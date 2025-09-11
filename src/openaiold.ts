@@ -4,7 +4,12 @@ import * as utils from './utils'
 import { redirectModel } from './config'
 
 export class impl implements provider.Provider {
-    async convertToProviderRequest(request: Request, baseUrl: string, apiKey: string, upstream?: import('./config').UpstreamConfig): Promise<Request> {
+    async convertToProviderRequest(
+        request: Request,
+        baseUrl: string,
+        apiKey: string,
+        upstream?: import('./config').UpstreamConfig
+    ): Promise<Request> {
         const claudeRequest = (await request.json()) as types.ClaudeRequest
         const openaiRequest = this.convertToOpenAIRequestBody(claudeRequest, upstream)
 
@@ -52,9 +57,12 @@ export class impl implements provider.Provider {
         return 'user'
     }
 
-    private convertToOpenAIRequestBody(claudeRequest: types.ClaudeRequest, upstream?: import('./config').UpstreamConfig): types.OpenAIRequest {
-        const convertedMessages = this.convertMessages(claudeRequest.messages)
-        
+    private convertToOpenAIRequestBody(
+        claudeRequest: types.ClaudeRequest,
+        upstream?: import('./config').UpstreamConfig
+    ): types.OpenAIRequest {
+        const converted = this.convertMessages(claudeRequest.messages)
+
         // 处理 system 字段，支持字符串和数组格式
         let systemContent: string | undefined
         if (claudeRequest.system) {
@@ -66,14 +74,14 @@ export class impl implements provider.Provider {
                 systemContent = textItem?.text
             }
         }
-        
+
         const messages: types.OpenAIMessage[] = systemContent
-            ? [{ role: 'system', content: systemContent }, ...convertedMessages]
-            : convertedMessages
+            ? [{ role: 'system', content: systemContent }, ...converted]
+            : converted
 
         // 应用模型重定向
         const finalModel = upstream ? redirectModel(claudeRequest.model, upstream) : claudeRequest.model
-        
+
         const openaiRequest: types.OpenAIRequest = {
             model: finalModel,
             messages,
@@ -98,8 +106,7 @@ export class impl implements provider.Provider {
         }
 
         if (claudeRequest.max_tokens !== undefined) {
-            // 使用新版字段以兼容 o4 系列及新接口行为
-            openaiRequest.max_completion_tokens = claudeRequest.max_tokens
+            openaiRequest.max_tokens = claudeRequest.max_tokens
         }
 
         return openaiRequest
@@ -112,7 +119,6 @@ export class impl implements provider.Provider {
         for (const message of claudeMessages) {
             const normalizedRole = this.normalizeClaudeRole((message as any).role)
             if (typeof message.content === 'string') {
-                // 纯文本消息：支持 system/user/assistant；tool 角色的纯文本忽略
                 if (normalizedRole !== 'tool') {
                     openaiMessages.push({
                         role: normalizedRole,
@@ -273,7 +279,8 @@ export class impl implements provider.Provider {
                         accumulated.arguments = (accumulated.arguments || '') + toolCall.function.arguments
                     }
 
-                    // 检查是否收集完整（包含 id/name/args），并且arguments是有效JSON
+                    // 检查是否收集完整（包含 id/name/args），并且 arguments 是有效 JSON
+                    // 为了让后续用户的 tool_result 能正确回传给 OpenAI，必须把 OpenAI 返回的 tool_call.id 原样透传给客户端
                     if (accumulated.id && accumulated.name && accumulated.arguments) {
                         try {
                             const args = JSON.parse(accumulated.arguments)

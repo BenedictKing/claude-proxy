@@ -1,13 +1,16 @@
 import * as types from './types'
 import * as provider from './provider'
 import * as utils from './utils'
+import { redirectModel } from './config'
 
 export class impl implements provider.Provider {
-    async convertToProviderRequest(request: Request, baseUrl: string, apiKey: string): Promise<Request> {
+    async convertToProviderRequest(request: Request, baseUrl: string, apiKey: string, upstream?: import('./config').UpstreamConfig): Promise<Request> {
         const claudeRequest = (await request.json()) as types.ClaudeRequest
-        const geminiRequest = this.convertToGeminiRequestBody(claudeRequest)
-
-        const endpoint = `models/${claudeRequest.model}:${claudeRequest.stream ? 'streamGenerateContent?alt=sse' : 'generateContent'}`
+        const geminiRequest = this.convertToGeminiRequestBody(claudeRequest, upstream)
+        
+        // 应用模型重定向
+        const finalModel = upstream ? redirectModel(claudeRequest.model, upstream) : claudeRequest.model
+        const endpoint = `models/${finalModel}:${claudeRequest.stream ? 'streamGenerateContent?alt=sse' : 'generateContent'}`
         const finalUrl = utils.buildUrl(baseUrl, endpoint)
 
         const headers = new Headers(request.headers)
@@ -36,7 +39,7 @@ export class impl implements provider.Provider {
         }
     }
 
-    private convertToGeminiRequestBody(claudeRequest: types.ClaudeRequest): types.GeminiRequest {
+    private convertToGeminiRequestBody(claudeRequest: types.ClaudeRequest, upstream?: import('./config').UpstreamConfig): types.GeminiRequest {
         const toolUseMap = this.buildToolUseMap(claudeRequest.messages)
         const contents = this.convertMessages(claudeRequest.messages, toolUseMap)
 

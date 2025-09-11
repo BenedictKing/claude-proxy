@@ -211,3 +211,10 @@ vite.config.ts.timestamp-*
 docs/
 .claude/
 CLAUDE.md
+.aider*
+*.log
+*.lock
+*-lock.json
+*-lock.yaml
+config.json
+*.patch

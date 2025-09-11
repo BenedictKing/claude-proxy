@@ -29,7 +29,7 @@ export interface ClaudeRequest {
     model: string
     // Claude v1/messages supports a top-level system prompt. Some clients (e.g., Claude Code)
     // rely on this to instruct the model to use tools. We surface it so providers can forward it.
-    system?: string
+    system?: string | Array<{ type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }>
     messages: ClaudeMessage[]
     max_tokens?: number
     temperature?: number
@@ -157,7 +157,7 @@ export interface OpenAIRequest {
     tool_choice?: string | { type: string; function?: { name: string } }
     temperature?: number
     max_tokens?: number
-    max_completion_tokens?: number  // 新的参数支持
+    max_completion_tokens?: number // 新的参数支持
     stream?: boolean
 }
 
@@ -213,8 +213,8 @@ export interface OpenAIResponsesRequest {
     tools?: OpenAITool[]
     tool_choice?: string | { type: string; function?: { name: string } }
     temperature?: number
-    max_tokens?: number  // 保留向后兼容
-    max_completion_tokens?: number  // 新的参数名
+    max_tokens?: number // 保留向后兼容
+    max_completion_tokens?: number // 新的参数名
     stream?: boolean
     reasoning_effort?: string
     stream_options?: {

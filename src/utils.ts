@@ -2,6 +2,19 @@ export function generateId(): string {
     return Math.random().toString(36).substring(2)
 }
 
+// API密钥掩码函数 - 保留前后5个字符，中间用***代替
+export function maskApiKey(apiKey: string): string {
+    if (!apiKey || apiKey.length <= 10) {
+        const start = apiKey.substring(0, 3)
+        const end = apiKey.substring(apiKey.length - 2)
+        return `${start}***${end}`
+    }
+
+    const start = apiKey.substring(0, 8)
+    const end = apiKey.substring(apiKey.length - 5)
+    return `${start}***${end}`
+}
+
 export function sendMessageStart(controller: ReadableStreamDefaultController): void {
     const event = `event: message_start\ndata: ${JSON.stringify({
         type: 'message_start',
@@ -57,10 +70,7 @@ export function processTextPart(text: string, index: number): string[] {
     return events
 }
 
-export function processToolUsePart(
-    functionCall: { name: string; args: any; id?: string },
-    index: number
-): string[] {
+export function processToolUsePart(functionCall: { name: string; args: any; id?: string }, index: number): string[] {
     const events: string[] = []
     // If upstream provided a stable id (e.g., OpenAI tool_call.id), use it;
     // otherwise generate one for providers that don't expose ids (e.g., Gemini).
@@ -83,10 +93,10 @@ export function processToolUsePart(
         `event: content_block_delta\ndata: ${JSON.stringify({
             type: 'content_block_delta',
             index,
-                delta: {
-                    type: 'input_json_delta',
-                    partial_json: JSON.stringify(functionCall.args)
-                }
+            delta: {
+                type: 'input_json_delta',
+                partial_json: JSON.stringify(functionCall.args)
+            }
         })}\n\n`
     )
 

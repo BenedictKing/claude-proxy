@@ -1,4 +1,6 @@
+import { UpstreamConfig } from './config'
+
 export interface Provider {
-    convertToProviderRequest(request: Request, baseUrl: string, apiKey: string): Promise<Request>
+    convertToProviderRequest(request: Request, baseUrl: string, apiKey: string, upstream?: UpstreamConfig): Promise<Request>
     convertToClaudeResponse(providerResponse: Response): Promise<Response>
 }
