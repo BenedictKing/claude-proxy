@@ -253,18 +253,14 @@ app.post('/v1/messages', async (req, res) => {
           if (providerResponse.body) {
             const [logStream, processStream] = providerResponse.body.tee()
 
-            // 在后台异步记录流式响应
+            // 在后台异步记录完整的流式响应体
             ;(async () => {
-              const reader = logStream.getReader()
-              const decoder = new TextDecoder()
               try {
-                while (true) {
-                  const { done, value } = await reader.read()
-                  if (done) break
-                  const decodedChunk = decoder.decode(value, { stream: false })
-                  if (decodedChunk.trim().length > 0) {
-                    console.log(`[${new Date().toISOString()}] 🛰️  上游流式数据: ${decodedChunk.trim()}`)
-                  }
+                const fullBody = await new Response(logStream).text()
+                if (fullBody.trim().length > 0) {
+                  console.log(
+                    `[${new Date().toISOString()}] 🛰️  上游流式响应体 (完整):\n---\n${fullBody.trim()}\n---`
+                  )
                 }
               } catch (e) {
                 console.error(`[${new Date().toISOString()}] 💥 日志流读取错误:`, e)
