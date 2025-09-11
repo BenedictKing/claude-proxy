@@ -5,8 +5,6 @@
   "scripts": {
     "start": "bun run server.ts",
     "dev": "bun run dev-runner.ts",
-    "dev:watch": "bun --watch run server.ts",
-    "dev:hot": "bun --watch --hot run server.ts",
     "config": "bun run config-cli.ts"
   },
   "devDependencies": {

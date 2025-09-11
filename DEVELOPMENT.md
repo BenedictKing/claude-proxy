@@ -5,20 +5,13 @@
 ### 生产环境
 
 ```bash
-bun start                    # 启动生产服务器
+bun run start                 # 启动生产服务器
 ```
 
 ### 开发环境
 
 ```bash
-# 推荐开发模式 (智能重启)
-bun run dev                 # 源码文件变化自动重启
-
-# 基础监听模式
-bun run dev:watch           # Bun自带文件监听并重启
-
-# 热重载模式 (实验性)
-bun run dev:hot             # Bun热重载模式
+bun run dev                   # 启动开发服务器（源码文件变化时自动重启）
 ```
 
 ## 文件监听策略
@@ -154,7 +147,7 @@ curl -X POST http://localhost:3000/admin/config/reload
 
 ## 最佳实践
 
-1. **开发时使用 `dev:auto`**
+1. **开发时使用 `dev`**
 2. **生产环境使用 `start`**
 3. **配置管理基于文件**
 4. **定期检查日志输出**
