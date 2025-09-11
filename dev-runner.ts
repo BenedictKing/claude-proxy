@@ -25,7 +25,8 @@ class DevServer {
       stdio: 'inherit',
       env: {
         ...process.env,
-        NODE_ENV: 'development'
+        NODE_ENV: 'development',
+        RUNNER: 'dev-runner'
       }
     })
 

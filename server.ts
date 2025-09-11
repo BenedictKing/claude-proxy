@@ -30,6 +30,7 @@ app.use(express.json({ limit: '50mb' }))
 
 // 开发模式检测
 const isDevelopment = process.env.NODE_ENV === 'development'
+const isManagedByRunner = process.env.RUNNER === 'dev-runner'
 
 // 开发模式中间件
 if (isDevelopment) {
@@ -318,7 +319,7 @@ app.post('/v1/messages', async (req, res) => {
 
 // 开发模式文件监听
 function setupDevelopmentWatchers() {
-  if (!isDevelopment) return
+  if (!isDevelopment || isManagedByRunner) return
 
   // 源码文件监听
   const sourceWatcher = chokidar.watch(['src/**/*.ts', 'server.ts'], {
@@ -387,15 +388,25 @@ app.listen(envConfig.port, () => {
     console.log(`🔧 配置管理: bun run config --help`)
     console.log(`📊 环境: ${envConfig.nodeEnv}`)
     console.log(`🔍 开发模式 - 详细日志已启用`)
+
     console.log(`\n📁 文件监听状态:`)
-    console.log(`   🔍 源码文件: 监听中 (变化需手动重启)`)
-    console.log(`   ⚙️  配置文件: 监听中 (自动重载)`)
-    console.log(`   🌍 环境变量: 监听中 (变化需重启)`)
+    if (isManagedByRunner) {
+      console.log(`   - 源码/环境变量: 监听中 (由 dev-runner 自动重启)`)
+      console.log(`   - 配置文件: 监听中 (自动热重载)`)
+    } else {
+      console.log(`   - 源码/环境变量: 监听中 (变化需手动重启)`)
+      console.log(`   - 配置文件: 监听中 (自动热重载)`)
+    }
+
     console.log(`\n💡 提示:`)
-    console.log(`   - 源码文件变化需要手动重启服务器`)
-    console.log(`   - 配置文件变化会自动重载，无需重启`)
-    console.log(`   - 环境变量变化需要重启服务器`)
-    console.log(`   - 使用 Ctrl+C 停止服务器\n`)
+    if (isManagedByRunner) {
+      console.log(`   - 源码和环境变量文件变化将自动重启服务器。`)
+    } else {
+      console.log(`   - 推荐使用 'bun run dev' 以获得源码修改后自动重启功能。`)
+      console.log(`   - 源码或环境变量文件变化需要手动重启服务器。`)
+    }
+    console.log(`   - 配置文件(config.json)变化会自动重载，无需重启。`)
+    console.log(`   - 使用 Ctrl+C 停止服务器。\n`)
   } else {
     console.log(`📊 环境: ${envConfig.nodeEnv}`)
     console.log(`\n💡 提示: 使用 Ctrl+C 停止服务器\n`)
