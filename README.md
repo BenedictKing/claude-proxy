@@ -144,6 +144,70 @@ bun run config balance <strategy>
 bun run config clear
 ```
 
+### 🔧 详细配置示例
+
+#### 1. OpenAI 配置
+
+```bash
+# 添加 OpenAI 上游
+bun run config add openai-main https://api.openai.com openai
+
+# 添加多个 API 密钥（支持负载均衡）
+bun run config key openai-main add \
+  sk-proj-abc123def456... \
+  sk-proj-xyz789uvw456...
+
+# 设置为当前使用的上游
+bun run config use openai-main
+```
+
+#### 2. Gemini 配置
+
+```bash
+# 添加 Gemini 上游
+bun run config add gemini-main https://generativelanguage.googleapis.com/v1beta gemini
+
+# 添加 Gemini API 密钥
+bun run config key gemini-main add AIzaSyC1234567890abcdef...
+
+# 切换到 Gemini
+bun run config use gemini-main
+```
+
+#### 3. 第三方 API 服务配置
+
+```bash
+# 添加第三方 Claude 兼容 API
+bun run config add anthropic-proxy https://api.your-provider.com openai
+
+# 添加 API 密钥
+bun run config key anthropic-proxy add your-api-key-here
+
+# 切换到第三方服务
+bun run config use anthropic-proxy
+```
+
+#### 4. 多渠道配置与切换
+
+```bash
+# 配置多个上游服务
+bun run config add openai-primary https://api.openai.com openai
+bun run config add openai-backup https://api.openai.com openai
+bun run config add gemini-backup https://generativelanguage.googleapis.com/v1beta gemini
+
+# 为每个上游添加密钥
+bun run config key openai-primary add sk-primary-key...
+bun run config key openai-backup add sk-backup-key...
+bun run config key gemini-backup add AIza-backup-key...
+
+# 查看所有配置
+bun run config show
+
+# 根据需要切换上游
+bun run config use openai-primary    # 使用主要 OpenAI
+bun run config use gemini-backup     # 切换到备用 Gemini
+```
+
 ### 配置文件格式
 
 配置存储在 `config.json` 中：
@@ -185,21 +249,46 @@ POST http://localhost:3000/v1/messages
 x-api-key: your-proxy-access-key
 ```
 
-### 工作原理
+### 🏗️ 工作原理
 
-1. **客户端请求**: 发送请求到代理服务器，包含代理访问密钥
-2. **代理验证**: 代理服务器验证访问密钥
-3. **上游路由**: 代理服务器根据配置选择上游服务商和 API 密钥
-4. **协议转换**: 代理服务器将 Claude API 格式转换为目标服务商格式
-5. **响应返回**: 代理服务器将响应转换回 Claude API 格式返回给客户端
+```mermaid
+sequenceDiagram
+    participant Client as 客户端
+    participant Proxy as 代理服务器
+    participant Redis as Redis缓存
+    participant Upstream as 上游API
+
+    Client->>Proxy: POST /v1/messages
+    Note over Client,Proxy: 包含代理访问密钥
+
+    Proxy->>Proxy: 验证访问密钥
+    Proxy->>Redis: 获取API密钥 (轮询/随机)
+    Redis-->>Proxy: 返回API密钥
+    
+    Proxy->>Proxy: 协议转换 (Claude→上游格式)
+    Proxy->>Upstream: 转发请求
+    Upstream-->>Proxy: 上游响应
+    
+    Proxy->>Proxy: 协议转换 (上游格式→Claude)
+    Proxy-->>Client: 返回Claude格式响应
+```
+
+### 📋 支持的模型
+
+| 模型类型 | 示例模型ID | 支持的服务商 |
+|---------|-----------|-------------|
+| Claude 3.5 Sonnet | `claude-3-5-sonnet-20241022` | OpenAI, 自定义API |
+| Claude 3.5 Haiku | `claude-3-5-haiku-20241022` | OpenAI, 自定义API |
+| Claude 3 Opus | `claude-3-opus-20240229` | OpenAI, 自定义API |
+| Gemini | `gemini-1.5-pro` | Gemini |
 
 ### 请求格式
 
-发送标准的 Claude API 格式请求：
+#### 基础文本对话
 
 ```json
 {
-    "model": "claude-sonnet-4-20250514",
+    "model": "claude-3-5-sonnet-20241022",
     "max_tokens": 1000,
     "messages": [
         {
@@ -210,9 +299,58 @@ x-api-key: your-proxy-access-key
 }
 ```
 
+#### 流式响应
+
+```json
+{
+    "model": "claude-3-5-sonnet-20241022",
+    "max_tokens": 1000,
+    "stream": true,
+    "messages": [
+        {
+            "role": "user",
+            "content": "Tell me a story"
+        }
+    ]
+}
+```
+
+#### 工具调用
+
+```json
+{
+    "model": "claude-3-5-sonnet-20241022",
+    "max_tokens": 1000,
+    "tools": [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_weather",
+                "description": "Get weather information",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The city name"
+                        }
+                    }
+                }
+            }
+        }
+    ],
+    "messages": [
+        {
+            "role": "user",
+            "content": "What's the weather like in Shanghai?"
+        }
+    ]
+}
+```
+
 ### 响应格式
 
-返回标准的 Claude API 格式响应：
+#### 标准响应
 
 ```json
 {
@@ -225,7 +363,7 @@ x-api-key: your-proxy-access-key
             "text": "I'm doing well, thank you for asking!"
         }
     ],
-    "model": "claude-sonnet-4-20250514",
+    "model": "claude-3-5-sonnet-20241022",
     "stop_reason": "end_turn",
     "stop_sequence": null,
     "usage": {
@@ -235,16 +373,35 @@ x-api-key: your-proxy-access-key
 }
 ```
 
+#### 流式响应
+
+```json
+data: {"type":"message_start","message":{"id":"msg_123","type":"message","role":"assistant","content":[],"model":"claude-3-5-sonnet-20241022","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":15,"output_tokens":0}}}
+
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}
+
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"!"}}
+
+data: {"type":"content_block_stop","index":0}
+
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn","usage":{"output_tokens":1}}}
+
+data: {"type":"message_stop"}
+```
+
 ### 实际使用示例
 
-使用 cURL 测试代理服务器：
+#### cURL 示例
 
 ```bash
+# 基础对话
 curl -X POST http://localhost:3000/v1/messages \
   -H "x-api-key: your-proxy-access-key" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "claude-3-5-haiku-20241022",
+    "model": "claude-3-5-sonnet-20241022",
     "max_tokens": 100,
     "messages": [
       {
@@ -253,6 +410,87 @@ curl -X POST http://localhost:3000/v1/messages \
       }
     ]
   }'
+
+# 流式响应
+curl -X POST http://localhost:3000/v1/messages \
+  -H "x-api-key: your-proxy-access-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-3-5-sonnet-20241022",
+    "max_tokens": 100,
+    "stream": true,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Tell me a short story"
+      }
+    ]
+  }'
+```
+
+#### Python 示例
+
+```python
+import requests
+import json
+
+# 配置
+base_url = "http://localhost:3000"
+api_key = "your-proxy-access-key"
+
+# 发送请求
+response = requests.post(
+    f"{base_url}/v1/messages",
+    headers={
+        "x-api-key": api_key,
+        "Content-Type": "application/json"
+    },
+    json={
+        "model": "claude-3-5-sonnet-20241022",
+        "max_tokens": 1000,
+        "messages": [
+            {
+                "role": "user",
+                "content": "Explain quantum computing in simple terms"
+            }
+        ]
+    }
+)
+
+print(response.json())
+```
+
+#### JavaScript 示例
+
+```javascript
+// 使用 fetch API
+async function sendMessage(content) {
+    const response = await fetch('http://localhost:3000/v1/messages', {
+        method: 'POST',
+        headers: {
+            'x-api-key': 'your-proxy-access-key',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            model: 'claude-3-5-sonnet-20241022',
+            max_tokens: 1000,
+            messages: [
+                {
+                    role: 'user',
+                    content: content
+                }
+            ]
+        })
+    });
+    
+    const data = await response.json();
+    return data;
+}
+
+// 使用示例
+sendMessage("What is the meaning of life?")
+    .then(response => console.log(response))
+    .catch(error => console.error(error));
 ```
 
 ## 🏥 健康检查
@@ -366,35 +604,274 @@ claude
 
 > **重要说明**: `your-proxy-access-key` 是你访问代理服务器的授权密钥，不是上游服务商的 API key。这个 key 用于验证你对代理服务器的访问权限。
 
+## ❓ 常见问题解答 (FAQ)
+
+### Q1: 代理服务器支持哪些上游 AI 服务商？
+
+**A:** 目前支持以下服务商：
+- **OpenAI**: 使用 OpenAI 格式的 API（如 OpenAI 官方、各种第三方 OpenAI 兼容服务）
+- **Gemini**: Google 的 Gemini API
+- **Claude**: Anthropic 的官方 Claude API
+- **自定义 API**: 任何兼容 OpenAI 格式的第三方 API
+
+### Q2: 如何实现 API 密钥的负载均衡？
+
+**A:** 代理服务器支持三种负载均衡策略：
+
+1. **轮询 (round-robin)**: 按顺序轮流使用每个 API 密钥
+2. **随机 (random)**: 随机选择一个 API 密钥
+3. **故障转移 (failover)**: 总是优先使用第一个密钥
+
+```bash
+# 设置负载均衡策略
+bun run config balance round-robin
+```
+
+### Q3: 可以同时配置多个上游服务商吗？
+
+**A:** 可以！你可以配置多个上游，但同时只能使用一个。通过以下命令切换：
+
+```bash
+# 查看所有上游
+bun run config show
+
+# 按索引切换
+bun run config use 0
+
+# 按名称切换
+bun run config use openai-main
+```
+
+### Q4: Redis 的作用是什么？是否必须？
+
+**A:** Redis 主要用于：
+- **API 密钥轮询计数**: 在分布式部署中保持轮询计数一致性
+- **配置同步**: 多实例间的配置实时同步
+
+Redis 不是必须的，没有 Redis 时会自动回退到内存模式。
+
+### Q5: 如何在 Claude Code 中使用这个代理？
+
+**A:** 修改 Claude Code 的配置文件 `~/.claude/settings.json`：
+
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://localhost:3000",
+    "ANTHROPIC_CUSTOM_HEADERS": "x-api-key: your-proxy-access-key",
+    "ANTHROPIC_MODEL": "claude-3-5-sonnet-20241022"
+  }
+}
+```
+
+### Q6: 支持流式响应吗？
+
+**A:** 完全支持！在请求中添加 `"stream": true` 即可：
+
+```json
+{
+    "model": "claude-3-5-sonnet-20241022",
+    "stream": true,
+    "messages": [...]
+}
+```
+
+### Q7: 如何监控代理服务器的状态？
+
+**A:** 使用健康检查端点：
+
+```bash
+curl http://localhost:3000/health
+```
+
+开发模式下还有额外的监控端点：
+
+```bash
+# 开发环境信息
+curl http://localhost:3000/admin/dev/info
+
+# 重载配置
+curl -X POST http://localhost:3000/admin/config/reload
+```
+
 ## 🐛 故障排除
 
-### 常见问题
+### 启动问题
 
-1. **端口被占用**
-    - 修改 `.env` 文件中的 `PORT` 配置
-    - 或停止占用端口的进程
+#### 1. 端口被占用
 
-2. **API 密钥无效**
-    - 检查 `config.json` 中的 API 密钥是否正确
-    - 确认上游服务商的 API 密钥格式
+**现象**: `Error: listen EADDRINUSE: address already in use :::3000`
 
-3. **上游连接失败**
-    - 检查网络连接
-    - 确认上游服务的 baseUrl 是否正确
-    - 检查防火墙设置
+**解决方案**:
+```bash
+# 查看端口占用
+lsof -i :3000
 
-4. **配置文件错误**
-    - 删除 `config.json` 重新配置
-    - 使用 `bun run config show` 检查配置
+# 强制终止进程
+kill -9 <PID>
 
-### 调试模式
+# 或修改端口
+echo "PORT=3001" >> .env
+```
 
-在 `.env` 文件中设置：
+#### 2. Redis 连接失败
 
-```env
+**现象**: `Redis connection failed`
+
+**解决方案**:
+```bash
+# 启动 Redis 服务
+redis-server
+
+# 检查 Redis 状态
+redis-cli ping
+
+# 或在 .env 中禁用 Redis
+echo "REDIS_URL=" >> .env
+```
+
+#### 3. 配置文件损坏
+
+**现象**: `SyntaxError: Unexpected token in JSON`
+
+**解决方案**:
+```bash
+# 检查配置文件语法
+cat config.json | python -m json.tool
+
+# 重新生成配置文件
+rm config.json
+bun run config show
+```
+
+### API 调用问题
+
+#### 1. 401 Unauthorized
+
+**可能原因**:
+- 代理访问密钥错误
+- 上游 API 密钥无效
+
+**解决方案**:
+```bash
+# 检查代理访问密钥
+echo $PROXY_ACCESS_KEY
+
+# 检查上游 API 密钥
+bun run config show
+
+# 测试上游 API 密钥
+curl -H "Authorization: Bearer sk-your-key" https://api.openai.com/v1/models
+```
+
+#### 2. 429 Too Many Requests
+
+**可能原因**:
+- API 密钥配额不足
+- 请求频率过高
+
+**解决方案**:
+```bash
+# 添加更多 API 密钥
+bun run config key your-upstream add sk-new-key
+
+# 修改负载均衡策略
+bun run config balance round-robin
+```
+
+#### 3. 500 Internal Server Error
+
+**可能原因**:
+- 上游服务不可用
+- 配置错误
+
+**解决方案**:
+```bash
+# 检查服务器日志
+tail -f server.log
+
+# 启用调试模式
+echo "LOG_LEVEL=debug" >> .env
+echo "ENABLE_REQUEST_LOGS=true" >> .env
+echo "ENABLE_RESPONSE_LOGS=true" >> .env
+
+# 重启服务器
+bun run start
+```
+
+### 性能问题
+
+#### 1. 响应缓慢
+
+**解决方案**:
+```bash
+# 增加并发数
+echo "MAX_CONCURRENT_REQUESTS=200" >> .env
+
+# 减少超时时间
+echo "REQUEST_TIMEOUT=15000" >> .env
+
+# 使用更近的上游服务
+bun run config show
+```
+
+#### 2. 内存使用过高
+
+**解决方案**:
+```bash
+# 减少日志级别
+echo "LOG_LEVEL=error" >> .env
+echo "ENABLE_REQUEST_LOGS=false" >> .env
+echo "ENABLE_RESPONSE_LOGS=false" >> .env
+
+# 重启服务器
+bun run start
+```
+
+### 调试技巧
+
+#### 1. 启用详细日志
+
+```bash
+# 在 .env 文件中设置
 LOG_LEVEL=debug
 ENABLE_REQUEST_LOGS=true
 ENABLE_RESPONSE_LOGS=true
+```
+
+#### 2. 使用健康检查
+
+```bash
+# 基础健康检查
+curl http://localhost:3000/health
+
+# 开发模式信息
+curl http://localhost:3000/admin/dev/info
+```
+
+#### 3. 手动测试上游 API
+
+```bash
+# 测试 OpenAI API
+curl -X POST https://api.openai.com/v1/chat/completions \
+  -H "Authorization: Bearer sk-your-key" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-3.5-turbo","messages":[{"role":"user","content":"Hello"}]}'
+
+# 测试 Gemini API
+curl -X POST https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=your-key \
+  -H "Content-Type: application/json" \
+  -d '{"contents":[{"parts":[{"text":"Hello"}]}]}'
+```
+
+#### 4. 配置验证
+
+```bash
+# 查看完整配置
+bun run config show
+
+# 验证配置文件格式
+cat config.json | jq .
 ```
 
 ## 📝 许可证

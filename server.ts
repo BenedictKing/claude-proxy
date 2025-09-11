@@ -6,7 +6,6 @@ import * as openai from './src/openai'
 import * as claude from './src/claude'
 import { configManager, UpstreamConfig } from './src/config'
 import { envConfigManager } from './src/env'
-import { redisCache } from './src/redis'
 import { maskApiKey } from './src/utils'
 import chokidar from 'chokidar'
 
@@ -38,14 +37,6 @@ app.get(envConfigManager.getConfig().healthCheckPath, (req, res) => {
         }
     }
 
-    if (isDevelopment) {
-        Object.assign(healthData, {
-            redis: {
-                connected: redisCache.isAvailable(),
-                url: process.env.REDIS_URL || 'redis://localhost:6379/1'
-            }
-        })
-    }
 
     res.json(healthData)
 })
@@ -79,10 +70,6 @@ if (isDevelopment) {
         res.json({
             status: 'development',
             timestamp: new Date().toISOString(),
-            redis: {
-                connected: redisCache.isAvailable(),
-                url: process.env.REDIS_URL || 'redis://localhost:6379/1'
-            },
             config: configManager.getConfig(),
             environment: envConfigManager.getConfig()
         })
@@ -131,8 +118,7 @@ app.post('/v1/messages', async (req, res) => {
         let apiKey: string
         try {
             upstream = configManager.getNextUpstream()
-            // 将此行修改为异步等待
-            apiKey = await configManager.getNextApiKey(upstream)
+            apiKey = configManager.getNextApiKey(upstream)
         } catch (error) {
             console.error('获取上游配置失败:', error)
             res.status(500).json({ error: '没有可用的上游配置或API密钥' })
@@ -319,15 +305,13 @@ function setupDevelopmentWatchers() {
 const envConfig = envConfigManager.getConfig()
 
 // 优雅关闭处理
-process.on('SIGINT', async () => {
+process.on('SIGINT', () => {
     console.log('\n正在关闭服务器...')
-    await redisCache.disconnect()
     process.exit(0)
 })
 
-process.on('SIGTERM', async () => {
+process.on('SIGTERM', () => {
     console.log('\n正在关闭服务器...')
-    await redisCache.disconnect()
     process.exit(0)
 })
 
@@ -347,7 +331,6 @@ app.listen(envConfig.port, () => {
         )
         console.log(`🔧 配置管理: bun run config --help`)
         console.log(`📊 环境: ${envConfig.nodeEnv}`)
-        console.log(`🔴 Redis: ${redisCache.isAvailable() ? '已连接 (DB 1)' : '未连接'}`)
         console.log(`🔍 开发模式 - 详细日志已启用`)
         console.log(`\n📁 文件监听状态:`)
         console.log(`   🔍 源码文件: 监听中 (变化需手动重启)`)
@@ -360,7 +343,6 @@ app.listen(envConfig.port, () => {
         console.log(`   - 使用 Ctrl+C 停止服务器\n`)
     } else {
         console.log(`📊 环境: ${envConfig.nodeEnv}`)
-        console.log(`🔴 Redis: ${redisCache.isAvailable() ? '已连接 (DB 1)' : '未连接'}`)
         console.log(`\n💡 提示: 使用 Ctrl+C 停止服务器\n`)
     }
 })

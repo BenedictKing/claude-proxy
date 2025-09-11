@@ -21,7 +21,6 @@
         "@types/express": "^5.0.3",
         "chokidar": "^3.6.0",
         "dotenv": "^17.2.2",
-        "express": "^4.19.2",
-        "redis": "^4.6.13"
+        "express": "^4.19.2"
     }
 }

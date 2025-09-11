@@ -1,11 +1,6 @@
 #!/usr/bin/env node
 import { configManagerCLI, UpstreamConfig } from './src/config'
-import { redisCache } from './src/redis'
 
-// 配置命令执行完成后自动退出
-process.on('exit', async () => {
-    await redisCache.disconnect()
-})
 
 function showHelp() {
     console.log(`
@@ -248,8 +243,7 @@ function main() {
     }
 
     // 命令执行完成后退出
-    setTimeout(async () => {
-        await redisCache.disconnect()
+    setTimeout(() => {
         process.exit(0)
     }, 100)
 }

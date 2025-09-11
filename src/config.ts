@@ -1,6 +1,5 @@
 import fs from 'fs'
 import path from 'path'
-import { redisCache } from './redis'
 import { maskApiKey } from './utils'
 
 export interface UpstreamConfig {
@@ -27,9 +26,9 @@ export function redirectModel(model: string, upstream: UpstreamConfig): string {
     if (!upstream.modelMapping) {
         return model
     }
-    
+
     let modelType: 'opus' | 'sonnet' | 'haiku' | null = null
-    
+
     if (model.includes('opus')) {
         modelType = 'opus'
     } else if (model.includes('sonnet')) {
@@ -37,11 +36,11 @@ export function redirectModel(model: string, upstream: UpstreamConfig): string {
     } else if (model.includes('haiku')) {
         modelType = 'haiku'
     }
-    
+
     if (modelType && upstream.modelMapping[modelType]) {
         return upstream.modelMapping[modelType]!
     }
-    
+
     return model
 }
 
@@ -69,23 +68,9 @@ class ConfigManager {
         this.config = this.loadConfig()
         if (enableWatcher) {
             this.startConfigWatcher()
-            this.initRedis()
         }
     }
 
-    private async initRedis(): Promise<void> {
-        await redisCache.connect()
-        // 订阅配置更新事件
-        redisCache.subscribe('config:updated', (message: string) => {
-            try {
-                const newConfig = JSON.parse(message)
-                this.config = newConfig
-                console.log(`[${new Date().toISOString()}] 通过Redis收到配置更新`)
-            } catch (error) {
-                console.warn('Redis配置更新解析失败:', error)
-            }
-        })
-    }
 
     private startConfigWatcher(): void {
         try {
@@ -112,10 +97,6 @@ class ConfigManager {
     reloadConfig(): void {
         this.config = this.loadConfig()
         console.log(`[${new Date().toISOString()}] 配置已重载`)
-        // 通过Redis发布配置更新（仅在有监听器时）
-        if (this.watcher) {
-            redisCache.publish('config:updated', JSON.stringify(this.config))
-        }
     }
 
     private loadConfig(): Config {
@@ -210,11 +191,11 @@ class ConfigManager {
 
     setUpstream(indexOrName: number | string): void {
         let targetIndex: number
-        
+
         if (typeof indexOrName === 'string') {
             // 按名称查找
-            const found = this.config.upstream.findIndex(upstream => 
-                upstream.name?.toLowerCase() === indexOrName.toLowerCase()
+            const found = this.config.upstream.findIndex(
+                upstream => upstream.name?.toLowerCase() === indexOrName.toLowerCase()
             )
             if (found === -1) {
                 throw new Error(`未找到名称为 "${indexOrName}" 的上游`)
@@ -227,10 +208,12 @@ class ConfigManager {
             }
             targetIndex = indexOrName
         }
-        
+
         this.config.currentUpstream = targetIndex
         this.saveConfig(this.config)
-        console.log(`已切换到上游: ${this.config.upstream[targetIndex].name || this.config.upstream[targetIndex].serviceType}`)
+        console.log(
+            `已切换到上游: ${this.config.upstream[targetIndex].name || this.config.upstream[targetIndex].serviceType}`
+        )
     }
 
     setLoadBalance(strategy: 'round-robin' | 'random' | 'failover'): void {
@@ -256,7 +239,7 @@ class ConfigManager {
         return currentUpstream
     }
 
-    async getNextApiKey(upstream: UpstreamConfig): Promise<string> {
+    getNextApiKey(upstream: UpstreamConfig): string {
         if (upstream.apiKeys.length === 0) {
             throw new Error(`上游 "${upstream.name}" 没有可用的API密钥`)
         }
@@ -265,24 +248,27 @@ class ConfigManager {
 
         switch (this.config.loadBalance) {
             case 'round-robin': {
-                if (redisCache.isAvailable()) {
-                    const count = await redisCache.increment('config:request_count')
-                    if (count > 0) {
-                        // Redis的INCR从1开始，所以需要-1来匹配0索引的数组
-                        return keys[(count - 1) % keys.length]
-                    }
-                }
-                // Redis不可用或increment失败时的回退逻辑
-                console.warn(`[${new Date().toISOString()}] Redis不可用或计数失败，回退到内存轮询`)
                 this.requestCount++
-                return keys[this.requestCount % keys.length]
+                const selectedKey = keys[(this.requestCount - 1) % keys.length]
+                console.log(
+                    `[${new Date().toISOString()}] 轮询选择密钥 ${maskApiKey(selectedKey)} (${((this.requestCount - 1) % keys.length) + 1}/${keys.length})`
+                )
+                return selectedKey
             }
-            case 'random':
-                return keys[Math.floor(Math.random() * keys.length)]
+            case 'random': {
+                const randomIndex = Math.floor(Math.random() * keys.length)
+                const selectedKey = keys[randomIndex]
+                console.log(
+                    `[${new Date().toISOString()}] 随机选择密钥 ${maskApiKey(selectedKey)} (${randomIndex + 1}/${keys.length})`
+                )
+                return selectedKey
+            }
             case 'failover':
-            default:
-                // 故障转移策略对于密钥级别，我们理解为总是使用第一个密钥。
-                return keys[0]
+            default: {
+                const selectedKey = keys[0]
+                console.log(`[${new Date().toISOString()}] 故障转移选择密钥 ${maskApiKey(selectedKey)} (主密钥)`)
+                return selectedKey
+            }
         }
     }
 
