@@ -71,6 +71,33 @@ class ConfigManager {
         }
     }
 
+    public findUpstreamIndex(indexOrName: number | string): number {
+        // 如果输入是数字字符串，先解析为数字
+        if (typeof indexOrName === 'string') {
+            const parsedIndex = parseInt(indexOrName, 10)
+            if (!isNaN(parsedIndex)) {
+                indexOrName = parsedIndex
+            }
+        }
+
+        if (typeof indexOrName === 'string') {
+            // 按名称查找
+            const foundIndex = this.config.upstream.findIndex(
+                upstream => upstream.name?.toLowerCase() === indexOrName.toLowerCase()
+            )
+            if (foundIndex === -1) {
+                throw new Error(`未找到名称为 "${indexOrName}" 的上游`)
+            }
+            return foundIndex
+        } else {
+            // 按索引查找
+            if (indexOrName < 0 || indexOrName >= this.config.upstream.length) {
+                throw new Error(`无效的上游索引: ${indexOrName}`)
+            }
+            return indexOrName
+        }
+    }
+
     private startConfigWatcher(): void {
         try {
             this.watcher = fs.watch(CONFIG_FILE, eventType => {
@@ -136,78 +163,48 @@ class ConfigManager {
         console.log(`已添加上游: ${upstream.name || upstream.serviceType} - ${upstream.baseUrl}`)
     }
 
-    removeUpstream(index: number): void {
-        if (index >= 0 && index < this.config.upstream.length) {
-            const removed = this.config.upstream.splice(index, 1)[0]
-            if (this.config.currentUpstream >= this.config.upstream.length) {
-                this.config.currentUpstream = Math.max(0, this.config.upstream.length - 1)
-            }
+    removeUpstream(indexOrName: number | string): void {
+        const index = this.findUpstreamIndex(indexOrName)
+        const removed = this.config.upstream.splice(index, 1)[0]
+        if (this.config.currentUpstream >= this.config.upstream.length) {
+            this.config.currentUpstream = Math.max(0, this.config.upstream.length - 1)
+        }
+        this.saveConfig(this.config)
+        console.log(`已删除上游: ${removed.name || removed.serviceType}`)
+    }
+
+    updateUpstream(indexOrName: number | string, upstream: Partial<UpstreamConfig>): void {
+        const index = this.findUpstreamIndex(indexOrName)
+        this.config.upstream[index] = { ...this.config.upstream[index], ...upstream }
+        this.saveConfig(this.config)
+        console.log(`已更新上游: ${this.config.upstream[index].name || this.config.upstream[index].serviceType}`)
+    }
+
+    addApiKey(indexOrName: number | string, apiKey: string): void {
+        const index = this.findUpstreamIndex(indexOrName)
+        if (!this.config.upstream[index].apiKeys.includes(apiKey)) {
+            this.config.upstream[index].apiKeys.push(apiKey)
             this.saveConfig(this.config)
-            console.log(`已删除上游: ${removed.name || removed.serviceType}`)
+            console.log(`已添加API密钥到上游 [${index}] ${this.config.upstream[index].name}`)
         } else {
-            throw new Error('无效的上游索引')
+            console.log('API密钥已存在')
         }
     }
 
-    updateUpstream(index: number, upstream: Partial<UpstreamConfig>): void {
-        if (index >= 0 && index < this.config.upstream.length) {
-            this.config.upstream[index] = { ...this.config.upstream[index], ...upstream }
+    removeApiKey(indexOrName: number | string, apiKey: string): void {
+        const index = this.findUpstreamIndex(indexOrName)
+        const keyIndex = this.config.upstream[index].apiKeys.indexOf(apiKey)
+        if (keyIndex > -1) {
+            this.config.upstream[index].apiKeys.splice(keyIndex, 1)
             this.saveConfig(this.config)
-            console.log(`已更新上游: ${this.config.upstream[index].name || this.config.upstream[index].serviceType}`)
+            console.log(`已删除API密钥从上游 [${index}] ${this.config.upstream[index].name}`)
         } else {
-            throw new Error('无效的上游索引')
-        }
-    }
-
-    addApiKey(index: number, apiKey: string): void {
-        if (index >= 0 && index < this.config.upstream.length) {
-            if (!this.config.upstream[index].apiKeys.includes(apiKey)) {
-                this.config.upstream[index].apiKeys.push(apiKey)
-                this.saveConfig(this.config)
-                console.log(`已添加API密钥到上游 ${index}`)
-            } else {
-                console.log('API密钥已存在')
-            }
-        } else {
-            throw new Error('无效的上游索引')
-        }
-    }
-
-    removeApiKey(index: number, apiKey: string): void {
-        if (index >= 0 && index < this.config.upstream.length) {
-            const keyIndex = this.config.upstream[index].apiKeys.indexOf(apiKey)
-            if (keyIndex > -1) {
-                this.config.upstream[index].apiKeys.splice(keyIndex, 1)
-                this.saveConfig(this.config)
-                console.log(`已删除API密钥从上游 ${index}`)
-            } else {
-                console.log('API密钥不存在')
-            }
-        } else {
-            throw new Error('无效的上游索引')
+            console.log('API密钥不存在')
         }
     }
 
     setUpstream(indexOrName: number | string): void {
-        let targetIndex: number
-
-        if (typeof indexOrName === 'string') {
-            // 按名称查找
-            const found = this.config.upstream.findIndex(
-                upstream => upstream.name?.toLowerCase() === indexOrName.toLowerCase()
-            )
-            if (found === -1) {
-                throw new Error(`未找到名称为 "${indexOrName}" 的上游`)
-            }
-            targetIndex = found
-        } else {
-            // 按索引查找
-            if (indexOrName < 0 || indexOrName >= this.config.upstream.length) {
-                throw new Error('无效的上游索引')
-            }
-            targetIndex = indexOrName
-        }
-
+        const targetIndex = this.findUpstreamIndex(indexOrName)
         this.config.currentUpstream = targetIndex
         this.saveConfig(this.config)
         console.log(

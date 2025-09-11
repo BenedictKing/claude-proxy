@@ -13,10 +13,10 @@ Claude API代理服务器配置工具
 命令:
   show                    显示当前配置
   add <name> <type> <url> 添加上游配置
-  remove <index>          删除上游配置
-  update <index> [options] 更新上游配置
+  remove <index|name>     删除上游配置
+  update <index|name> [options] 更新上游配置
   use <index|name>        切换到指定上游（支持索引或名称）
-  key <index> <action>    管理API密钥
+  key <index|name> <action>    管理API密钥
   balance <strategy>      设置负载均衡策略
   help                    显示帮助信息
 
@@ -24,7 +24,7 @@ Claude API代理服务器配置工具
   name                    上游名称
   type                    服务类型 (gemini, openaiold, openai, claude)
   url                     上游基础URL
-  index                   上游索引
+  index                   上游索引或名称
   action                  密钥操作 (add, remove, list)
   strategy                负载均衡策略 (round-robin, random, failover)
 
@@ -33,13 +33,14 @@ Claude API代理服务器配置工具
   bun run config add MyGemini gemini https://generativelanguage.googleapis.com/v1beta
   bun run config add MyOpenAI openai https://api.openai.com/v1
   bun run config use 0                             # 切换到第一个上游
-  bun run config use nonocode                     # 切换到名称为 nonocode 的上游
-  bun run config key 0 add sk-1234567890abcdef      # 添加API密钥
-  bun run config key 0 list                        # 列出API密钥
-  bun run config update 0 --name "NewName"         # 更新上游名称
-  bun run config update 0 --description "基于gpt-4o，响应速度快" # 更新备注
-  bun run config balance round-robin              # 设置负载均衡
-  bun run config remove 0                          # 删除上游
+  bun run config use MyOpenAI                      # 切换到名称为 MyOpenAI 的上游
+  bun run config key 0 add sk-1234567890abcdef      # 为索引为0的上游添加API密钥
+  bun run config key MyOpenAI list                 # 列出名为 MyOpenAI 的上游的API密钥
+  bun run config update 1 --name "NewName"         # 更新索引为1的上游名称
+  bun run config update MyOpenAI --description "备注" # 更新名为 MyOpenAI 的上游的备注
+  bun run config balance round-robin               # 设置负载均衡
+  bun run config remove 0                          # 按索引删除上游
+  bun run config remove MyOpenAI                   # 按名称删除上游
 
 支持的默认URL:
   gemini: https://generativelanguage.googleapis.com/v1beta
@@ -85,14 +86,8 @@ function addUpstream(name: string, type: string, url: string, extraArgs?: string
     configManagerCLI.addUpstream(upstream)
 }
 
-function updateUpstream(index: string, args: string[]) {
-    const upstreamIndex = parseInt(index)
+function updateUpstream(indexOrName: string, args: string[]) {
     const flags = parseArgs(args)
-
-    if (isNaN(upstreamIndex)) {
-        console.error('错误: 无效的上游索引')
-        return
-    }
 
     const update: Partial<UpstreamConfig> = {}
     if (flags.name) update.name = flags.name
@@ -105,17 +100,10 @@ function updateUpstream(index: string, args: string[]) {
         return
     }
 
-    configManagerCLI.updateUpstream(upstreamIndex, update)
+    configManagerCLI.updateUpstream(indexOrName, update)
 }
 
-function manageKeys(index: string, action: string, args: string[]) {
-    const upstreamIndex = parseInt(index)
-
-    if (isNaN(upstreamIndex)) {
-        console.error('错误: 无效的上游索引')
-        return
-    }
-
+function manageKeys(indexOrName: string, action: string, args: string[]) {
     switch (action) {
         case 'add':
             const apiKey = args[0]
@@ -123,7 +111,7 @@ function manageKeys(index: string, action: string, args: string[]) {
                 console.error('错误: 请提供API密钥')
                 return
             }
-            configManagerCLI.addApiKey(upstreamIndex, apiKey)
+            configManagerCLI.addApiKey(indexOrName, apiKey)
             break
 
         case 'remove':
@@ -132,23 +120,20 @@ function manageKeys(index: string, action: string, args: string[]) {
                 console.error('错误: 请提供要删除的API密钥')
                 return
             }
-            configManagerCLI.removeApiKey(upstreamIndex, keyToRemove)
+            configManagerCLI.removeApiKey(indexOrName, keyToRemove)
             break
 
         case 'list':
+            const index = configManagerCLI.findUpstreamIndex(indexOrName)
             const config = configManagerCLI.getConfig()
-            const upstream = config.upstream[upstreamIndex]
-            if (upstream) {
-                console.log(`上游 [${upstreamIndex}] 的API密钥(已脱敏):`)
-                if (upstream.apiKeys.length === 0) {
-                    console.log('  没有API密钥')
-                } else {
-                    upstream.apiKeys.forEach((key, i) => {
-                        console.log(`  [${i}] ${maskApiKey(key)}`)
-                    })
-                }
+            const upstream = config.upstream[index]
+            console.log(`上游 [${index}] "${upstream.name || upstream.serviceType}" 的API密钥(已脱敏):`)
+            if (upstream.apiKeys.length === 0) {
+                console.log('  没有API密钥')
             } else {
-                console.error('错误: 上游不存在')
+                upstream.apiKeys.forEach((key, i) => {
+                    console.log(`  [${i}] ${maskApiKey(key)}`)
+                })
             }
             break
 
@@ -185,18 +170,26 @@ function main() {
 
             case 'remove':
                 if (args.length < 2) {
-                    console.error('错误: remove 命令需要 index 参数')
+                    console.error('错误: remove 命令需要 index 或 name 参数')
                     return
                 }
-                configManagerCLI.removeUpstream(parseInt(args[1]))
+                try {
+                    configManagerCLI.removeUpstream(args[1])
+                } catch (error) {
+                    console.error(error instanceof Error ? error.message : String(error))
+                }
                 break
 
             case 'update':
                 if (args.length < 2) {
-                    console.error('错误: update 命令需要 index 参数')
+                    console.error('错误: update 命令需要 index 或 name 参数')
                     return
                 }
-                updateUpstream(args[1], args.slice(2))
+                try {
+                    updateUpstream(args[1], args.slice(2))
+                } catch (error) {
+                    console.error(error instanceof Error ? error.message : String(error))
+                }
                 break
 
             case 'use':
@@ -204,15 +197,8 @@ function main() {
                     console.error('错误: use 命令需要 index 或 name 参数')
                     return
                 }
-                const indexOrName = args[1]
                 try {
-                    // 尝试解析为数字，如果失败则作为名称处理
-                    const parsedIndex = parseInt(indexOrName)
-                    if (!isNaN(parsedIndex)) {
-                        configManagerCLI.setUpstream(parsedIndex)
-                    } else {
-                        configManagerCLI.setUpstream(indexOrName)
-                    }
+                    configManagerCLI.setUpstream(args[1])
                 } catch (error) {
                     console.error(`错误: ${error instanceof Error ? error.message : error}`)
                 }
@@ -220,10 +206,14 @@ function main() {
 
             case 'key':
                 if (args.length < 3) {
-                    console.error('错误: key 命令需要 index 和 action 参数')
+                    console.error('错误: key 命令需要 index/name 和 action 参数')
                     return
                 }
-                manageKeys(args[1], args[2], args.slice(3))
+                try {
+                    manageKeys(args[1], args[2], args.slice(3))
+                } catch (error) {
+                    console.error(error instanceof Error ? error.message : String(error))
+                }
                 break
 
             case 'balance':
