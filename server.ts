@@ -1,7 +1,8 @@
 import express from 'express'
+import { Readable } from 'stream' // 新增导入
 import * as provider from './src/provider'
 import * as gemini from './src/gemini'
-import * as openaiold from './src/openaiold'
+import * => openaiold from './src/openaiold'
 import * as openai from './src/openai'
 import * as claude from './src/claude'
 import { configManager, UpstreamConfig } from './src/config'
@@ -296,20 +297,46 @@ app.post('/v1/messages', async (req, res) => {
     }
 
     // 协议转换：Provider -> Claude
-    const response = await providerImpl.convertToClaudeResponse(providerResponse)
+    const claudeResponse = await providerImpl.convertToClaudeResponse(providerResponse)
 
-    // 设置响应头并发送响应
-    response.headers.forEach((value, key) => {
+    res.status(claudeResponse.status)
+    claudeResponse.headers.forEach((value, key) => {
       res.setHeader(key, value)
     })
-    const data = await response.text()
-    res.status(response.status).send(data)
 
-    if (envConfigManager.getConfig().enableResponseLogs) {
-      const responseTime = Date.now() - startTime
-      console.log(
-        `[${new Date().toISOString()}] ${isDevelopment ? '⏱️' : ''} 响应时间: ${responseTime}ms, 状态: ${response.status}`
-      )
+    // 监听响应完成事件以记录时间
+    res.on('finish', () => {
+      if (envConfigManager.getConfig().enableResponseLogs) {
+        const responseTime = Date.now() - startTime
+        console.log(
+          `[${new Date().toISOString()}] ${isDevelopment ? '⏱️' : ''} 响应完成: ${responseTime}ms, 状态: ${claudeResponse.status}`
+        )
+      }
+    })
+
+    // 监听响应关闭事件（例如客户端断开连接或流错误）
+    res.on('close', () => {
+      if (!res.writableFinished) {
+        if (envConfigManager.getConfig().enableResponseLogs) {
+          const responseTime = Date.now() - startTime
+          console.log(
+            `[${new Date().toISOString()}] ${isDevelopment ? '⏱️' : ''} 响应中断: ${responseTime}ms, 状态: ${claudeResponse.status}`
+          )
+        }
+      }
+    })
+
+    if (claudeResponse.body) {
+      const nodeStream = Readable.fromWeb(claudeResponse.body as any)
+      nodeStream.on('error', error => {
+        // 这个错误来自上游流（例如，通过 controller.error() 抛出）
+        // 我们在这里记录它，因为主 catch 块无法捕获异步流错误
+        console.error(`[${new Date().toISOString()}] 💥 流式传输期间发生错误:`, error.message)
+        // pipe 会自动处理销毁 res，所以我们不需要手动操作
+      })
+      nodeStream.pipe(res)
+    } else {
+      res.end()
     }
   } catch (error) {
     console.error('服务器错误:', error)
