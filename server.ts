@@ -162,12 +162,28 @@ app.post('/v1/messages', async (req, res) => {
             )
         }
 
-        // 构造Request对象，模拟原Workers的URL结构
-        const encodedBaseUrl = encodeURIComponent(upstream.baseUrl)
-        const url = `http://localhost:${envConfigManager.getConfig().port}/${upstream.serviceType}/${encodedBaseUrl}/v1/messages`
-        const headers = new Headers()
+        // 确定提供商实现
+        let providerImpl: provider.Provider
+        switch (upstream.serviceType) {
+            case 'gemini':
+                providerImpl = new gemini.impl()
+                break
+            case 'openai':
+                providerImpl = new openai.impl()
+                break
+            case 'openaiold':
+                providerImpl = new openaiold.impl()
+                break
+            case 'claude':
+                providerImpl = new claude.impl()
+                break
+            default:
+                res.status(400).json({ error: 'Unsupported type' })
+                return
+        }
 
-        // 复制请求头，但不包含API密钥（我们将使用配置中的密钥）
+        // 构造提供商所需的 Request 对象
+        const headers = new Headers()
         Object.entries(req.headers).forEach(([key, value]) => {
             if (
                 typeof value === 'string' &&
@@ -179,24 +195,77 @@ app.post('/v1/messages', async (req, res) => {
                 headers.set(key, value.join(', '))
             }
         })
-
-        // 设置配置中的API密钥
-        headers.set('x-api-key', apiKey)
-
-        const request = new Request(url, {
+        const incomingRequest = new Request('http://localhost/v1/messages', {
             method: 'POST',
             headers: headers,
             body: JSON.stringify(req.body)
         })
 
-        const response = await handle(request, upstream, apiKey)
+        // 协议转换：Claude -> Provider
+        const providerRequest = await providerImpl.convertToProviderRequest(
+            incomingRequest,
+            upstream.baseUrl,
+            apiKey,
+            upstream
+        )
 
-        // 设置响应头
+        // 记录实际发出的请求
+        if (isDevelopment || envConfigManager.getConfig().enableRequestLogs) {
+            console.log(`[${new Date().toISOString()}] 🌐 实际请求URL: ${providerRequest.url}`)
+            console.log(`[${new Date().toISOString()}] 📤 请求方法: ${providerRequest.method}`)
+            const reqHeaders: { [key: string]: string } = {}
+            providerRequest.headers.forEach((value, key) => {
+                reqHeaders[key] = maskHeaderValue(key, value)
+            })
+            console.log(`[${new Date().toISOString()}] 📋 请求头:`, JSON.stringify(reqHeaders, null, 2))
+            try {
+                const body = await providerRequest.clone().text()
+                if (body.length > 0) {
+                    console.log(
+                        `[${new Date().toISOString()}] 📦 请求体:`,
+                        body.length > 500 ? body.substring(0, 500) + '...' : body
+                    )
+                }
+            } catch (error) {
+                console.log(`[${new Date().toISOString()}] 📦 请求体: [无法读取 - ${error.message}]`)
+            }
+        }
+
+        // 根据配置决定是否跳过TLS验证
+        const fetchOptions: any = {}
+        if (upstream.insecureSkipVerify) {
+            if (isDevelopment) {
+                console.log(`[${new Date().toISOString()}] ⚠️ 正在跳过对 ${providerRequest.url} 的TLS证书验证`)
+            }
+            fetchOptions.dispatcher = new Agent({
+                connect: {
+                    rejectUnauthorized: false
+                }
+            })
+        }
+
+        // 调用上游
+        const providerResponse = await fetch(providerRequest, fetchOptions)
+
+        // 记录响应信息
+        if (isDevelopment || envConfigManager.getConfig().enableResponseLogs) {
+            console.log(
+                `[${new Date().toISOString()}] 📥 响应状态: ${providerResponse.status} ${providerResponse.statusText}`
+            )
+            const responseHeaders: { [key: string]: string } = {}
+            providerResponse.headers.forEach((value, key) => {
+                responseHeaders[key] = value
+            })
+            console.log(`[${new Date().toISOString()}] 📋 响应头:`, JSON.stringify(responseHeaders, null, 2))
+        }
+
+        // 协议转换：Provider -> Claude
+        const response = await providerImpl.convertToClaudeResponse(providerResponse)
+
+        // 设置响应头并发送响应
         response.headers.forEach((value, key) => {
             res.setHeader(key, value)
         })
-
-        // 发送响应
         const data = await response.text()
         res.status(response.status).send(data)
 
@@ -212,86 +281,6 @@ app.post('/v1/messages', async (req, res) => {
     }
 })
 
-// 重用原有的handle函数逻辑，移除Cloudflare特定类型
-async function handle(request: Request, upstream: UpstreamConfig, apiKey: string): Promise<Response> {
-    // 使用顶部的统一敏感头脱敏工具
-    let providerImpl: provider.Provider
-    switch (upstream.serviceType) {
-        case 'gemini':
-            providerImpl = new gemini.impl()
-            break
-        case 'openai':
-            providerImpl = new openai.impl()
-            break
-        case 'openaiold':
-            providerImpl = new openaiold.impl()
-            break
-        case 'claude':
-            providerImpl = new claude.impl()
-            break
-        default:
-            return new Response('Unsupported type', { status: 400 })
-    }
-
-    const providerRequest = await providerImpl.convertToProviderRequest(request, upstream.baseUrl, apiKey, upstream)
-
-    // 记录实际发出的请求
-    if (isDevelopment || envConfigManager.getConfig().enableRequestLogs) {
-        console.log(`[${new Date().toISOString()}] 🌐 实际请求URL: ${providerRequest.url}`)
-        console.log(`[${new Date().toISOString()}] 📤 请求方法: ${providerRequest.method}`)
-
-        // 记录请求头（隐藏敏感信息：authorization/x-api-key/x-goog-api-key）
-        const headers: { [key: string]: string } = {}
-        providerRequest.headers.forEach((value, key) => {
-            headers[key] = maskHeaderValue(key, value)
-        })
-        console.log(`[${new Date().toISOString()}] 📋 请求头:`, JSON.stringify(headers, null, 2))
-
-        // 记录请求体
-        try {
-            const body = await providerRequest.clone().text()
-            if (body.length > 0) {
-                console.log(
-                    `[${new Date().toISOString()}] 📦 请求体:`,
-                    body.length > 500 ? body.substring(0, 500) + '...' : body
-                )
-            }
-        } catch (error) {
-            console.log(`[${new Date().toISOString()}] 📦 请求体: [无法读取 - ${error.message}]`)
-        }
-    }
-
-    // 根据配置决定是否跳过TLS验证
-    const fetchOptions: any = {}
-    if (upstream.insecureSkipVerify) {
-        if (isDevelopment) {
-            console.log(`[${new Date().toISOString()}] ⚠️ 正在跳过对 ${providerRequest.url} 的TLS证书验证`)
-        }
-        fetchOptions.dispatcher = new Agent({
-            connect: {
-                rejectUnauthorized: false
-            }
-        })
-    }
-
-    const providerResponse = await fetch(providerRequest, fetchOptions)
-
-    // 记录响应信息
-    if (isDevelopment || envConfigManager.getConfig().enableResponseLogs) {
-        console.log(
-            `[${new Date().toISOString()}] 📥 响应状态: ${providerResponse.status} ${providerResponse.statusText}`
-        )
-
-        // 记录响应头
-        const responseHeaders: { [key: string]: string } = {}
-        providerResponse.headers.forEach((value, key) => {
-            responseHeaders[key] = value
-        })
-        console.log(`[${new Date().toISOString()}] 📋 响应头:`, JSON.stringify(responseHeaders, null, 2))
-    }
-
-    return await providerImpl.convertToClaudeResponse(providerResponse)
-}
 
 // 开发模式文件监听
 function setupDevelopmentWatchers() {

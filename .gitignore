@@ -166,11 +166,6 @@ dist
 .yarn/install-state.gz
 .pnp.\*
 
-# wrangler project
-
-.dev.vars
-.wrangler/
-
 # Cursor rules
 
 .cursorrules
@@ -189,7 +184,6 @@ node_modules
 .output
 .vercel
 .netlify
-.wrangler
 .svelte-kit
 build
 

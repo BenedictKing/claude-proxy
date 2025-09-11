@@ -170,7 +170,6 @@ curl -X POST http://localhost:3000/admin/config/reload
 ```
 claude-worker-proxy/
 ├── src/
-│   ├── index.ts          # Cloudflare Worker 入口
 │   ├── provider.ts       # 统一提供商接口
 │   ├── openai.ts         # OpenAI 格式转换器
 │   ├── gemini.ts         # Gemini 格式转换器
@@ -412,16 +411,6 @@ pm2 save
 pm2 startup
 ```
 
-### Cloudflare Workers 部署
-
-```bash
-# 1. 配置 wrangler
-npm install -g wrangler
-wrangler auth login
-
-# 2. 部署到 Cloudflare
-pnpm deploycf
-```
 
 ### Docker 部署
 
