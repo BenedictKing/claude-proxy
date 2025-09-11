@@ -22,7 +22,7 @@ Claude API代理服务器配置工具
 
 参数:
   name                    上游名称
-  type                    服务类型 (gemini, openai, oainew, claude, custom)
+  type                    服务类型 (gemini, openaiold, openai, claude, custom)
   url                     上游基础URL
   index                   上游索引
   action                  密钥操作 (add, remove, list)
@@ -43,8 +43,8 @@ Claude API代理服务器配置工具
 
 支持的默认URL:
   gemini: https://generativelanguage.googleapis.com/v1beta
+  openaiold: https://api.openai.com/v1
   openai: https://api.openai.com/v1
-  oainew: https://api.openai.com/v1
 `)
 }
 
@@ -62,8 +62,8 @@ function parseArgs(args: string[]): { [key: string]: string } {
 }
 
 function addUpstream(name: string, type: string, url: string, extraArgs?: string[]) {
-    if (!['gemini', 'openai', 'oainew', 'claude', 'custom'].includes(type)) {
-        console.error('错误: 不支持的类型，请使用 gemini, openai, oainew, claude 或 custom')
+    if (!['gemini', 'openaiold', 'openai', 'claude', 'custom'].includes(type)) {
+        console.error('错误: 不支持的类型，请使用 gemini, openaiold, openai, claude 或 custom')
         return
     }
 
@@ -176,7 +176,7 @@ function main() {
             if (args.length < 4) {
                 console.error('错误: add 命令需要 name, type 和 url 参数')
                 console.log('示例: bun run config add MyGemini gemini https://generativelanguage.googleapis.com/v1beta')
-                console.log('      bun run config add MyOpenAI openai https://api.openai.com/v1 --description "官方OpenAI接口"')
+                console.log('      bun run config add MyOpenAI openaiold https://api.openai.com/v1 --description "官方OpenAI接口"')
                 return
             }
             addUpstream(args[1], args[2], args[3], args.slice(4))
