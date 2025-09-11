@@ -28,7 +28,7 @@
 1. 克隆项目
 
 ```bash
-git clone https://github.com/glidea/claude-worker-proxy
+git clone https://github.com/BenedictKing/claude-proxy
 cd claude-worker-proxy
 ```
 
