@@ -229,7 +229,7 @@ app.post('/v1/messages', async (req, res) => {
     }
 
     // 调用上游
-    const providerResponse = await fetch(providerRequest, fetchOptions)
+    let providerResponse = await fetch(providerRequest, fetchOptions)
 
     // 记录响应信息
     if (isDevelopment || envConfigManager.getConfig().enableResponseLogs) {
@@ -241,6 +241,57 @@ app.post('/v1/messages', async (req, res) => {
         responseHeaders[key] = value
       })
       console.log(`[${new Date().toISOString()}] 📋 响应头:`, JSON.stringify(responseHeaders, null, 2))
+
+      // 在 debug 级别下记录响应体
+      if (envConfigManager.shouldLog('debug')) {
+        const contentType = providerResponse.headers.get('content-type') || ''
+        const isStream = contentType.includes('text/event-stream')
+
+        if (isStream) {
+          if (providerResponse.body) {
+            const [logStream, processStream] = providerResponse.body.tee()
+
+            // 在后台异步记录流式响应
+            ;(async () => {
+              const reader = logStream.getReader()
+              const decoder = new TextDecoder()
+              try {
+                while (true) {
+                  const { done, value } = await reader.read()
+                  if (done) break
+                  const decodedChunk = decoder.decode(value, { stream: false })
+                  if (decodedChunk.trim().length > 0) {
+                    console.log(`[${new Date().toISOString()}] 🛰️  上游流式数据: ${decodedChunk.trim()}`)
+                  }
+                }
+              } catch (e) {
+                console.error(`[${new Date().toISOString()}] 💥 日志流读取错误:`, e)
+              }
+            })()
+
+            // 创建一个新的 Response 对象，用于后续处理
+            providerResponse = new Response(processStream, {
+              status: providerResponse.status,
+              statusText: providerResponse.statusText,
+              headers: providerResponse.headers
+            })
+          }
+        } else {
+          // 对于非流式响应，克隆并记录
+          try {
+            const responseClone = providerResponse.clone()
+            const body = await responseClone.text()
+            if (body.length > 0) {
+              console.log(
+                `[${new Date().toISOString()}] 📦 响应体:`,
+                body.length > 1000 ? body.substring(0, 1000) + '...' : body
+              )
+            }
+          } catch (error) {
+            console.log(`[${new Date().toISOString()}] 📦 响应体: [无法读取 - ${(error as Error).message}]`)
+          }
+        }
+      }
     }
 
     // 协议转换：Provider -> Claude
