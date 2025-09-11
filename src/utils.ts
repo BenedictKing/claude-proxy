@@ -142,6 +142,7 @@ export async function processProviderStream(
       sendMessageStart(controller)
 
       try {
+        // 主处理循环
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
@@ -152,34 +153,62 @@ export async function processProviderStream(
           buffer = lines.pop() || ''
 
           for (const line of lines) {
-            if (!line.trim() || !line.startsWith('data: ')) continue
+            const trimmedLine = line.trim()
+            if (!trimmedLine) continue
 
-            const jsonStr = line.slice(6)
+            let jsonStr: string
+            if (trimmedLine.startsWith('data: ')) {
+              jsonStr = trimmedLine.substring(6).trim()
+            } else {
+              // 处理一些不规范的上游，错误信息可能直接以JSON形式返回
+              jsonStr = trimmedLine
+            }
+
             if (jsonStr === '[DONE]') continue
+            if (!jsonStr) continue
 
             const result = processLine(jsonStr, textBlockIndex, toolUseBlockIndex)
             if (result) {
               textBlockIndex = result.textBlockIndex
               toolUseBlockIndex = result.toolUseBlockIndex
-
               for (const event of result.events) {
                 controller.enqueue(new TextEncoder().encode(event))
               }
             }
           }
         }
-      } finally {
+
+        // 处理缓冲区中剩余的数据
         if (buffer.trim()) {
-          const result = processLine(buffer.slice(6), textBlockIndex, toolUseBlockIndex)
-          if (result) {
-            for (const event of result.events) {
-              controller.enqueue(new TextEncoder().encode(event))
+          let jsonStr = buffer.trim()
+          if (jsonStr.startsWith('data: ')) {
+            jsonStr = jsonStr.substring(6).trim()
+          }
+
+          if (jsonStr && jsonStr !== '[DONE]') {
+            const result = processLine(jsonStr, textBlockIndex, toolUseBlockIndex)
+            if (result) {
+              for (const event of result.events) {
+                controller.enqueue(new TextEncoder().encode(event))
+              }
             }
           }
         }
-        reader.releaseLock()
+
         sendMessageStop(controller)
-        controller.close()
+      } catch (error) {
+        console.error(`[${new Date().toISOString()}] 💥 Stream processing error:`, error)
+        controller.error(error) // 向流的消费者发出错误信号
+      } finally {
+        reader.releaseLock()
+        // 确保控制器在所有路径上都关闭
+        if (controller.desiredSize !== null) {
+          try {
+            controller.close()
+          } catch (e) {
+            // 忽略，可能因错误已关闭
+          }
+        }
       }
     }
   })

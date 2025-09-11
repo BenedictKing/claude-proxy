@@ -240,7 +240,7 @@ export class impl implements provider.Provider {
     const toolCallAccumulator = new Map<number, { id?: string; name?: string; arguments?: string }>()
 
     return utils.processProviderStream(openaiResponse, (jsonStr, textBlockIndex, toolUseBlockIndex) => {
-      let openaiData: types.OpenAIStreamResponse
+      let openaiData: any
       try {
         openaiData = JSON.parse(jsonStr)
       } catch (e) {
@@ -249,6 +249,12 @@ export class impl implements provider.Provider {
           jsonStr
         )
         return null
+      }
+
+      // 检查上游流中是否直接返回了错误对象
+      if (openaiData.error) {
+        console.error(`[${new Date().toISOString()}] 🚨 Upstream error in stream:`, JSON.stringify(openaiData.error))
+        throw new Error(`Upstream stream error: ${openaiData.error.message || JSON.stringify(openaiData.error)}`)
       }
 
       if (!openaiData.choices || openaiData.choices.length === 0) {
