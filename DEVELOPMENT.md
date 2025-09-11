@@ -103,7 +103,7 @@ NODE_ENV=development                   # 开发模式
 1. **启动开发服务器**
 
     ```bash
-    bun run dev:auto
+    bun run dev
     ```
 
 2. **修改源码**
@@ -390,7 +390,7 @@ cp .env.example .env
 vim .env
 
 # 3. 启动开发服务器
-bun run dev:auto
+bun run dev
 ```
 
 ### 生产环境部署
