@@ -8,6 +8,7 @@ import { configManager, UpstreamConfig } from './src/config'
 import { envConfigManager } from './src/env'
 import { maskApiKey } from './src/utils'
 import chokidar from 'chokidar'
+import { Agent } from 'undici'
 
 // 敏感头统一掩码配置与函数
 const SENSITIVE_HEADER_KEYS = new Set(['authorization', 'x-api-key', 'x-goog-api-key'])
@@ -260,7 +261,20 @@ async function handle(request: Request, upstream: UpstreamConfig, apiKey: string
         }
     }
 
-    const providerResponse = await fetch(providerRequest)
+    // 根据配置决定是否跳过TLS验证
+    const fetchOptions: any = {}
+    if (upstream.insecureSkipVerify) {
+        if (isDevelopment) {
+            console.log(`[${new Date().toISOString()}] ⚠️ 正在跳过对 ${providerRequest.url} 的TLS证书验证`)
+        }
+        fetchOptions.dispatcher = new Agent({
+            connect: {
+                rejectUnauthorized: false
+            }
+        })
+    }
+
+    const providerResponse = await fetch(providerRequest, fetchOptions)
 
     // 记录响应信息
     if (isDevelopment || envConfigManager.getConfig().enableResponseLogs) {

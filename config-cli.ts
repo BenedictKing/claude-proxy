@@ -82,6 +82,9 @@ function addUpstream(name: string, type: string, url: string, extraArgs?: string
         if (flags.description) {
             upstream.description = flags.description
         }
+        if (flags.insecureSkipVerify) {
+            upstream.insecureSkipVerify = flags.insecureSkipVerify === 'true'
+        }
     }
 
     configManagerCLI.addUpstream(upstream)
@@ -95,9 +98,12 @@ function updateUpstream(indexOrName: string, args: string[]) {
     if (flags.url) update.baseUrl = flags.url
     if (flags.type) update.serviceType = flags.type as any
     if (flags.description) update.description = flags.description
+    if (flags.insecureSkipVerify) {
+        update.insecureSkipVerify = flags.insecureSkipVerify === 'true'
+    }
 
     if (Object.keys(update).length === 0) {
-        console.error('错误: 请指定要更新的字段 (--name, --url, --type, --description)')
+        console.error('错误: 请指定要更新的字段 (--name, --url, --type, --description, --insecureSkipVerify)')
         return
     }
 

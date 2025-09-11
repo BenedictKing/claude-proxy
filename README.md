@@ -775,6 +775,32 @@ bun run config key your-upstream add sk-new-key
 bun run config balance round-robin
 ```
 
+#### 3. 500 Internal Server Error 或 TLS/SSL 错误
+
+**现象**: `Internal Server Error` 或日志中出现 `ERR_TLS_CERT_ALTNAME_INVALID` 等证书错误。
+
+**可能原因**:
+- 上游服务不可用
+- 配置错误
+- 上游服务使用了自签名或不匹配的SSL证书
+
+**解决方案**:
+```bash
+# 检查服务器日志
+tail -f server.log
+
+# 启用调试模式
+echo "LOG_LEVEL=debug" >> .env
+echo "ENABLE_REQUEST_LOGS=true" >> .env
+echo "ENABLE_RESPONSE_LOGS=true" >> .env
+
+# 如果确认是上游证书问题，可以开启跳过TLS验证（请谨慎使用）
+bun run config update your-upstream --insecureSkipVerify true
+
+# 重启服务器
+bun run start
+```
+
 #### 3. 500 Internal Server Error
 
 **可能原因**:

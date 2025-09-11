@@ -8,6 +8,7 @@ export interface UpstreamConfig {
     serviceType: 'gemini' | 'openai' | 'openaiold' | 'claude'
     name?: string
     description?: string // 备注字段，用于记录渠道详细信息
+    insecureSkipVerify?: boolean // 新增：是否跳过TLS证书验证
     modelMapping?: {
         opus?: string
         sonnet?: string
@@ -282,6 +283,9 @@ class ConfigManager {
             console.log(`        地址: ${upstream.baseUrl}`)
             if (upstream.description) {
                 console.log(`        备注: ${upstream.description}`)
+            }
+            if (upstream.insecureSkipVerify) {
+                console.log(`        安全: 跳过TLS证书验证`)
             }
             console.log(`        API密钥数量: ${keyCount}`)
             if (keyCount > 0) {
