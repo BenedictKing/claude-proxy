@@ -59,7 +59,7 @@ class DevServer {
   private setupWatcher() {
     const sourcePaths = ['src/**/*.ts', 'server.ts', 'dev-runner.ts']
 
-    const envPaths = ['.env', '.env.example']
+    const envPaths = ['.env', '.env.local']
 
     console.log(`[${new Date().toISOString()}] 🔍 启动源码监听: ${sourcePaths.join(', ')}`)
     console.log(`[${new Date().toISOString()}] 🌍 启动环境变量监听: ${envPaths.join(', ')}`)
