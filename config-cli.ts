@@ -158,90 +158,94 @@ function manageKeys(index: string, action: string, args: string[]) {
 }
 
 function main() {
-    const args = process.argv.slice(2)
+    const run = () => {
+        const args = process.argv.slice(2)
 
-    if (args.length === 0 || args[0] === 'help') {
-        showHelp()
-        return
-    }
-
-    const command = args[0]
-
-    switch (command) {
-        case 'show':
-            configManagerCLI.showConfig()
-            break
-
-        case 'add':
-            if (args.length < 4) {
-                console.error('错误: add 命令需要 name, type 和 url 参数')
-                console.log('示例: bun run config add MyGemini gemini https://generativelanguage.googleapis.com/v1beta')
-                console.log('      bun run config add MyOpenAI openaiold https://api.openai.com/v1 --description "官方OpenAI接口"')
-                return
-            }
-            addUpstream(args[1], args[2], args[3], args.slice(4))
-            break
-
-        case 'remove':
-            if (args.length < 2) {
-                console.error('错误: remove 命令需要 index 参数')
-                return
-            }
-            configManagerCLI.removeUpstream(parseInt(args[1]))
-            break
-
-        case 'update':
-            if (args.length < 2) {
-                console.error('错误: update 命令需要 index 参数')
-                return
-            }
-            updateUpstream(args[1], args.slice(2))
-            break
-
-        case 'use':
-            if (args.length < 2) {
-                console.error('错误: use 命令需要 index 或 name 参数')
-                return
-            }
-            const indexOrName = args[1]
-            try {
-                // 尝试解析为数字，如果失败则作为名称处理
-                const parsedIndex = parseInt(indexOrName)
-                if (!isNaN(parsedIndex)) {
-                    configManagerCLI.setUpstream(parsedIndex)
-                } else {
-                    configManagerCLI.setUpstream(indexOrName)
-                }
-            } catch (error) {
-                console.error(`错误: ${error instanceof Error ? error.message : error}`)
-            }
-            break
-
-        case 'key':
-            if (args.length < 3) {
-                console.error('错误: key 命令需要 index 和 action 参数')
-                return
-            }
-            manageKeys(args[1], args[2], args.slice(3))
-            break
-
-        case 'balance':
-            if (args.length < 2) {
-                console.error('错误: balance 命令需要 strategy 参数')
-                return
-            }
-            const strategy = args[1] as 'round-robin' | 'random' | 'failover'
-            if (!['round-robin', 'random', 'failover'].includes(strategy)) {
-                console.error('错误: 不支持的策略，请使用 round-robin, random 或 failover')
-                return
-            }
-            configManagerCLI.setLoadBalance(strategy)
-            break
-
-        default:
-            console.error(`未知命令: ${command}`)
+        if (args.length === 0 || args[0] === 'help') {
             showHelp()
+            return
+        }
+
+        const command = args[0]
+
+        switch (command) {
+            case 'show':
+                configManagerCLI.showConfig()
+                break
+
+            case 'add':
+                if (args.length < 4) {
+                    console.error('错误: add 命令需要 name, type 和 url 参数')
+                    console.log('示例: bun run config add MyGemini gemini https://generativelanguage.googleapis.com/v1beta')
+                    console.log('      bun run config add MyOpenAI openaiold https://api.openai.com/v1 --description "官方OpenAI接口"')
+                    return
+                }
+                addUpstream(args[1], args[2], args[3], args.slice(4))
+                break
+
+            case 'remove':
+                if (args.length < 2) {
+                    console.error('错误: remove 命令需要 index 参数')
+                    return
+                }
+                configManagerCLI.removeUpstream(parseInt(args[1]))
+                break
+
+            case 'update':
+                if (args.length < 2) {
+                    console.error('错误: update 命令需要 index 参数')
+                    return
+                }
+                updateUpstream(args[1], args.slice(2))
+                break
+
+            case 'use':
+                if (args.length < 2) {
+                    console.error('错误: use 命令需要 index 或 name 参数')
+                    return
+                }
+                const indexOrName = args[1]
+                try {
+                    // 尝试解析为数字，如果失败则作为名称处理
+                    const parsedIndex = parseInt(indexOrName)
+                    if (!isNaN(parsedIndex)) {
+                        configManagerCLI.setUpstream(parsedIndex)
+                    } else {
+                        configManagerCLI.setUpstream(indexOrName)
+                    }
+                } catch (error) {
+                    console.error(`错误: ${error instanceof Error ? error.message : error}`)
+                }
+                break
+
+            case 'key':
+                if (args.length < 3) {
+                    console.error('错误: key 命令需要 index 和 action 参数')
+                    return
+                }
+                manageKeys(args[1], args[2], args.slice(3))
+                break
+
+            case 'balance':
+                if (args.length < 2) {
+                    console.error('错误: balance 命令需要 strategy 参数')
+                    return
+                }
+                const strategy = args[1] as 'round-robin' | 'random' | 'failover'
+                if (!['round-robin', 'random', 'failover'].includes(strategy)) {
+                    console.error('错误: 不支持的策略，请使用 round-robin, random 或 failover')
+                    return
+                }
+                configManagerCLI.setLoadBalance(strategy)
+                break
+
+            default:
+                console.error(`未知命令: ${command}`)
+                showHelp()
+        }
     }
+
+    run()
 
     // 命令执行完成后退出
     setTimeout(() => {
