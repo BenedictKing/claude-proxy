@@ -61,14 +61,13 @@ bun run dev:hot             # 热重载模式
 - ✅ 生产/开发环境自适应
 - ✅ 开发模式端点和中间件
 - ✅ 分离的文件监听
-- ✅ Redis状态显示
 - ✅ 配置自动重载
 - ✅ 详细的开发日志
 
 ### 3. 配置热重载
 
 - ✅ 配置文件变化自动重载
-- ✅ Redis多实例配置同步
+- ✅ 基于文件的配置管理
 - ✅ 手动重载端点
 - ✅ 无需重启服务器
 
@@ -95,9 +94,6 @@ POST /admin/config/reload  # 手动重载配置
 ## 环境变量
 
 ```bash
-# Redis配置
-REDIS_URL=redis://localhost:6379/1    # Redis连接URL（使用DB 1）
-
 # 开发环境
 NODE_ENV=development                   # 开发模式
 ```
@@ -140,12 +136,6 @@ lsof -i :3000              # 查看端口占用
 kill -9 <PID>              # 强制终止进程
 ```
 
-### Redis连接失败
-
-```bash
-redis-server              # 启动Redis服务器
-redis-cli ping            # 测试Redis连接
-```
 
 ### 配置重载失败
 
@@ -167,7 +157,7 @@ curl -X POST http://localhost:3000/admin/config/reload
 
 1. **开发时使用 `dev:auto`**
 2. **生产环境使用 `start`**
-3. **配置管理使用Redis**
+3. **配置管理基于文件**
 4. **定期检查日志输出**
 5. **使用健康检查监控状态**
 6. **配置修改无需重启**
@@ -188,12 +178,11 @@ claude-worker-proxy/
 │   ├── openaiold.ts      # 旧版 OpenAI 格式转换器
 │   ├── config.ts         # 配置管理器
 │   ├── env.ts            # 环境变量管理
-│   ├── redis.ts          # Redis 缓存管理
 │   ├── utils.ts          # 工具函数
 │   └── types.ts          # TypeScript 类型定义
 ├── server.ts             # Express 服务器（本地/开发）
 ├── dev-runner.ts         # 开发模式自动重启
-├── config.ts             # 配置命令行工具
+├── config-cli.ts         # 配置命令行工具
 ├── config.json           # 运行时配置文件
 └── .env                  # 环境变量配置
 ```
@@ -216,7 +205,7 @@ interface Provider {
 `ConfigManager` 负责：
 - 配置文件的读写
 - 配置变更监听
-- Redis 配置同步
+- 基于文件的配置管理
 - API 密钥轮询策略
 
 #### 3. 中间件模式
@@ -244,8 +233,6 @@ graph TD
     K --> L[Client Response]
     
     M[Config File] --> E
-    N[Redis Cache] --> E
-    N --> F
 ```
 
 ## 📝 代码规范
@@ -333,22 +320,6 @@ for i in {1..5}; do
 done
 ```
 
-#### 3. Redis 集成测试
-
-```bash
-# 启动 Redis
-redis-server
-
-# 测试配置同步
-bun run config add test-redis https://api.example.com openai
-bun run config key test-redis add test-key
-
-# 在另一个终端检查 Redis 数据
-redis-cli
-> SELECT 1
-> KEYS *
-> GET config:request_count
-```
 
 ### 集成测试
 
@@ -391,10 +362,7 @@ grep -o "POST /v1/messages" server.log | wc -l
 cat config.json | jq .
 
 # 检查环境变量
-env | grep -E "(PORT|REDIS|LOG_LEVEL)"
-
-# 测试 Redis 连接
-redis-cli ping
+env | grep -E "(PORT|LOG_LEVEL)"
 ```
 
 ### 3. 网络调试
@@ -410,33 +378,6 @@ nslookup api.openai.com
 telnet localhost 3000
 ```
 
-## Redis配置同步
-
-### 多实例配置同步
-
-- 配置文件变化时，通过Redis发布/订阅同步
-- 所有实例会收到配置更新通知
-- 支持跨实例配置一致性
-
-### 配置缓存
-
-- 配置存储在Redis DB 1中
-- 提供配置读取性能
-- 支持配置版本控制
-
-### Redis 数据结构
-
-```
-Redis DB 1:
-├── config:request_count     # 轮询计数器
-├── config:current           # 当前配置快照
-└── config:version           # 配置版本号
-
-Redis 发布/订阅:
-├── config:updated           # 配置更新通知
-└── config:reload            # 配置重载通知
-```
-
 ## 🚀 部署指南
 
 ### 开发环境部署
@@ -449,10 +390,7 @@ pnpm install
 cp .env.example .env
 vim .env
 
-# 3. 启动 Redis (可选)
-redis-server
-
-# 4. 启动开发服务器
+# 3. 启动开发服务器
 bun run dev:auto
 ```
 
@@ -465,8 +403,6 @@ pnpm install --production
 # 2. 配置环境变量
 export NODE_ENV=production
 export PORT=3000
-export REDIS_URL=redis://localhost:6379/1
-
 # 3. 启动服务器
 bun run start
 

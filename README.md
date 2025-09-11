@@ -255,15 +255,13 @@ x-api-key: your-proxy-access-key
 sequenceDiagram
     participant Client as 客户端
     participant Proxy as 代理服务器
-    participant Redis as Redis缓存
     participant Upstream as 上游API
 
     Client->>Proxy: POST /v1/messages
     Note over Client,Proxy: 包含代理访问密钥
 
     Proxy->>Proxy: 验证访问密钥
-    Proxy->>Redis: 获取API密钥 (轮询/随机)
-    Redis-->>Proxy: 返回API密钥
+    Proxy->>Proxy: 获取API密钥 (轮询/随机)
     
     Proxy->>Proxy: 协议转换 (Claude→上游格式)
     Proxy->>Upstream: 转发请求
@@ -642,13 +640,12 @@ bun run config use 0
 bun run config use openai-main
 ```
 
-### Q4: Redis 的作用是什么？是否必须？
+### Q4: 系统是否需要外部依赖？
 
-**A:** Redis 主要用于：
-- **API 密钥轮询计数**: 在分布式部署中保持轮询计数一致性
-- **配置同步**: 多实例间的配置实时同步
-
-Redis 不是必须的，没有 Redis 时会自动回退到内存模式。
+**A:** 不需要。系统已经简化，移除了Redis依赖：
+- **API密钥轮询**: 使用内存计数器实现
+- **配置管理**: 基于本地文件，支持热重载
+- **部署简单**: 无需配置外部数据库或缓存
 
 ### Q5: 如何在 Claude Code 中使用这个代理？
 
@@ -714,23 +711,7 @@ kill -9 <PID>
 echo "PORT=3001" >> .env
 ```
 
-#### 2. Redis 连接失败
-
-**现象**: `Redis connection failed`
-
-**解决方案**:
-```bash
-# 启动 Redis 服务
-redis-server
-
-# 检查 Redis 状态
-redis-cli ping
-
-# 或在 .env 中禁用 Redis
-echo "REDIS_URL=" >> .env
-```
-
-#### 3. 配置文件损坏
+#### 2. 配置文件损坏
 
 **现象**: `SyntaxError: Unexpected token in JSON`
 
