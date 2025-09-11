@@ -5,7 +5,7 @@ import { maskApiKey } from './utils'
 export interface UpstreamConfig {
     baseUrl: string
     apiKeys: string[]
-    serviceType: 'gemini' | 'openai' | 'openaiold' | 'claude' | 'custom'
+    serviceType: 'gemini' | 'openai' | 'openaiold' | 'claude'
     name?: string
     description?: string // 备注字段，用于记录渠道详细信息
     modelMapping?: {

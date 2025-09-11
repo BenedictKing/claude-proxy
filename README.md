@@ -5,7 +5,7 @@
 ## 🚀 功能特性
 
 - **统一入口**: 所有请求通过单一端点 `http://localhost:3000/v1/messages` 访问
-- **多上游支持**: 支持 OpenAI、Gemini、自定义 API 服务商
+- **多上游支持**: 支持 OpenAI (及兼容 API)、Gemini 和 Claude 等多种上游服务
 - **负载均衡**: 支持轮询、随机、故障转移策略
 - **多 API 密钥**: 每个上游可配置多个 API 密钥，自动轮换使用
 - **配置管理**: 命令行工具轻松管理上游配置
@@ -123,7 +123,6 @@ bun run config add <name> <baseUrl> <serviceType>
 # 示例
 bun run config add openai-api https://api.openai.com openai
 bun run config add gemini-api https://generativelanguage.googleapis.com gemini
-bun run config add custom-api https://your-api.com custom
 
 # 添加 API 密钥
 bun run config key <upstream-name> add <apiKey1> <apiKey2> ...
@@ -278,9 +277,9 @@ sequenceDiagram
 
 | 模型类型 | 示例模型ID | 支持的服务商 |
 |---------|-----------|-------------|
-| Claude 3.5 Sonnet | `claude-3-5-sonnet-20241022` | OpenAI, 自定义API |
-| Claude 3.5 Haiku | `claude-3-5-haiku-20241022` | OpenAI, 自定义API |
-| Claude 3 Opus | `claude-3-opus-20240229` | OpenAI, 自定义API |
+| Claude 3.5 Sonnet | `claude-3-5-sonnet-20241022` | OpenAI (及兼容 API) |
+| Claude 3.5 Haiku | `claude-3-5-haiku-20241022` | OpenAI (及兼容 API) |
+| Claude 3 Opus | `claude-3-opus-20240229` | OpenAI (及兼容 API) |
 | Gemini | `gemini-1.5-pro` | Gemini |
 
 ### 请求格式
@@ -610,10 +609,9 @@ claude
 ### Q1: 代理服务器支持哪些上游 AI 服务商？
 
 **A:** 目前支持以下服务商：
-- **OpenAI**: 使用 OpenAI 格式的 API（如 OpenAI 官方、各种第三方 OpenAI 兼容服务）
-- **Gemini**: Google 的 Gemini API
-- **Claude**: Anthropic 的官方 Claude API
-- **自定义 API**: 任何兼容 OpenAI 格式的第三方 API
+- **OpenAI**: 支持 OpenAI 官方 API 以及任何兼容 OpenAI 格式的第三方服务 (使用 `openai` 或 `openaiold` 类型)。
+- **Gemini**: Google 的 Gemini API。
+- **Claude**: Anthropic 的官方 Claude API。
 
 ### Q2: 如何实现 API 密钥的负载均衡？
 

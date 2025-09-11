@@ -22,7 +22,7 @@ Claude API代理服务器配置工具
 
 参数:
   name                    上游名称
-  type                    服务类型 (gemini, openaiold, openai, claude, custom)
+  type                    服务类型 (gemini, openaiold, openai, claude)
   url                     上游基础URL
   index                   上游索引
   action                  密钥操作 (add, remove, list)
@@ -62,8 +62,8 @@ function parseArgs(args: string[]): { [key: string]: string } {
 }
 
 function addUpstream(name: string, type: string, url: string, extraArgs?: string[]) {
-    if (!['gemini', 'openaiold', 'openai', 'claude', 'custom'].includes(type)) {
-        console.error('错误: 不支持的类型，请使用 gemini, openaiold, openai, claude 或 custom')
+    if (!['gemini', 'openaiold', 'openai', 'claude'].includes(type)) {
+        console.error('错误: 不支持的类型，请使用 gemini, openaiold, openai, 或 claude')
         return
     }
 
