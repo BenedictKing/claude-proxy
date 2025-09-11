@@ -121,14 +121,14 @@ HEALTH_CHECK_PATH=/health
 bun run config add <name> <baseUrl> <serviceType>
 
 # 示例
-bun run config add openai-api https://api.openai.com openai
-bun run config add gemini-api https://generativelanguage.googleapis.com gemini
+bun run config add openai-api https://api.openai.com/v1 openai
+bun run config add gemini-api https://generativelanguage.googleapis.com/v1beta gemini
 
-# 添加 API 密钥
-bun run config key <upstream-name> add <apiKey1> <apiKey2> ...
+# 添加 API 密钥 (支持索引或名称)
+bun run config key <index|name> add <apiKey1> <apiKey2> ...
 
 # 列出 API 密钥（输出已脱敏）
-bun run config key <index> list
+bun run config key <index|name> list
 
 # 示例
 bun run config key openai-api add sk-1234567890abcdef sk-0987654321fedcba
@@ -136,8 +136,8 @@ bun run config key openai-api add sk-1234567890abcdef sk-0987654321fedcba
 # 查看当前配置
 bun run config show
 
-# 删除上游
-bun run config remove <upstream-name>
+# 删除上游 (支持索引或名称)
+bun run config remove <index|name>
 
 # 设置负载均衡策略
 bun run config balance <strategy>
