@@ -240,7 +240,17 @@ export class impl implements provider.Provider {
     const toolCallAccumulator = new Map<number, { id?: string; name?: string; arguments?: string }>()
 
     return utils.processProviderStream(openaiResponse, (jsonStr, textBlockIndex, toolUseBlockIndex) => {
-      const openaiData = JSON.parse(jsonStr) as types.OpenAIStreamResponse
+      let openaiData: types.OpenAIStreamResponse
+      try {
+        openaiData = JSON.parse(jsonStr)
+      } catch (e) {
+        console.error(
+          `[${new Date().toISOString()}] 🚨 OpenAI(old) stream JSON parse error, skipping. Raw data:`,
+          jsonStr
+        )
+        return null
+      }
+
       if (!openaiData.choices || openaiData.choices.length === 0) {
         return null
       }

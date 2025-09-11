@@ -248,8 +248,15 @@ export class impl implements provider.Provider {
     let toolUseStopEmitted = false
 
     return utils.processProviderStream(openaiResponse, (jsonStr, textBlockIndex, toolUseBlockIndex) => {
-      const openaiData = JSON.parse(jsonStr) as types.OpenAIStreamResponse
-      if (!openaiData.choices || openaiData.choices.length === 0) {
+      let openaiData: types.OpenAIStreamResponse
+      try {
+        openaiData = JSON.parse(jsonStr)
+      } catch (e) {
+        console.error(`[${new Date().toISOString()}] 🚨 OpenAI stream JSON parse error, skipping. Raw data:`, jsonStr)
+        return null
+      }
+
+      if (!openaiData || !openaiData.choices || openaiData.choices.length === 0) {
         return null
       }
 

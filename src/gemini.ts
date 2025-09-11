@@ -215,8 +215,15 @@ export class impl implements provider.Provider {
 
   private async convertStreamResponse(geminiResponse: Response): Promise<Response> {
     return utils.processProviderStream(geminiResponse, (jsonStr, textBlockIndex, toolUseBlockIndex) => {
-      const geminiData = JSON.parse(jsonStr) as types.GeminiResponse
-      if (!geminiData.candidates || geminiData.candidates.length === 0) {
+      let geminiData: types.GeminiResponse
+      try {
+        geminiData = JSON.parse(jsonStr)
+      } catch (e) {
+        console.error(`[${new Date().toISOString()}] 🚨 Gemini stream JSON parse error, skipping. Raw data:`, jsonStr)
+        return null
+      }
+
+      if (!geminiData || !geminiData.candidates || geminiData.candidates.length === 0) {
         return null
       }
 
