@@ -102,22 +102,22 @@ NODE_ENV=development                   # 开发模式
 
 1. **启动开发服务器**
 
-    ```bash
-    bun run dev
-    ```
+   ```bash
+   bun run dev
+   ```
 
 2. **修改源码**
-    - 服务器会自动重启
-    - 保持请求会话
+   - 服务器会自动重启
+   - 保持请求会话
 
 3. **修改配置**
-    - 使用 `bun run config` 命令
-    - 或直接编辑 `config.json`
-    - 配置会自动重载，无需重启
+   - 使用 `bun run config` 命令
+   - 或直接编辑 `config.json`
+   - 配置会自动重载，无需重启
 
 4. **测试**
-    - 使用 `/admin/dev/info` 查看状态
-    - 使用健康检查端点验证
+   - 使用 `/admin/dev/info` 查看状态
+   - 使用健康检查端点验证
 
 ## 文件变化处理
 
@@ -135,7 +135,6 @@ NODE_ENV=development                   # 开发模式
 lsof -i :3000              # 查看端口占用
 kill -9 <PID>              # 强制终止进程
 ```
-
 
 ### 配置重载失败
 
@@ -194,14 +193,15 @@ claude-api-proxy/
 
 ```typescript
 interface Provider {
-    convertToProviderRequest(request: Request, baseUrl: string, apiKey: string): Promise<Request>
-    convertToClaudeResponse(response: Response): Promise<Response>
+  convertToProviderRequest(request: Request, baseUrl: string, apiKey: string): Promise<Request>
+  convertToClaudeResponse(response: Response): Promise<Response>
 }
 ```
 
 #### 2. 配置管理器模式
 
 `ConfigManager` 负责：
+
 - 配置文件的读写
 - 配置变更监听
 - 基于文件的配置管理
@@ -210,6 +210,7 @@ interface Provider {
 #### 3. 中间件模式
 
 Express 服务器使用中间件架构：
+
 - 身份验证中间件
 - 日志记录中间件
 - 错误处理中间件
@@ -230,7 +231,7 @@ graph TD
     I --> J[Response Converter]
     J --> K[Response Logger]
     K --> L[Client Response]
-    
+
     M[Config File] --> E
 ```
 
@@ -259,11 +260,11 @@ graph TD
 
 ```typescript
 try {
-    const result = await riskyOperation()
-    return result
+  const result = await riskyOperation()
+  return result
 } catch (error) {
-    console.error('Operation failed:', error)
-    throw new Error('Specific error message for user')
+  console.error('Operation failed:', error)
+  throw new Error('Specific error message for user')
 }
 ```
 
@@ -272,10 +273,10 @@ try {
 使用分级日志系统：
 
 ```typescript
-console.error('严重错误信息')   // 错误级别
-console.warn('警告信息')       // 警告级别
-console.log('一般信息')        // 信息级别
-console.debug('调试信息')      // 调试级别
+console.error('严重错误信息') // 错误级别
+console.warn('警告信息') // 警告级别
+console.log('一般信息') // 信息级别
+console.debug('调试信息') // 调试级别
 ```
 
 ## 🧪 测试策略
@@ -318,7 +319,6 @@ for i in {1..5}; do
     -d '{"model":"claude-3-5-sonnet-20241022","max_tokens":10,"messages":[{"role":"user","content":"Test '$i'"}]}'
 done
 ```
-
 
 ### 集成测试
 
@@ -410,7 +410,6 @@ pm2 start server.ts --name claude-proxy
 pm2 save
 pm2 startup
 ```
-
 
 ### Docker 部署
 

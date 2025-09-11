@@ -232,22 +232,22 @@ bun run config use gemini-backup     # 切换到备用 Gemini
 
 ```json
 {
-    "upstream": [
-        {
-            "baseUrl": "https://api.openai.com",
-            "apiKeys": ["sk-1234567890abcdef", "sk-0987654321fedcba"],
-            "serviceType": "openai",
-            "name": "openai-api"
-        },
-        {
-            "baseUrl": "https://generativelanguage.googleapis.com",
-            "apiKeys": ["your-gemini-api-key"],
-            "serviceType": "gemini",
-            "name": "gemini-api"
-        }
-    ],
-    "currentUpstream": 0,
-    "loadBalance": "failover"
+  "upstream": [
+    {
+      "baseUrl": "https://api.openai.com",
+      "apiKeys": ["sk-1234567890abcdef", "sk-0987654321fedcba"],
+      "serviceType": "openai",
+      "name": "openai-api"
+    },
+    {
+      "baseUrl": "https://generativelanguage.googleapis.com",
+      "apiKeys": ["your-gemini-api-key"],
+      "serviceType": "gemini",
+      "name": "gemini-api"
+    }
+  ],
+  "currentUpstream": 0,
+  "loadBalance": "failover"
 }
 ```
 
@@ -304,14 +304,14 @@ sequenceDiagram
 
 ```json
 {
-    "model": "claude-3-5-sonnet-20241022",
-    "max_tokens": 1000,
-    "messages": [
-        {
-            "role": "user",
-            "content": "Hello, how are you?"
-        }
-    ]
+  "model": "claude-3-5-sonnet-20241022",
+  "max_tokens": 1000,
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hello, how are you?"
+    }
+  ]
 }
 ```
 
@@ -319,15 +319,15 @@ sequenceDiagram
 
 ```json
 {
-    "model": "claude-3-5-sonnet-20241022",
-    "max_tokens": 1000,
-    "stream": true,
-    "messages": [
-        {
-            "role": "user",
-            "content": "Tell me a story"
-        }
-    ]
+  "model": "claude-3-5-sonnet-20241022",
+  "max_tokens": 1000,
+  "stream": true,
+  "messages": [
+    {
+      "role": "user",
+      "content": "Tell me a story"
+    }
+  ]
 }
 ```
 
@@ -335,32 +335,32 @@ sequenceDiagram
 
 ```json
 {
-    "model": "claude-3-5-sonnet-20241022",
-    "max_tokens": 1000,
-    "tools": [
-        {
-            "type": "function",
-            "function": {
-                "name": "get_weather",
-                "description": "Get weather information",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "location": {
-                            "type": "string",
-                            "description": "The city name"
-                        }
-                    }
-                }
+  "model": "claude-3-5-sonnet-20241022",
+  "max_tokens": 1000,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "description": "Get weather information",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "location": {
+              "type": "string",
+              "description": "The city name"
             }
+          }
         }
-    ],
-    "messages": [
-        {
-            "role": "user",
-            "content": "What's the weather like in Shanghai?"
-        }
-    ]
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": "What's the weather like in Shanghai?"
+    }
+  ]
 }
 ```
 
@@ -370,22 +370,22 @@ sequenceDiagram
 
 ```json
 {
-    "id": "msg_123456789",
-    "type": "message",
-    "role": "assistant",
-    "content": [
-        {
-            "type": "text",
-            "text": "I'm doing well, thank you for asking!"
-        }
-    ],
-    "model": "claude-3-5-sonnet-20241022",
-    "stop_reason": "end_turn",
-    "stop_sequence": null,
-    "usage": {
-        "input_tokens": 15,
-        "output_tokens": 12
+  "id": "msg_123456789",
+  "type": "message",
+  "role": "assistant",
+  "content": [
+    {
+      "type": "text",
+      "text": "I'm doing well, thank you for asking!"
     }
+  ],
+  "model": "claude-3-5-sonnet-20241022",
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 15,
+    "output_tokens": 12
+  }
 }
 ```
 
@@ -481,32 +481,32 @@ print(response.json())
 ```javascript
 // 使用 fetch API
 async function sendMessage(content) {
-    const response = await fetch('http://localhost:3000/v1/messages', {
-        method: 'POST',
-        headers: {
-            'x-api-key': 'your-proxy-access-key',
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            model: 'claude-3-5-sonnet-20241022',
-            max_tokens: 1000,
-            messages: [
-                {
-                    role: 'user',
-                    content: content
-                }
-            ]
-        })
+  const response = await fetch('http://localhost:3000/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': 'your-proxy-access-key',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 1000,
+      messages: [
+        {
+          role: 'user',
+          content: content
+        }
+      ]
     })
+  })
 
-    const data = await response.json()
-    return data
+  const data = await response.json()
+  return data
 }
 
 // 使用示例
 sendMessage('What is the meaning of life?')
-    .then(response => console.log(response))
-    .catch(error => console.error(error))
+  .then(response => console.log(response))
+  .catch(error => console.error(error))
 ```
 
 ## 🏥 健康检查
@@ -521,14 +521,14 @@ GET http://localhost:3000/health
 
 ```json
 {
-    "status": "healthy",
-    "timestamp": "2024-01-01T00:00:00.000Z",
-    "uptime": 120.5,
-    "config": {
-        "upstreamCount": 2,
-        "currentUpstream": "openai-api",
-        "loadBalance": "failover"
-    }
+  "status": "healthy",
+  "timestamp": "2024-01-01T00:00:00.000Z",
+  "uptime": 120.5,
+  "config": {
+    "upstreamCount": 2,
+    "currentUpstream": "openai-api",
+    "loadBalance": "failover"
+  }
 }
 ```
 
@@ -665,11 +665,11 @@ bun run config use openai-main
 
 ```json
 {
-    "env": {
-        "ANTHROPIC_BASE_URL": "http://localhost:3000",
-        "ANTHROPIC_CUSTOM_HEADERS": "x-api-key: your-proxy-access-key",
-        "ANTHROPIC_MODEL": "claude-3-5-sonnet-20241022"
-    }
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://localhost:3000",
+    "ANTHROPIC_CUSTOM_HEADERS": "x-api-key: your-proxy-access-key",
+    "ANTHROPIC_MODEL": "claude-3-5-sonnet-20241022"
+  }
 }
 ```
 
