@@ -28,7 +28,7 @@
 
 ```bash
 git clone https://github.com/BenedictKing/claude-proxy
-cd claude-worker-proxy
+cd claude-proxy
 ```
 
 2. 安装依赖
@@ -48,10 +48,10 @@ cp .env.example .env
 
 ```bash
 # 生产环境
-pnpm start
+bun run start
 
-# 开发环境（热重载）
-pnpm dev:local
+# 开发环境（智能重启）
+bun run dev
 ```
 
 ## ⚙️ 配置
@@ -585,11 +585,11 @@ GET http://localhost:3000/health
 ### 本地开发
 
 ```bash
-# 开发模式（热重载）
-pnpm dev:local
+# 开发模式（智能重启）
+bun run dev
 
 # 生产模式
-pnpm start
+bun run start
 ```
 
 ## 在 Claude Code 中使用

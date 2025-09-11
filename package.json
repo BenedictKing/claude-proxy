@@ -1,13 +1,11 @@
 {
-    "name": "claude-worker-proxy",
+    "name": "claude-api-proxy",
     "version": "0.0.0",
     "license": "MIT",
     "scripts": {
-        "deploycf": "wrangler types && pnpm prettier --write . && wrangler deploy",
-        "dev": "wrangler types && pnpm prettier --write . && wrangler dev --port 8080",
         "start": "bun run server.ts",
-        "dev:local": "bun --watch run server.ts",
-        "dev:auto": "bun run dev-runner.ts",
+        "dev": "bun run dev-runner.ts",
+        "dev:watch": "bun --watch run server.ts",
         "dev:hot": "bun --watch --hot run server.ts",
         "config": "bun run config-cli.ts"
     },

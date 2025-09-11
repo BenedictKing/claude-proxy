@@ -11,14 +11,14 @@ bun start                    # 启动生产服务器
 ### 开发环境
 
 ```bash
-# 基础开发模式 - Bun自带文件监听
-bun run dev:local           # 监听文件变化并重启
+# 推荐开发模式 (智能重启)
+bun run dev                 # 源码文件变化自动重启
 
-# 自动重启模式 - 智能重启（推荐）
-bun run dev:auto            # 源码文件变化自动重启
+# 基础监听模式
+bun run dev:watch           # Bun自带文件监听并重启
 
-# 热重载模式 - Bun热重载
-bun run dev:hot             # 热重载模式
+# 热重载模式 (实验性)
+bun run dev:hot             # Bun热重载模式
 ```
 
 ## 文件监听策略
@@ -48,7 +48,7 @@ bun run dev:hot             # 热重载模式
 
 ## 开发模式特性
 
-### 1. 自动重启 (`dev:auto`)
+### 1. 自动重启 (`dev`)
 
 - ✅ 源码文件变化自动重启
 - ✅ 配置文件变化自动重载（不重启）
