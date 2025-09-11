@@ -195,20 +195,16 @@ export async function processProviderStream(
           }
         }
 
+        // 正常结束流
         sendMessageStop(controller)
+        controller.close()
       } catch (error) {
+        // 发生错误时，向流的消费者发出错误信号
         console.error(`[${new Date().toISOString()}] 💥 Stream processing error:`, error)
-        controller.error(error) // 向流的消费者发出错误信号
+        controller.error(error)
       } finally {
+        // 无论成功或失败，都释放 reader lock
         reader.releaseLock()
-        // 确保控制器在所有路径上都关闭
-        if (controller.desiredSize !== null) {
-          try {
-            controller.close()
-          } catch (e) {
-            // 忽略，可能因错误已关闭
-          }
-        }
       }
     }
   })
