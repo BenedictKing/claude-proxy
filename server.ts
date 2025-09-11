@@ -2,7 +2,7 @@ import express from 'express'
 import { Readable } from 'stream' // 新增导入
 import * as provider from './src/provider'
 import * as gemini from './src/gemini'
-import * => openaiold from './src/openaiold'
+import * as openaiold from './src/openaiold'
 import * as openai from './src/openai'
 import * as claude from './src/claude'
 import { configManager, UpstreamConfig } from './src/config'
