@@ -56,7 +56,7 @@ const DEFAULT_CONFIG: Config = {
         }
     ],
     currentUpstream: 0,
-    loadBalance: 'failover'
+    loadBalance: 'round-robin'
 }
 
 class ConfigManager {
@@ -70,7 +70,6 @@ class ConfigManager {
             this.startConfigWatcher()
         }
     }
-
 
     private startConfigWatcher(): void {
         try {
