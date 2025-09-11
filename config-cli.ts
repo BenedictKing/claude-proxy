@@ -38,6 +38,7 @@ Claude API代理服务器配置工具
   bun run config key MyOpenAI list                 # 列出名为 MyOpenAI 的上游的API密钥
   bun run config update 1 --name "NewName"         # 更新索引为1的上游名称
   bun run config update MyOpenAI --description "备注" # 更新名为 MyOpenAI 的上游的备注
+  bun run config update MyOpenAI --insecureSkipVerify true # 开启跳过TLS验证
   bun run config balance round-robin               # 设置负载均衡
   bun run config remove 0                          # 按索引删除上游
   bun run config remove MyOpenAI                   # 按名称删除上游
