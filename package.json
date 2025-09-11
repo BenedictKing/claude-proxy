@@ -1,5 +1,5 @@
 {
-  "name": "claude-api-proxy",
+  "name": "claude-proxy",
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
