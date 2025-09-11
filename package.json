@@ -11,11 +11,9 @@
         "dev:hot": "bun --watch --hot run server.ts",
         "config": "bun run config-cli.ts"
     },
-    "packageManager": "pnpm@10.12.2+sha512.a32540185b964ee30bb4e979e405adc6af59226b438ee4cc19f9e8773667a66d302f5bfee60a39d3cac69e35e4b96e708a71dd002b7e9359c4112a1722ac323f",
     "devDependencies": {
         "prettier": "^3.6.2",
-        "typescript": "^5.5.2",
-        "wrangler": "^4.21.0"
+        "typescript": "^5.5.2"
     },
     "dependencies": {
         "@types/express": "^5.0.3",

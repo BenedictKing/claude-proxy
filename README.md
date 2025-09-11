@@ -12,7 +12,6 @@
 - **环境变量**: 通过 `.env` 文件灵活配置服务器参数
 - **健康检查**: 内置健康检查端点
 - **日志系统**: 完整的请求/响应日志记录
-- **🔄 兼容 Claude Code**: 配合 [One-Balance](https://github.com/glidea/one-balance) 低成本使用 Claude Code
 - **📡 支持流式和非流式响应**
 - **🛠️ 支持工具调用**
 
@@ -281,23 +280,23 @@ sequenceDiagram
 
     Proxy->>Proxy: 验证访问密钥
     Proxy->>Proxy: 获取API密钥 (轮询/随机)
-    
+
     Proxy->>Proxy: 协议转换 (Claude→上游格式)
     Proxy->>Upstream: 转发请求
     Upstream-->>Proxy: 上游响应
-    
+
     Proxy->>Proxy: 协议转换 (上游格式→Claude)
     Proxy-->>Client: 返回Claude格式响应
 ```
 
 ### 📋 支持的模型
 
-| 模型类型 | 示例模型ID | 支持的服务商 |
-|---------|-----------|-------------|
+| 模型类型          | 示例模型ID                   | 支持的服务商                |
+| ----------------- | ---------------------------- | --------------------------- |
 | Claude 3.5 Sonnet | `claude-3-5-sonnet-20241022` | Claude, OpenAI (及兼容 API) |
-| Claude 3.5 Haiku | `claude-3-5-haiku-20241022` | Claude, OpenAI (及兼容 API) |
-| Claude 3 Opus | `claude-3-opus-20240229` | Claude, OpenAI (及兼容 API) |
-| Gemini | `gemini-1.5-pro` | Gemini |
+| Claude 3.5 Haiku  | `claude-3-5-haiku-20241022`  | Claude, OpenAI (及兼容 API) |
+| Claude 3 Opus     | `claude-3-opus-20240229`     | Claude, OpenAI (及兼容 API) |
+| Gemini            | `gemini-1.5-pro`             | Gemini                      |
 
 ### 请求格式
 
@@ -498,16 +497,16 @@ async function sendMessage(content) {
                 }
             ]
         })
-    });
-    
-    const data = await response.json();
-    return data;
+    })
+
+    const data = await response.json()
+    return data
 }
 
 // 使用示例
-sendMessage("What is the meaning of life?")
+sendMessage('What is the meaning of life?')
     .then(response => console.log(response))
-    .catch(error => console.error(error));
+    .catch(error => console.error(error))
 ```
 
 ## 🏥 健康检查
@@ -593,13 +592,6 @@ pnpm dev:local
 pnpm start
 ```
 
-### Cloudflare Workers 部署
-
-```bash
-# 部署到 Cloudflare Workers
-pnpm deploycf
-```
-
 ## 在 Claude Code 中使用
 
 配置 Claude Code 使用本地代理：
@@ -626,6 +618,7 @@ claude
 ### Q1: 代理服务器支持哪些上游 AI 服务商？
 
 **A:** 目前支持以下服务商：
+
 - **OpenAI**: 支持 OpenAI 官方 API 以及任何兼容 OpenAI 格式的第三方服务 (使用 `openai` 或 `openaiold` 类型)。
 - **Gemini**: Google 的 Gemini API。
 - **Claude**: Anthropic 的官方 Claude API。
@@ -661,6 +654,7 @@ bun run config use openai-main
 ### Q4: 系统是否需要外部依赖？
 
 **A:** 不需要。系统已经简化，移除了Redis依赖：
+
 - **API密钥轮询**: 使用内存计数器实现
 - **配置管理**: 基于本地文件，支持热重载
 - **部署简单**: 无需配置外部数据库或缓存
@@ -671,11 +665,11 @@ bun run config use openai-main
 
 ```json
 {
-  "env": {
-    "ANTHROPIC_BASE_URL": "http://localhost:3000",
-    "ANTHROPIC_CUSTOM_HEADERS": "x-api-key: your-proxy-access-key",
-    "ANTHROPIC_MODEL": "claude-3-5-sonnet-20241022"
-  }
+    "env": {
+        "ANTHROPIC_BASE_URL": "http://localhost:3000",
+        "ANTHROPIC_CUSTOM_HEADERS": "x-api-key: your-proxy-access-key",
+        "ANTHROPIC_MODEL": "claude-3-5-sonnet-20241022"
+    }
 }
 ```
 
@@ -718,6 +712,7 @@ curl -X POST http://localhost:3000/admin/config/reload
 **现象**: `Error: listen EADDRINUSE: address already in use :::3000`
 
 **解决方案**:
+
 ```bash
 # 查看端口占用
 lsof -i :3000
@@ -734,6 +729,7 @@ echo "PORT=3001" >> .env
 **现象**: `SyntaxError: Unexpected token in JSON`
 
 **解决方案**:
+
 ```bash
 # 检查配置文件语法
 cat config.json | python -m json.tool
@@ -748,10 +744,12 @@ bun run config show
 #### 1. 401 Unauthorized
 
 **可能原因**:
+
 - 代理访问密钥错误
 - 上游 API 密钥无效
 
 **解决方案**:
+
 ```bash
 # 检查代理访问密钥
 echo $PROXY_ACCESS_KEY
@@ -766,10 +764,12 @@ curl -H "Authorization: Bearer sk-your-key" https://api.openai.com/v1/models
 #### 2. 429 Too Many Requests
 
 **可能原因**:
+
 - API 密钥配额不足
 - 请求频率过高
 
 **解决方案**:
+
 ```bash
 # 添加更多 API 密钥
 bun run config key your-upstream add sk-new-key
@@ -783,11 +783,13 @@ bun run config balance round-robin
 **现象**: `Internal Server Error` 或日志中出现 `ERR_TLS_CERT_ALTNAME_INVALID` 等证书错误。
 
 **可能原因**:
+
 - 上游服务不可用
 - 配置错误
 - 上游服务使用了自签名或不匹配的SSL证书
 
 **解决方案**:
+
 ```bash
 # 检查服务器日志
 tail -f server.log
@@ -807,10 +809,12 @@ bun run start
 #### 3. 500 Internal Server Error
 
 **可能原因**:
+
 - 上游服务不可用
 - 配置错误
 
 **解决方案**:
+
 ```bash
 # 检查服务器日志
 tail -f server.log
@@ -829,6 +833,7 @@ bun run start
 #### 1. 响应缓慢
 
 **解决方案**:
+
 ```bash
 # 增加并发数
 echo "MAX_CONCURRENT_REQUESTS=200" >> .env
@@ -843,6 +848,7 @@ bun run config show
 #### 2. 内存使用过高
 
 **解决方案**:
+
 ```bash
 # 减少日志级别
 echo "LOG_LEVEL=error" >> .env
