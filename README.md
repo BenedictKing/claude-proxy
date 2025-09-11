@@ -143,6 +143,9 @@ bun run config remove <index|name>
 # 设置负载均衡策略
 bun run config balance <strategy>
 
+# 开启/关闭跳过TLS证书验证（用于处理证书问题）
+bun run config update <index|name> --insecureSkipVerify <true|false>
+
 # 清除所有配置
 bun run config clear
 ```
