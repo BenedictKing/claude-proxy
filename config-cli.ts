@@ -46,6 +46,7 @@ Claude API代理服务器配置工具
   gemini: https://generativelanguage.googleapis.com/v1beta
   openaiold: https://api.openai.com/v1
   openai: https://api.openai.com/v1
+  claude: https://api.anthropic.com/v1
 `)
 }
 

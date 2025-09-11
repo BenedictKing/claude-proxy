@@ -10,19 +10,22 @@ export class impl implements provider.Provider {
         const finalUrl = utils.buildUrl(baseUrl, 'messages')
 
         const headers = new Headers()
+        // 复制必要的请求头
         request.headers.forEach((value, key) => {
             const lowerKey = key.toLowerCase()
             if (lowerKey !== 'authorization' && lowerKey !== 'x-api-key' && lowerKey !== 'host') {
-                if (lowerKey == 'user-agent')
-                    if (value && value.startsWith('claude-cli')) headers.set(key, value)
-                    else headers.set('User-Agent', 'claude-cli/1.0.58 (external, cli)')
                 headers.set(key, value)
             }
         })
+        
+        // 确保 User-Agent 的兼容性
+        const userAgent = headers.get('user-agent')
+        if (!userAgent || !userAgent.startsWith('claude-cli')) {
+            headers.set('User-Agent', 'claude-cli/1.0.58 (external, cli)')
+        }
 
         // Anthropic 官方 API 使用 x-api-key 和 anthropic-version
-        // headers.set('x-api-key', apiKey)
-        headers.set('Authorization', `Bearer ${apiKey}`)
+        headers.set('x-api-key', apiKey)
         headers.set('anthropic-version', '2023-06-01')
         headers.set('Content-Type', 'application/json')
 

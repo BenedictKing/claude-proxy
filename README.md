@@ -123,6 +123,7 @@ bun run config add <name> <baseUrl> <serviceType>
 # 示例
 bun run config add openai-api https://api.openai.com/v1 openai
 bun run config add gemini-api https://generativelanguage.googleapis.com/v1beta gemini
+bun run config add claude-api https://api.anthropic.com/v1 claude
 
 # 添加 API 密钥 (支持索引或名称)
 bun run config key <index|name> add <apiKey1> <apiKey2> ...
@@ -176,7 +177,20 @@ bun run config key gemini-main add AIzaSyC1234567890abcdef...
 bun run config use gemini-main
 ```
 
-#### 3. 第三方 API 服务配置
+#### 3. Claude 配置
+
+```bash
+# 添加 Claude 官方上游
+bun run config add claude-main https://api.anthropic.com/v1 claude
+
+# 添加 API 密钥
+bun run config key claude-main add sk-ant-your-api-key...
+
+# 切换到 Claude
+bun run config use claude-main
+```
+
+#### 4. 第三方 API 服务配置
 
 ```bash
 # 添加第三方 Claude 兼容 API
@@ -277,9 +291,9 @@ sequenceDiagram
 
 | 模型类型 | 示例模型ID | 支持的服务商 |
 |---------|-----------|-------------|
-| Claude 3.5 Sonnet | `claude-3-5-sonnet-20241022` | OpenAI (及兼容 API) |
-| Claude 3.5 Haiku | `claude-3-5-haiku-20241022` | OpenAI (及兼容 API) |
-| Claude 3 Opus | `claude-3-opus-20240229` | OpenAI (及兼容 API) |
+| Claude 3.5 Sonnet | `claude-3-5-sonnet-20241022` | Claude, OpenAI (及兼容 API) |
+| Claude 3.5 Haiku | `claude-3-5-haiku-20241022` | Claude, OpenAI (及兼容 API) |
+| Claude 3 Opus | `claude-3-opus-20240229` | Claude, OpenAI (及兼容 API) |
 | Gemini | `gemini-1.5-pro` | Gemini |
 
 ### 请求格式
