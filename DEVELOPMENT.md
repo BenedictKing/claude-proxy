@@ -168,7 +168,7 @@ curl -X POST http://localhost:3000/admin/config/reload
 ### 核心组件
 
 ```
-claude-worker-proxy/
+claude-api-proxy/
 ├── src/
 │   ├── provider.ts       # 统一提供商接口
 │   ├── openai.ts         # OpenAI 格式转换器
