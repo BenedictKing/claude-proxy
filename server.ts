@@ -9,6 +9,21 @@ import { envConfigManager } from './src/env'
 import { maskApiKey } from './src/utils'
 import chokidar from 'chokidar'
 
+// 敏感头统一掩码配置与函数
+const SENSITIVE_HEADER_KEYS = new Set(['authorization', 'x-api-key', 'x-goog-api-key'])
+function maskHeaderValue(key: string, value: string): string {
+    const lowerKey = key.toLowerCase()
+    if (lowerKey === 'authorization') {
+        const m = value.match(/^\s*Bearer\s+(.+)$/i)
+        if (m) return `Bearer ${maskApiKey(m[1])}`
+        return maskApiKey(value)
+    }
+    if (SENSITIVE_HEADER_KEYS.has(lowerKey)) {
+        return maskApiKey(value)
+    }
+    return value
+}
+
 const app = express()
 app.use(express.json({ limit: '50mb' }))
 
@@ -87,7 +102,19 @@ app.post('/v1/messages', async (req, res) => {
             )
             if (isDevelopment) {
                 console.log(`[${new Date().toISOString()}] 📋 请求体:`, JSON.stringify(req.body, null, 2))
-                console.log(`[${new Date().toISOString()}] 📥 请求头:`, JSON.stringify(req.headers, null, 2))
+                // 对请求头做敏感信息脱敏
+                const sanitizedReqHeaders: { [key: string]: string } = {}
+                Object.entries(req.headers).forEach(([k, v]) => {
+                    if (typeof v === 'string') {
+                        sanitizedReqHeaders[k] = maskHeaderValue(k, v)
+                    } else if (Array.isArray(v)) {
+                        sanitizedReqHeaders[k] = v.map(val => maskHeaderValue(k, val)).join(', ')
+                    }
+                })
+                console.log(
+                    `[${new Date().toISOString()}] 📥 请求头:`,
+                    JSON.stringify(sanitizedReqHeaders, null, 2)
+                )
             }
         }
 
@@ -186,6 +213,7 @@ app.post('/v1/messages', async (req, res) => {
 
 // 重用原有的handle函数逻辑，移除Cloudflare特定类型
 async function handle(request: Request, upstream: UpstreamConfig, apiKey: string): Promise<Response> {
+    // 使用顶部的统一敏感头脱敏工具
     let providerImpl: provider.Provider
     switch (upstream.serviceType) {
         case 'gemini':
@@ -211,20 +239,10 @@ async function handle(request: Request, upstream: UpstreamConfig, apiKey: string
         console.log(`[${new Date().toISOString()}] 🌐 实际请求URL: ${providerRequest.url}`)
         console.log(`[${new Date().toISOString()}] 📤 请求方法: ${providerRequest.method}`)
 
-        // 记录请求头（隐藏敏感信息）
+        // 记录请求头（隐藏敏感信息：authorization/x-api-key/x-goog-api-key）
         const headers: { [key: string]: string } = {}
         providerRequest.headers.forEach((value, key) => {
-            if (key.toLowerCase() === 'authorization') {
-                // 从Bearer或直接的API密钥中提取密钥部分并掩码
-                const keyMatch = value.match(/(?:Bearer\s+)?(sk-[^\s]+)/)
-                if (keyMatch) {
-                    headers[key] = value.replace(keyMatch[1], maskApiKey(keyMatch[1]))
-                } else {
-                    headers[key] = value
-                }
-            } else {
-                headers[key] = value
-            }
+            headers[key] = maskHeaderValue(key, value)
         })
         console.log(`[${new Date().toISOString()}] 📋 请求头:`, JSON.stringify(headers, null, 2))
 

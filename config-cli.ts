@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { configManagerCLI, UpstreamConfig } from './src/config'
+import { maskApiKey } from './src/utils'
 
 
 function showHelp() {
@@ -138,12 +139,12 @@ function manageKeys(index: string, action: string, args: string[]) {
             const config = configManagerCLI.getConfig()
             const upstream = config.upstream[upstreamIndex]
             if (upstream) {
-                console.log(`上游 [${upstreamIndex}] 的API密钥:`)
+                console.log(`上游 [${upstreamIndex}] 的API密钥(已脱敏):`)
                 if (upstream.apiKeys.length === 0) {
                     console.log('  没有API密钥')
                 } else {
                     upstream.apiKeys.forEach((key, i) => {
-                        console.log(`  [${i}] ${key}`)
+                        console.log(`  [${i}] ${maskApiKey(key)}`)
                     })
                 }
             } else {

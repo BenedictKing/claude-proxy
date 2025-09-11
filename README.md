@@ -128,6 +128,9 @@ bun run config add custom-api https://your-api.com custom
 # 添加 API 密钥
 bun run config key <upstream-name> add <apiKey1> <apiKey2> ...
 
+# 列出 API 密钥（输出已脱敏）
+bun run config key <index> list
+
 # 示例
 bun run config key openai-api add sk-1234567890abcdef sk-0987654321fedcba
 
