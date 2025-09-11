@@ -248,18 +248,12 @@ export class impl implements provider.Provider {
     let toolUseStopEmitted = false
 
     return utils.processProviderStream(openaiResponse, (jsonStr, textBlockIndex, toolUseBlockIndex) => {
-      let openaiData: any
+      let openaiData: types.OpenAIStreamResponse
       try {
         openaiData = JSON.parse(jsonStr)
       } catch (e) {
         console.error(`[${new Date().toISOString()}] 🚨 OpenAI stream JSON parse error, skipping. Raw data:`, jsonStr)
         return null
-      }
-
-      // 检查上游流中是否直接返回了错误对象
-      if (openaiData.error) {
-        console.error(`[${new Date().toISOString()}] 🚨 Upstream error in stream:`, JSON.stringify(openaiData.error))
-        throw new Error(`Upstream stream error: ${openaiData.error.message || JSON.stringify(openaiData.error)}`)
       }
 
       if (!openaiData || !openaiData.choices || openaiData.choices.length === 0) {
