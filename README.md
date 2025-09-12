@@ -56,73 +56,26 @@ bun run dev # 启动开发服务器并监听文件变化
 # 生产模式
 bun run start
 
-### 🚀 部署指南
+5. 配置客户端 (以 Claude Code 为例)
 
-除了通过 `bun run start` 直接启动，您还可以选择更强大的生产环境部署方式。
+现在代理服务器已在本地运行，您需要配置您的客户端来使用它。
 
-#### 生产环境 (使用 PM2)
+编辑 `~/.claude/settings.json` 文件：
 
-PM2 是一个带有负载均衡器的 Node.js 生产流程管理器，可以帮助您保持应用7x24小时在线。
-
-```bash
-# 1. 全局安装 PM2 (如果尚未安装)
-npm install -g pm2
-
-# 2. 使用 PM2 启动应用
-# 这会使用 bun 来执行 start 脚本
-pm2 start bun --name "claude-proxy" -- run start
-
-# 3. 将应用列表保存到硬盘
-pm2 save
-
-# 4. 生成并配置启动脚本，使应用在服务器重启后自动启动
-pm2 startup
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://localhost:3000",
+    "ANTHROPIC_AUTH_TOKEN": "your-proxy-access-key",
+    "DISABLE_TELEMETRY": "1",
+    "DISABLE_ERROR_REPORTING": "1",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  }
+}
 ```
 
-#### Docker 部署
+> **重要说明**: `your-proxy-access-key` 是您在 `.env` 文件中设置的 `PROXY_ACCESS_KEY`，用于验证您对代理服务器的访问权限，并非上游服务商的 API key。
 
-您也可以使用 Docker 来容器化和部署此应用。
-
-1.  **在项目根目录创建 `Dockerfile`**
-
-    ```dockerfile
-    FROM oven/bun:1
-
-    WORKDIR /app
-
-    # 仅复制必要的文件
-    COPY package.json bun.lockb ./
-
-    # 安装生产依赖
-    RUN bun install --production --frozen-lockfile
-
-    # 复制源代码
-    COPY . .
-
-    # 暴露端口
-    EXPOSE 3000
-
-    # 启动命令
-    CMD ["bun", "run", "start"]
-    ```
-
-2.  **构建和运行 Docker 容器**
-
-    ```bash
-    # 构建镜像
-    docker build -t claude-api-proxy .
-
-    # 运行容器
-    # -d: 后台运行
-    # --restart always: 容器退出时总是自动重启
-    # -v: 挂载配置文件和环境变量文件，方便修改
-    docker run -d -p 3000:3000 \
-      -v $(pwd)/config.json:/app/config.json \
-      -v $(pwd)/.env:/app/.env \
-      --name claude-proxy-container \
-      --restart always \
-      claude-api-proxy
-    ```
 ```
 
 ## ⚙️ 配置
@@ -641,24 +594,6 @@ GET http://localhost:3000/health
 - 请求超时保护
 - 错误处理和日志记录
 
-## 在 Claude Code 中使用
-
-配置 Claude Code 使用本地代理：
-
-```bash
-# 编辑 ~/.claude/settings.json
-{
-  "env": {
-    "ANTHROPIC_BASE_URL": "http://localhost:3000",
-    "ANTHROPIC_AUTH_TOKEN": "your-proxy-access-key",
-    "DISABLE_TELEMETRY": "1",
-    "DISABLE_ERROR_REPORTING": "1",
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
-  }
-}
-```
-
-> **重要说明**: `your-proxy-access-key` 是你访问代理服务器的授权密钥，不是上游服务商的 API key。这个 key 用于验证你对代理服务器的访问权限。
 
 ## ❓ 常见问题解答 (FAQ)
 
