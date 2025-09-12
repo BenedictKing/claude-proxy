@@ -52,6 +52,7 @@ bun run dev
 
 # 生产环境
 bun run start
+```
 
 5. 配置客户端 (以 Claude Code 为例)
 
@@ -72,8 +73,6 @@ bun run start
 ```
 
 > **重要说明**: `your-proxy-access-key` 是您在 `.env` 文件中设置的 `PROXY_ACCESS_KEY`，用于验证您对代理服务器的访问权限，并非上游服务商的 API key。
-
-```
 
 ## ⚙️ 配置
 
@@ -658,7 +657,6 @@ GET http://localhost:3000/health
 - 请求频率限制（可选）
 - 请求超时保护
 - 错误处理和日志记录
-
 
 ## ❓ 常见问题解答 (FAQ)
 
