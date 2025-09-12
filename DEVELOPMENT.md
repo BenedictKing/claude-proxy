@@ -388,8 +388,8 @@ bun run dev
 ### 生产环境部署
 
 ```bash
-# 1. 构建项目
-pnpm install --production
+# 1. 安装依赖
+bun install --production
 
 # 2. 配置环境变量
 export NODE_ENV=production
