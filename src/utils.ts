@@ -227,7 +227,7 @@ export function cleanJsonSchema(schema: any): any {
   const cleaned = { ...schema }
 
   for (const key in cleaned) {
-    if (key === '$schema' || key === 'title' || key === 'examples') {
+    if (key === '$schema' || key === 'title' || key === 'examples' || key === 'additionalProperties') {
       delete cleaned[key]
     } else if (key === 'enum' && Array.isArray(cleaned[key])) {
       cleaned[key] = cleaned[key]
