@@ -273,6 +273,74 @@ bun run config use gemini-backup     # 切换到备用 Gemini
 }
 ```
 
+## 🚀 部署指南
+
+除了通过 `bun run start` 直接启动，您还可以选择更强大的生产环境部署方式。
+
+#### 生产环境 (使用 PM2)
+
+PM2 是一个带有负载均衡器的 Node.js 生产流程管理器，可以帮助您保持应用7x24小时在线。
+
+```bash
+# 1. 全局安装 PM2 (如果尚未安装)
+npm install -g pm2
+
+# 2. 使用 PM2 启动应用
+# 这会使用 bun 来执行 start 脚本
+pm2 start bun --name "claude-proxy" -- run start
+
+# 3. 将应用列表保存到硬盘
+pm2 save
+
+# 4. 生成并配置启动脚本，使应用在服务器重启后自动启动
+pm2 startup
+```
+
+#### Docker 部署
+
+您也可以使用 Docker 来容器化和部署此应用。
+
+1.  **在项目根目录创建 `Dockerfile`**
+
+    ```dockerfile
+    FROM oven/bun:1
+
+    WORKDIR /app
+
+    # 仅复制必要的文件
+    COPY package.json bun.lockb ./
+
+    # 安装生产依赖
+    RUN bun install --production --frozen-lockfile
+
+    # 复制源代码
+    COPY . .
+
+    # 暴露端口
+    EXPOSE 3000
+
+    # 启动命令
+    CMD ["bun", "run", "start"]
+    ```
+
+2.  **构建和运行 Docker 容器**
+
+    ```bash
+    # 构建镜像
+    docker build -t claude-api-proxy .
+
+    # 运行容器
+    # -d: 后台运行
+    # --restart always: 容器退出时总是自动重启
+    # -v: 挂载配置文件和环境变量文件，方便修改
+    docker run -d -p 3000:3000 \
+      -v $(pwd)/config.json:/app/config.json \
+      -v $(pwd)/.env:/app/.env \
+      --name claude-proxy-container \
+      --restart always \
+      claude-api-proxy
+    ```
+
 ## 🔧 API 使用
 
 ### 统一入口端点
