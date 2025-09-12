@@ -44,7 +44,7 @@ export class impl implements provider.Provider {
   // 兼容各种来源的 role 值（如 'tools'、'system' 等）
   private normalizeClaudeRole(role: any): 'system' | 'user' | 'assistant' | 'tool' {
     const r = String(role ?? '').toLowerCase()
-    if (r === 'assistant') return 'assistant'
+    if (r === 'assistant' || r === 'model') return 'assistant'
     if (r === 'system') return 'system'
     if (r === 'tool' || r === 'tools') return 'tool'
     return 'user'
