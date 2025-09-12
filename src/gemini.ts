@@ -215,15 +215,21 @@ export class impl implements provider.Provider {
 
   private async convertStreamResponse(geminiResponse: Response): Promise<Response> {
     return utils.processProviderStream(geminiResponse, (jsonStr, textBlockIndex, toolUseBlockIndex) => {
-      let geminiData: types.GeminiResponse
+      let geminiData: any
       try {
         geminiData = JSON.parse(jsonStr)
       } catch (e) {
-        console.error(`[${new Date().toISOString()}] 🚨 Gemini stream JSON parse error, skipping. Raw data:`, jsonStr)
+        console.warn(`[${new Date().toISOString()}] 🟡 Gemini stream JSON parse error, skipping a chunk.`)
         return null
       }
 
-      if (!geminiData || !geminiData.candidates || geminiData.candidates.length === 0) {
+      // 关键修复：检查上游流中是否直接返回了错误对象
+      if (geminiData.error) {
+        console.error(`[${new Date().toISOString()}] 🚨 Upstream error in stream:`, JSON.stringify(geminiData.error))
+        throw new Error(`Upstream stream error: ${geminiData.error.message || JSON.stringify(geminiData.error)}`)
+      }
+
+      if (!geminiData || !geminiData.candidates || !geminiData.candidates.length) {
         return null
       }
 

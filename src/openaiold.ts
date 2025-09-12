@@ -249,13 +249,13 @@ export class impl implements provider.Provider {
         return null
       }
 
-      // 检查上游流中是否直接返回了错误对象
+      // 关键修复：检查上游流中是否直接返回了错误对象
       if (openaiData.error) {
         console.error(`[${new Date().toISOString()}] 🚨 Upstream error in stream:`, JSON.stringify(openaiData.error))
         throw new Error(`Upstream stream error: ${openaiData.error.message || JSON.stringify(openaiData.error)}`)
       }
 
-      if (!openaiData || !openaiData.choices || openaiData.choices.length === 0) {
+      if (!openaiData || !openaiData.choices || !openaiData.choices.length) {
         return null
       }
 
