@@ -713,14 +713,14 @@ curl -X POST http://localhost:3000/admin/config/reload
 **解决方案**:
 
 ```bash
-# 查看端口占用
+# 查看端口占用 (macOS/Linux)
 lsof -i :3000
 
 # 强制终止进程
 kill -9 <PID>
 
-# 或修改端口
-echo "PORT=3001" >> .env
+# 或修改 .env 文件中的端口
+PORT=3001
 ```
 
 #### 2. 配置文件损坏
@@ -731,101 +731,69 @@ echo "PORT=3001" >> .env
 
 ```bash
 # 检查配置文件语法
-cat config.json | python -m json.tool
+cat config.json | jq .
 
-# 重新生成配置文件
+# 或直接删除损坏的配置文件，程序会自动重新生成
 rm config.json
 bun run config show
 ```
 
 ### API 调用问题
 
-#### 1. 401 Unauthorized
+#### 1. 401 Unauthorized (未授权)
 
 **可能原因**:
 
-- 代理访问密钥错误
-- 上游 API 密钥无效
+- 客户端发来的 `x-api-key` (代理访问密钥) 不正确。
+- 上游服务的 API 密钥无效或已过期。
 
 **解决方案**:
 
-```bash
-# 检查代理访问密钥
-echo $PROXY_ACCESS_KEY
+- 确认客户端请求头中的 `x-api-key` 与 `.env` 文件里的 `PROXY_ACCESS_KEY` 一致。
+- 使用 `bun run config show` 检查当前上游的密钥是否正确配置。
+- 直接用上游密钥测试，以验证其有效性。
 
-# 检查上游 API 密钥
-bun run config show
-
-# 测试上游 API 密钥
-curl -H "Authorization: Bearer sk-your-key" https://api.openai.com/v1/models
-```
-
-#### 2. 429 Too Many Requests
+#### 2. 429 Too Many Requests (请求过多)
 
 **可能原因**:
 
-- API 密钥配额不足
-- 请求频率过高
+- 单个 API 密钥的请求频率或额度已达上限。
 
 **解决方案**:
 
-```bash
-# 添加更多 API 密钥
-bun run config key your-upstream add sk-new-key
+- 为当前上游添加更多可用的 API 密钥。
+  ```bash
+  bun run config key your-upstream add sk-new-key
+  ```
+- 将负载均衡策略设置为 `round-robin` 以分散请求。
+  ```bash
+  bun run config balance round-robin
+  ```
 
-# 修改负载均衡策略
-bun run config balance round-robin
-```
+#### 3. 500 Internal Server Error (服务器内部错误)
 
-#### 3. 500 Internal Server Error 或 TLS/SSL 错误
-
-**现象**: `Internal Server Error` 或日志中出现 `ERR_TLS_CERT_ALTNAME_INVALID` 等证书错误。
+**现象**: 客户端收到 500 错误，或日志中出现 `ERR_TLS_CERT_ALTNAME_INVALID` 等证书错误。
 
 **可能原因**:
 
-- 上游服务不可用
-- 配置错误
-- 上游服务使用了自签名或不匹配的SSL证书
+- 上游服务暂时不可用或返回了错误。
+- 代理服务器配置错误。
+- 上游服务使用了自签名或不匹配的 SSL/TLS 证书。
 
 **解决方案**:
 
-```bash
-# 检查服务器日志
-tail -f server.log
-
-# 启用调试模式
-echo "LOG_LEVEL=debug" >> .env
-echo "ENABLE_REQUEST_LOGS=true" >> .env
-echo "ENABLE_RESPONSE_LOGS=true" >> .env
-
-# 如果确认是上游证书问题，可以开启跳过TLS验证（请谨慎使用）
-bun run config update your-upstream --insecureSkipVerify true
-
-# 重启服务器
-bun run start
-```
-
-#### 3. 500 Internal Server Error
-
-**可能原因**:
-
-- 上游服务不可用
-- 配置错误
-
-**解决方案**:
-
-```bash
-# 检查服务器日志
-tail -f server.log
-
-# 启用调试模式
-echo "LOG_LEVEL=debug" >> .env
-echo "ENABLE_REQUEST_LOGS=true" >> .env
-echo "ENABLE_RESPONSE_LOGS=true" >> .env
-
-# 重启服务器
-bun run start
-```
+- 首先检查服务器日志，定位问题根源。
+- 启用 `debug` 模式以获取最详细的日志：
+  ```bash
+  # 在 .env 文件中修改
+  LOG_LEVEL=debug
+  ```
+- 如果日志显示为 TLS 证书问题，并且你信任该上游，可以为特定上游开启“跳过 TLS 验证”：
+  ```bash
+  # 警告：这会降低安全性，仅在必要时使用
+  bun run config update your-upstream --insecureSkipVerify true
+  ```
+- 重启服务器以应用 `.env` 文件的更改。
 
 ### 性能问题
 
@@ -833,76 +801,22 @@ bun run start
 
 **解决方案**:
 
-```bash
-# 增加并发数
-echo "MAX_CONCURRENT_REQUESTS=200" >> .env
-
-# 减少超时时间
-echo "REQUEST_TIMEOUT=15000" >> .env
-
-# 使用更近的上游服务
-bun run config show
-```
+- 检查网络到上游服务器的延迟。
+- 确认上游服务本身没有性能问题。
+- 在 `.env` 文件中适当调整 `MAX_CONCURRENT_REQUESTS` 和 `REQUEST_TIMEOUT`。
 
 #### 2. 内存使用过高
 
 **解决方案**:
 
-```bash
-# 减少日志级别
-echo "LOG_LEVEL=error" >> .env
-echo "ENABLE_REQUEST_LOGS=false" >> .env
-echo "ENABLE_RESPONSE_LOGS=false" >> .env
-
-# 重启服务器
-bun run start
-```
-
-### 调试技巧
-
-#### 1. 启用详细日志
-
-```bash
-# 在 .env 文件中设置
-LOG_LEVEL=debug
-ENABLE_REQUEST_LOGS=true
-ENABLE_RESPONSE_LOGS=true
-```
-
-#### 2. 使用健康检查
-
-```bash
-# 基础健康检查
-curl http://localhost:3000/health
-
-# 开发模式信息
-curl http://localhost:3000/admin/dev/info
-```
-
-#### 3. 手动测试上游 API
-
-```bash
-# 测试 OpenAI API
-curl -X POST https://api.openai.com/v1/chat/completions \
-  -H "Authorization: Bearer sk-your-key" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"gpt-3.5-turbo","messages":[{"role":"user","content":"Hello"}]}'
-
-# 测试 Gemini API
-curl -X POST https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=your-key \
-  -H "Content-Type: application/json" \
-  -d '{"contents":[{"parts":[{"text":"Hello"}]}]}'
-```
-
-#### 4. 配置验证
-
-```bash
-# 查看完整配置
-bun run config show
-
-# 验证配置文件格式
-cat config.json | jq .
-```
+- 在生产环境中，将日志级别设置为 `info` 或 `warn` 以减少日志输出带来的开销。
+  ```bash
+  # 在 .env 文件中修改
+  LOG_LEVEL=info
+  ENABLE_REQUEST_LOGS=false
+  ENABLE_RESPONSE_LOGS=false
+  ```
+- 重启服务器以应用更改。
 
 ## 📝 许可证
 
