@@ -104,6 +104,8 @@ export class impl implements provider.Provider {
     if (claudeRequest.max_tokens !== undefined) {
       // 使用旧版 max_tokens 字段
       openaiRequest.max_tokens = claudeRequest.max_tokens
+    } else {
+      openaiRequest.max_tokens = 65535
     }
 
     return openaiRequest
