@@ -16,13 +16,6 @@ export class impl implements provider.Provider {
     const finalUrl = utils.buildUrl(baseUrl, 'chat/completions')
 
     const headers = new Headers()
-    // 只复制必要的头，排除授权相关的头
-    // request.headers.forEach((value, key) => {
-    //     const lowerKey = key.toLowerCase()
-    //     if (lowerKey !== 'authorization' && lowerKey !== 'x-api-key' && lowerKey !== 'host') {
-    //         headers.set(key, value)
-    //     }
-    // })
     headers.set('Authorization', `Bearer ${apiKey}`)
     headers.set('Content-Type', 'application/json')
 
