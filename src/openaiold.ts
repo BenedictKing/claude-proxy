@@ -57,27 +57,31 @@ export class impl implements provider.Provider {
     return 'user'
   }
 
+  // 支持 Claude 顶层 system 为 string 或 content[]（含 {type:'text'} 块）
+  private extractSystemText(systemField: any): string | undefined {
+    if (!systemField) return undefined
+    if (typeof systemField === 'string') return systemField
+    // 可能是单个对象或数组
+    const arr = Array.isArray(systemField) ? systemField : [systemField]
+    const parts: string[] = []
+    for (const item of arr) {
+      if (item && typeof item === 'object' && item.type === 'text' && typeof item.text === 'string') {
+        parts.push(item.text)
+      }
+    }
+    if (parts.length === 0) return undefined
+    return parts.join('\n')
+  }
+
   private convertToOpenAIRequestBody(
     claudeRequest: types.ClaudeRequest,
     upstream?: import('./config').UpstreamConfig
   ): types.OpenAIRequest {
-    const converted = this.convertMessages(claudeRequest.messages)
-
-    // 处理 system 字段，支持字符串和数组格式
-    let systemContent: string | undefined
-    if (claudeRequest.system) {
-      if (typeof claudeRequest.system === 'string') {
-        systemContent = claudeRequest.system
-      } else if (Array.isArray(claudeRequest.system)) {
-        // 从数组中提取文本内容
-        const textItem = claudeRequest.system.find(item => item.type === 'text')
-        systemContent = textItem?.text
-      }
-    }
-
-    const messages: types.OpenAIMessage[] = systemContent
-      ? [{ role: 'system', content: systemContent }, ...converted]
-      : converted
+    const convertedMessages = this.convertMessages(claudeRequest.messages)
+    const systemText = this.extractSystemText((claudeRequest as any).system)
+    const messages: types.OpenAIMessage[] = systemText
+      ? [{ role: 'system', content: systemText }, ...convertedMessages]
+      : convertedMessages
 
     // 应用模型重定向
     const finalModel = upstream ? redirectModel(claudeRequest.model, upstream) : claudeRequest.model
@@ -94,8 +98,7 @@ export class impl implements provider.Provider {
         function: {
           name: tool.name,
           description: tool.description,
-          parameters: utils.cleanJsonSchema(tool.input_schema),
-          strict: true
+          parameters: utils.cleanJsonSchema(tool.input_schema)
         }
       }))
       openaiRequest.tool_choice = 'auto'
@@ -106,7 +109,8 @@ export class impl implements provider.Provider {
     }
 
     if (claudeRequest.max_tokens !== undefined) {
-      openaiRequest.max_tokens = claudeRequest.max_tokens
+      // 使用新版字段以兼容 o4 系列及新接口行为
+      openaiRequest.max_completion_tokens = claudeRequest.max_tokens
     }
 
     return openaiRequest
@@ -119,6 +123,7 @@ export class impl implements provider.Provider {
     for (const message of claudeMessages) {
       const normalizedRole = this.normalizeClaudeRole((message as any).role)
       if (typeof message.content === 'string') {
+        // 纯文本消息：支持 system/user/assistant；tool 角色的纯文本忽略
         if (normalizedRole !== 'tool') {
           openaiMessages.push({
             role: normalizedRole,
@@ -157,6 +162,15 @@ export class impl implements provider.Provider {
         }
       }
 
+      // 优先推送 tool_result，确保紧跟在上一次 assistant 的 tool_calls 之后
+      for (const toolResult of toolResults) {
+        openaiMessages.push({
+          role: 'tool',
+          tool_call_id: toolResult.tool_call_id,
+          content: toolResult.content
+        })
+      }
+
       if ((textContents.length > 0 || toolCalls.length > 0) && normalizedRole !== 'tool') {
         const openaiMessage: types.OpenAIMessage = {
           role: normalizedRole === 'assistant' ? 'assistant' : normalizedRole === 'system' ? 'system' : 'user',
@@ -168,14 +182,6 @@ export class impl implements provider.Provider {
         }
 
         openaiMessages.push(openaiMessage)
-      }
-
-      for (const toolResult of toolResults) {
-        openaiMessages.push({
-          role: 'tool',
-          tool_call_id: toolResult.tool_call_id,
-          content: toolResult.content
-        })
       }
     }
 
@@ -238,20 +244,25 @@ export class impl implements provider.Provider {
   private async convertStreamResponse(openaiResponse: Response): Promise<Response> {
     // 用于累积工具调用数据
     const toolCallAccumulator = new Map<number, { id?: string; name?: string; arguments?: string }>()
+    // 仅在确认 OpenAI 本轮以 tool_calls 结束时，向下游发送一次 stop_reason=tool_use
+    let toolUseStopEmitted = false
 
     return utils.processProviderStream(openaiResponse, (jsonStr, textBlockIndex, toolUseBlockIndex) => {
-      let openaiData: types.OpenAIStreamResponse
+      let openaiData: any
       try {
         openaiData = JSON.parse(jsonStr)
       } catch (e) {
-        console.error(
-          `[${new Date().toISOString()}] 🚨 OpenAI(old) stream JSON parse error, skipping. Raw data:`,
-          jsonStr
-        )
+        console.warn(`[${new Date().toISOString()}] 🟡 OpenAI(old) stream JSON parse error, skipping a chunk.`)
         return null
       }
 
-      if (!openaiData.choices || openaiData.choices.length === 0) {
+      // 检查上游流中是否直接返回了错误对象
+      if (openaiData.error) {
+        console.error(`[${new Date().toISOString()}] 🚨 Upstream error in stream:`, JSON.stringify(openaiData.error))
+        throw new Error(`Upstream stream error: ${openaiData.error.message || JSON.stringify(openaiData.error)}`)
+      }
+
+      if (!openaiData || !openaiData.choices || openaiData.choices.length === 0) {
         return null
       }
 
@@ -287,8 +298,7 @@ export class impl implements provider.Provider {
             accumulated.arguments = (accumulated.arguments || '') + toolCall.function.arguments
           }
 
-          // 检查是否收集完整（包含 id/name/args），并且 arguments 是有效 JSON
-          // 为了让后续用户的 tool_result 能正确回传给 OpenAI，必须把 OpenAI 返回的 tool_call.id 原样透传给客户端
+          // 检查是否收集完整（包含 id/name/args），并且arguments是有效JSON
           if (accumulated.id && accumulated.name && accumulated.arguments) {
             try {
               const args = JSON.parse(accumulated.arguments)
@@ -302,14 +312,6 @@ export class impl implements provider.Provider {
                   currentToolIndex
                 )
               )
-              // 通知客户端该轮以 tool_use 结束，便于立刻触发工具执行
-              events.push(
-                `event: message_delta\n` +
-                  `data: ${JSON.stringify({
-                    type: 'message_delta',
-                    delta: { stop_reason: 'tool_use' }
-                  })}\n\n`
-              )
               currentToolIndex++
               // 清除已处理的工具调用
               toolCallAccumulator.delete(toolIndex)
@@ -318,6 +320,18 @@ export class impl implements provider.Provider {
             }
           }
         }
+      }
+
+      // 仅当 OpenAI 明确以 tool_calls 结束时，再发送一次 stop_reason=tool_use，避免并行多工具时提前结束
+      if (!toolUseStopEmitted && (choice.finish_reason === 'tool_calls' || choice.finish_reason === 'function_call')) {
+        events.push(
+          `event: message_delta\n` +
+            `data: ${JSON.stringify({
+              type: 'message_delta',
+              delta: { stop_reason: 'tool_use' }
+            })}\n\n`
+        )
+        toolUseStopEmitted = true
       }
 
       return {
