@@ -47,13 +47,10 @@ cp .env.example .env
 4. 启动服务器
 
 ```bash
+# 开发环境 (文件修改后自动重启)
+bun run dev
+
 # 生产环境
-bun run start
-
-# 开发环境（智能重启）
-bun run dev # 启动开发服务器并监听文件变化
-
-# 生产模式
 bun run start
 
 5. 配置客户端 (以 Claude Code 为例)
@@ -711,17 +708,7 @@ bun run config use openai-main
 
 ### Q5: 如何在 Claude Code 中使用这个代理？
 
-**A:** 修改 Claude Code 的配置文件 `~/.claude/settings.json`：
-
-```json
-{
-  "env": {
-    "ANTHROPIC_BASE_URL": "http://localhost:3000",
-    "ANTHROPIC_CUSTOM_HEADERS": "x-api-key: your-proxy-access-key",
-    "ANTHROPIC_MODEL": "claude-3-5-sonnet-20241022"
-  }
-}
-```
+**A:** 请参考 **[🏁 快速开始](#-快速开始)** 章节中的“5. 配置客户端”部分。该部分提供了详细的步骤来修改 `~/.claude/settings.json` 文件以正确接入本代理服务。
 
 ### Q6: 支持流式响应吗？
 
