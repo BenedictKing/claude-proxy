@@ -244,37 +244,12 @@ app.post('/v1/messages', async (req, res) => {
       })
       console.log(`[${new Date().toISOString()}] 📋 响应头:`, JSON.stringify(responseHeaders, null, 2))
 
-      // 在 debug 级别下记录响应体
+      // 在 debug 级别下记录响应体（仅限非流式）
       if (envConfigManager.shouldLog('debug')) {
         const contentType = providerResponse.headers.get('content-type') || ''
         const isStream = contentType.includes('text/event-stream')
 
-        if (isStream) {
-          if (providerResponse.body) {
-            const [logStream, processStream] = providerResponse.body.tee()
-
-            // 在后台异步记录完整的流式响应体
-            ;(async () => {
-              try {
-                const fullBody = await new Response(logStream).text()
-                if (fullBody.trim().length > 0) {
-                  console.log(
-                    `[${new Date().toISOString()}] 🛰️  上游流式响应体 (完整):\n---\n${fullBody.trim()}\n---`
-                  )
-                }
-              } catch (e) {
-                console.error(`[${new Date().toISOString()}] 💥 日志流读取错误:`, e)
-              }
-            })()
-
-            // 创建一个新的 Response 对象，用于后续处理
-            providerResponse = new Response(processStream, {
-              status: providerResponse.status,
-              statusText: providerResponse.statusText,
-              headers: providerResponse.headers
-            })
-          }
-        } else {
+        if (!isStream) {
           // 对于非流式响应，克隆并记录
           try {
             const responseClone = providerResponse.clone()
