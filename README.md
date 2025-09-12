@@ -34,7 +34,7 @@ cd claude-proxy
 2. 安装依赖
 
 ```bash
-pnpm install
+bun install
 ```
 
 3. 配置环境变量
@@ -117,21 +117,22 @@ HEALTH_CHECK_PATH=/health
 
 ```bash
 # 添加上游
-bun run config add <name> <baseUrl> <serviceType>
+bun run config add <name> <type> <url>
 
 # 示例
-bun run config add openai-api https://api.openai.com/v1 openai
-bun run config add gemini-api https://generativelanguage.googleapis.com/v1beta gemini
-bun run config add claude-api https://api.anthropic.com/v1 claude
+bun run config add openai-api openai https://api.openai.com/v1
+bun run config add gemini-api gemini https://generativelanguage.googleapis.com/v1beta
+bun run config add claude-api claude https://api.anthropic.com/v1
 
-# 添加 API 密钥 (支持索引或名称)
-bun run config key <index|name> add <apiKey1> <apiKey2> ...
+# 添加 API 密钥 (支持索引或名称，一次添加一个)
+bun run config key <index|name> add <apiKey>
 
 # 列出 API 密钥（输出已脱敏）
 bun run config key <index|name> list
 
 # 示例
-bun run config key openai-api add sk-1234567890abcdef sk-0987654321fedcba
+bun run config key openai-api add sk-1234567890abcdef
+bun run config key openai-api add sk-0987654321fedcba
 
 # 查看当前配置
 bun run config show
@@ -144,9 +145,6 @@ bun run config balance <strategy>
 
 # 开启/关闭跳过TLS证书验证（用于处理证书问题）
 bun run config update <index|name> --insecureSkipVerify <true|false>
-
-# 清除所有配置
-bun run config clear
 ```
 
 ### 🔧 详细配置示例
@@ -524,9 +522,10 @@ GET http://localhost:3000/health
   "status": "healthy",
   "timestamp": "2024-01-01T00:00:00.000Z",
   "uptime": 120.5,
+  "mode": "development",
   "config": {
     "upstreamCount": 2,
-    "currentUpstream": "openai-api",
+    "currentUpstream": 0,
     "loadBalance": "failover"
   }
 }

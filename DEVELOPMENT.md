@@ -409,17 +409,20 @@ pm2 startup
 FROM oven/bun:1 as base
 WORKDIR /app
 
-COPY package.json bun.lock ./
+# 安装依赖
+COPY package.json bun.lockb ./
 RUN bun install --frozen-lockfile
 
+# 复制源码
 COPY . .
 
+# 暴露端口并启动
 EXPOSE 3000
 CMD ["bun", "run", "start"]
 ```
 
 ```bash
 # 构建和运行
-docker build -t claude-proxy .
-docker run -p 3000:3000 -e NODE_ENV=production claude-proxy
+docker build -t claude-api-proxy .
+docker run -p 3000:3000 -v $(pwd)/config.json:/app/config.json -v $(pwd)/.env:/app/.env --name claude-proxy-container claude-api-proxy
 ```
