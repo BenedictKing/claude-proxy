@@ -287,15 +287,6 @@ sequenceDiagram
     Proxy-->>Client: 返回Claude格式响应
 ```
 
-### 📋 支持的模型
-
-| 模型类型          | 示例模型ID                   | 支持的服务商                |
-| ----------------- | ---------------------------- | --------------------------- |
-| Claude 3.5 Sonnet | `claude-3-5-sonnet-20241022` | Claude, OpenAI (及兼容 API) |
-| Claude 3.5 Haiku  | `claude-3-5-haiku-20241022`  | Claude, OpenAI (及兼容 API) |
-| Claude 3 Opus     | `claude-3-opus-20240229`     | Claude, OpenAI (及兼容 API) |
-| Gemini            | `gemini-1.5-pro`             | Gemini                      |
-
 ### 请求格式
 
 #### 基础文本对话
@@ -600,14 +591,12 @@ bun run start
 {
   "env": {
     "ANTHROPIC_BASE_URL": "http://localhost:3000",
-    "ANTHROPIC_CUSTOM_HEADERS": "x-api-key: your-proxy-access-key",
-    "ANTHROPIC_MODEL": "claude-3-5-sonnet-20241022",
-    "ANTHROPIC_SMALL_FAST_MODEL": "claude-3-haiku-20240307",
-    "API_TIMEOUT_MS": "600000"
+    "ANTHROPIC_AUTH_TOKEN": "your-proxy-access-key",
+    "DISABLE_TELEMETRY": "1",
+    "DISABLE_ERROR_REPORTING": "1",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
   }
 }
-
-claude
 ```
 
 > **重要说明**: `your-proxy-access-key` 是你访问代理服务器的授权密钥，不是上游服务商的 API key。这个 key 用于验证你对代理服务器的访问权限。
