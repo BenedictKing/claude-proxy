@@ -253,14 +253,59 @@ app.post('/v1/messages', async (req, res) => {
           if (providerResponse.body) {
             const [logStream, processStream] = providerResponse.body.tee()
 
-            // 在后台异步记录完整的流式响应体
+            // 在后台异步记录流式响应的合成内容
             ;(async () => {
               try {
                 const fullBody = await new Response(logStream).text()
                 if (fullBody.trim().length > 0) {
-                  console.log(
-                    `[${new Date().toISOString()}] 🛰️  上游流式响应体 (完整):\n---\n${fullBody.trim()}\n---`
-                  )
+                  let synthesizedContent = ''
+                  const lines = fullBody.trim().split('\n')
+                  let parseFailed = false
+
+                  for (const line of lines) {
+                    const trimmedLine = line.trim()
+                    if (!trimmedLine.startsWith('data: ')) continue
+
+                    const jsonStr = trimmedLine.substring(6).trim()
+                    if (jsonStr === '[DONE]') continue
+
+                    try {
+                      const data = JSON.parse(jsonStr)
+
+                      if (upstream.serviceType === 'gemini') {
+                        if (data.candidates && data.candidates[0]?.content?.parts) {
+                          for (const part of data.candidates[0].content.parts) {
+                            if (part.text) {
+                              synthesizedContent += part.text
+                            }
+                          }
+                        }
+                      } else if (upstream.serviceType === 'openai' || upstream.serviceType === 'openaiold') {
+                        if (data.choices && data.choices[0]?.delta?.content) {
+                          synthesizedContent += data.choices[0].delta.content
+                        }
+                      } else if (upstream.serviceType === 'claude') {
+                        if (data.type === 'content_block_delta' && data.delta?.type === 'text_delta' && data.delta.text) {
+                          synthesizedContent += data.delta.text
+                        }
+                      }
+                    } catch (e) {
+                      // 如果任何一个块解析失败，就放弃合成，回退到打印原始日志
+                      parseFailed = true
+                      break
+                    }
+                  }
+
+                  if (synthesizedContent && !parseFailed) {
+                    console.log(
+                      `[${new Date().toISOString()}] 🛰️  上游流式响应合成内容:\n---\n${synthesizedContent.trim()}\n---`
+                    )
+                  } else {
+                    // 如果合成失败或内容为空，则打印原始响应体
+                    console.log(
+                      `[${new Date().toISOString()}] 🛰️  上游流式响应体 (完整):\n---\n${fullBody.trim()}\n---`
+                    )
+                  }
                 }
               } catch (e) {
                 console.error(`[${new Date().toISOString()}] 💥 日志流读取错误:`, e)
