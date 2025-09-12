@@ -259,6 +259,7 @@ app.post('/v1/messages', async (req, res) => {
                 const fullBody = await new Response(logStream).text()
                 if (fullBody.trim().length > 0) {
                   let synthesizedContent = ''
+                  const toolCallAccumulator = new Map<number, { id?: string; name?: string; arguments?: string }>()
                   const lines = fullBody.trim().split('\n')
                   let parseFailed = false
 
@@ -278,11 +279,29 @@ app.post('/v1/messages', async (req, res) => {
                             if (part.text) {
                               synthesizedContent += part.text
                             }
+                            if (part.functionCall) {
+                              const fc = part.functionCall
+                              synthesizedContent += `\nTool Call: ${fc.name}(${JSON.stringify(fc.args)})`
+                            }
                           }
                         }
                       } else if (upstream.serviceType === 'openai' || upstream.serviceType === 'openaiold') {
                         if (data.choices && data.choices[0]?.delta?.content) {
                           synthesizedContent += data.choices[0].delta.content
+                        }
+                        if (data.choices && data.choices[0]?.delta?.tool_calls) {
+                          for (const toolCall of data.choices[0].delta.tool_calls) {
+                            const index = toolCall.index ?? 0
+                            if (!toolCallAccumulator.has(index)) {
+                              toolCallAccumulator.set(index, {})
+                            }
+                            const accumulated = toolCallAccumulator.get(index)!
+                            if (toolCall.id) accumulated.id = toolCall.id
+                            if (toolCall.function?.name) accumulated.name = toolCall.function.name
+                            if (toolCall.function?.arguments) {
+                              accumulated.arguments = (accumulated.arguments || '') + toolCall.function.arguments
+                            }
+                          }
                         }
                       } else if (upstream.serviceType === 'claude') {
                         if (data.type === 'content_block_delta' && data.delta?.type === 'text_delta' && data.delta.text) {
@@ -296,7 +315,22 @@ app.post('/v1/messages', async (req, res) => {
                     }
                   }
 
-                  if (synthesizedContent && !parseFailed) {
+                  if (toolCallAccumulator.size > 0) {
+                    let toolCallsString = ''
+                    for (const [index, tool] of toolCallAccumulator.entries()) {
+                      const args = tool.arguments || '{}'
+                      const name = tool.name || 'unknown_function'
+                      try {
+                        const parsedArgs = JSON.parse(args)
+                        toolCallsString += `\nTool Call #${index}: ${name}(${JSON.stringify(parsedArgs)})`
+                      } catch (e) {
+                        toolCallsString += `\nTool Call #${index}: ${name}(${args})`
+                      }
+                    }
+                    synthesizedContent += toolCallsString
+                  }
+
+                  if (synthesizedContent.trim() && !parseFailed) {
                     console.log(
                       `[${new Date().toISOString()}] 🛰️  上游流式响应合成内容:\n---\n${synthesizedContent.trim()}\n---`
                     )
