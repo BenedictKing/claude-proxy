@@ -375,7 +375,7 @@ telnet localhost 3000
 
 ```bash
 # 1. 安装依赖
-pnpm install
+bun install
 
 # 2. 配置环境变量
 cp .env.example .env
