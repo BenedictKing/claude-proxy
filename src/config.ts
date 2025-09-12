@@ -123,7 +123,9 @@ class ConfigManager {
 
   reloadConfig(): void {
     this.config = this.loadConfig()
+    const currentUpstream = this.getCurrentUpstream()
     console.log(`[${new Date().toISOString()}] 配置已重载`)
+    console.log(`⚙️  当前配置: ${currentUpstream.name || currentUpstream.serviceType} - ${currentUpstream.baseUrl}`)
   }
 
   private loadConfig(): Config {
