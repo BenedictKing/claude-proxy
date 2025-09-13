@@ -210,7 +210,14 @@ export class impl implements provider.Provider {
             type: 'tool_use',
             id: toolCall.id,
             name: toolCall.function.name,
-            input: JSON.parse(toolCall.function.arguments)
+            input: (() => {
+              try {
+                return JSON.parse(toolCall.function.arguments)
+              } catch (e) {
+                console.error(`Error parsing toolCall arguments for ${toolCall.function.name}:`, toolCall.function.arguments, e)
+                return toolCall.function.arguments // Fallback to raw string if parsing fails
+              }
+            })()
           })
         }
         claudeResponse.stop_reason = 'tool_use'
