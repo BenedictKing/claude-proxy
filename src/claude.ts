@@ -1,6 +1,7 @@
 import * as provider from './provider'
 import * as utils from './utils'
 import * as types from './types'
+import { redirectModel } from './config'
 
 export class impl implements provider.Provider {
   async convertToProviderRequest(
@@ -10,6 +11,11 @@ export class impl implements provider.Provider {
     upstream?: import('./config').UpstreamConfig
   ): Promise<Request> {
     const claudeRequest = (await request.json()) as types.ClaudeRequest
+
+    // 应用模型重定向
+    if (upstream) {
+      claudeRequest.model = redirectModel(claudeRequest.model, upstream)
+    }
 
     // Claude API 的端点通常是 /v1/messages
     const finalUrl = utils.buildUrl(baseUrl, 'messages')
