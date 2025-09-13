@@ -426,3 +426,8 @@ CMD ["bun", "run", "start"]
 docker build -t claude-api-proxy .
 docker run -p 3000:3000 -v $(pwd)/config.json:/app/config.json -v $(pwd)/.env:/app/.env --name claude-proxy-container claude-api-proxy
 ```
+
+## 🤝 贡献与发布
+
+-   有关如何为项目贡献代码，请继续阅读本文档。
+-   有关如何发布新版本，请参考 [RELEASE.md](./RELEASE.md)。

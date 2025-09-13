@@ -862,6 +862,9 @@ MIT License
 
 欢迎提交 Issue 和 Pull Request！
 
+有关如何为项目贡献代码和进行开发，请参考 [DEVELOPMENT.md](./DEVELOPMENT.md)。
+有关如何发布新版本，请参考 [RELEASE.md](./RELEASE.md)。
+
 ## 📞 支持
 
 如有问题，请查看故障排除部分或提交 Issue。
