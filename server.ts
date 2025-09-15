@@ -304,8 +304,27 @@ app.post('/v1/messages', async (req, res) => {
                           }
                         }
                       } else if (upstream.serviceType === 'claude') {
-                        if (data.type === 'content_block_delta' && data.delta?.type === 'text_delta' && data.delta.text) {
-                          synthesizedContent += data.delta.text
+                        if (data.type === 'content_block_delta') {
+                          if (data.delta?.type === 'text_delta' && data.delta.text) {
+                            synthesizedContent += data.delta.text
+                          } else if (data.delta?.type === 'input_json_delta' && data.delta.partial_json) {
+                            // 累积工具调用的JSON片段
+                            const blockIndex = data.index ?? 0
+                            if (!toolCallAccumulator.has(blockIndex)) {
+                              toolCallAccumulator.set(blockIndex, { arguments: '' })
+                            }
+                            const accumulated = toolCallAccumulator.get(blockIndex)!
+                            accumulated.arguments = (accumulated.arguments || '') + data.delta.partial_json
+                          }
+                        } else if (data.type === 'content_block_start' && data.content_block?.type === 'tool_use') {
+                          // 记录工具调用的基本信息
+                          const blockIndex = data.index ?? 0
+                          if (!toolCallAccumulator.has(blockIndex)) {
+                            toolCallAccumulator.set(blockIndex, {})
+                          }
+                          const accumulated = toolCallAccumulator.get(blockIndex)!
+                          accumulated.id = data.content_block.id
+                          accumulated.name = data.content_block.name
                         }
                       }
                     } catch (e) {
@@ -320,11 +339,12 @@ app.post('/v1/messages', async (req, res) => {
                     for (const [index, tool] of toolCallAccumulator.entries()) {
                       const args = tool.arguments || '{}'
                       const name = tool.name || 'unknown_function'
+                      const id = tool.id || `tool_${index}`
                       try {
                         const parsedArgs = JSON.parse(args)
-                        toolCallsString += `\nTool Call #${index}: ${name}(${JSON.stringify(parsedArgs)})`
+                        toolCallsString += `\nTool Call: ${name}(${JSON.stringify(parsedArgs)}) [ID: ${id}]`
                       } catch (e) {
-                        toolCallsString += `\nTool Call #${index}: ${name}(${args})`
+                        toolCallsString += `\nTool Call: ${name}(${args}) [ID: ${id}]`
                       }
                     }
                     synthesizedContent += toolCallsString
