@@ -5,7 +5,9 @@
   "scripts": {
     "start": "bun run server.ts",
     "dev": "bun run dev-runner.ts",
-    "config": "bun run config-cli.ts"
+    "config": "bun run config-cli.ts",
+    "build": "bun build server.ts --target=bun --outdir=dist",
+    "type-check": "tsc --noEmit"
   },
   "devDependencies": {
     "prettier": "^3.6.2",
