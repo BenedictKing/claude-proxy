@@ -16,14 +16,11 @@ const SENSITIVE_HEADER_KEYS = new Set(['authorization', 'x-api-key', 'x-goog-api
 function maskHeaderValue(key: string, value: string): string {
   const lowerKey = key.toLowerCase()
   if (lowerKey === 'authorization') {
-    const m = value.match(/^\s*Bearer\s+(.+)$/i)
-    if (m) return `Bearer ${maskApiKey(m[1])}`
-    return maskApiKey(value)
+    return value.replace(/^(Bearer\s+)(.+)$/i, (_, prefix, token) => 
+      `${prefix}${maskApiKey(token)}`
+    ) || maskApiKey(value)
   }
-  if (SENSITIVE_HEADER_KEYS.has(lowerKey)) {
-    return maskApiKey(value)
-  }
-  return value
+  return SENSITIVE_HEADER_KEYS.has(lowerKey) ? maskApiKey(value) : value
 }
 
 const app = express()
@@ -119,8 +116,8 @@ app.post('/v1/messages', async (req, res) => {
     let providedApiKey = req.headers['x-api-key'] || req.headers['authorization']
 
     // 移除 Bearer 前缀（如果有）
-    if (providedApiKey && typeof providedApiKey === 'string' && providedApiKey.toLowerCase().startsWith('bearer ')) {
-      providedApiKey = providedApiKey.substring(7)
+    if (providedApiKey && typeof providedApiKey === 'string') {
+      providedApiKey = providedApiKey.replace(/^bearer\s+/i, '')
     }
 
     const expectedApiKey = envConfigManager.getConfig().proxyAccessKey
@@ -175,7 +172,8 @@ app.post('/v1/messages', async (req, res) => {
     // 构造提供商所需的 Request 对象
     const headers = new Headers()
     Object.entries(req.headers).forEach(([key, value]) => {
-      if (typeof value === 'string' && key.toLowerCase() !== 'x-api-key' && key.toLowerCase() !== 'authorization') {
+      const lowerKey = key.toLowerCase()
+      if (typeof value === 'string' && lowerKey !== 'x-api-key' && lowerKey !== 'authorization') {
         headers.set(key, value)
       } else if (Array.isArray(value)) {
         headers.set(key, value.join(', '))
@@ -265,9 +263,11 @@ app.post('/v1/messages', async (req, res) => {
 
                   for (const line of lines) {
                     const trimmedLine = line.trim()
-                    if (!trimmedLine.startsWith('data: ')) continue
+                    // 使用正则匹配 SSE data 字段，支持 'data:' 和 'data: ' 格式
+                    const dataMatch = trimmedLine.match(/^data:\s*(.*)$/)
+                    if (!dataMatch) continue
 
-                    const jsonStr = trimmedLine.substring(6).trim()
+                    const jsonStr = dataMatch[1].trim()
                     if (jsonStr === '[DONE]') continue
 
                     try {

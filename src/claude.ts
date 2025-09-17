@@ -31,7 +31,7 @@ export class impl implements provider.Provider {
 
     // 确保 User-Agent 的兼容性
     const userAgent = headers.get('user-agent')
-    if (!userAgent || !userAgent.startsWith('claude-cli')) {
+    if (!/^claude-cli/i.test(userAgent || '')) {
       headers.set('User-Agent', 'claude-cli/1.0.58 (external, cli)')
     }
 

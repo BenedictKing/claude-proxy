@@ -22,6 +22,15 @@
 
 2.  确认所有计划内的功能和修复都已合并到 `main` 分支。
 
+3.  验证代码质量和构建状态。
+    ```bash
+    # TypeScript 类型检查
+    bun run type-check
+    
+    # 构建验证
+    bun run build
+    ```
+
 ### 步骤 2: 更新版本日志 (`CHANGELOG.md`)
 
 1.  打开 `CHANGELOG.md` 文件。

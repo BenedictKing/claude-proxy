@@ -52,6 +52,12 @@ bun run dev
 
 # 生产环境
 bun run start
+
+# 构建项目 (验证代码)
+bun run build
+
+# 类型检查
+bun run type-check
 ```
 
 5. 配置客户端 (以 Claude Code 为例)

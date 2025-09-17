@@ -2,17 +2,22 @@ export function generateId(): string {
   return Math.random().toString(36).substring(2)
 }
 
+// 标准化 Claude 角色名称
+export function normalizeClaudeRole(role: any): 'system' | 'user' | 'assistant' | 'tool' {
+  const r = String(role ?? '').toLowerCase()
+  if (r === 'assistant' || r === 'model') return 'assistant'
+  if (r === 'user' || r === 'human') return 'user'
+  if (r === 'system') return 'system'
+  if (r === 'tool') return 'tool'
+  return 'user' // 默认为用户角色
+}
+
 // API密钥掩码函数 - 保留前后5个字符，中间用***代替
 export function maskApiKey(apiKey: string): string {
-  if (!apiKey || apiKey.length <= 10) {
-    const start = apiKey.substring(0, 3)
-    const end = apiKey.substring(apiKey.length - 2)
-    return `${start}***${end}`
-  }
-
-  const start = apiKey.substring(0, 8)
-  const end = apiKey.substring(apiKey.length - 5)
-  return `${start}***${end}`
+  if (!apiKey) return ''
+  const len = apiKey.length
+  if (len <= 10) return `${apiKey.slice(0, 3)}***${apiKey.slice(-2)}`
+  return `${apiKey.slice(0, 8)}***${apiKey.slice(-5)}`
 }
 
 export function sendMessageStart(controller: ReadableStreamDefaultController): void {
@@ -156,13 +161,9 @@ export async function processProviderStream(
             const trimmedLine = line.trim()
             if (!trimmedLine) continue
 
-            let jsonStr: string
-            if (trimmedLine.startsWith('data: ')) {
-              jsonStr = trimmedLine.substring(6).trim()
-            } else {
-              // 处理一些不规范的上游，错误信息可能直接以JSON形式返回
-              jsonStr = trimmedLine
-            }
+            // 使用正则匹配 SSE data 字段，支持各种格式
+            const dataMatch = trimmedLine.match(/^data:\s*(.*)$/)
+            const jsonStr = dataMatch ? dataMatch[1].trim() : trimmedLine
 
             if (jsonStr === '[DONE]') continue
             if (!jsonStr) continue
@@ -180,10 +181,8 @@ export async function processProviderStream(
 
         // 处理缓冲区中剩余的数据
         if (buffer.trim()) {
-          let jsonStr = buffer.trim()
-          if (jsonStr.startsWith('data: ')) {
-            jsonStr = jsonStr.substring(6).trim()
-          }
+          const dataMatch = buffer.trim().match(/^data:\s*(.*)$/)
+          let jsonStr = dataMatch ? dataMatch[1].trim() : buffer.trim()
 
           if (jsonStr && jsonStr !== '[DONE]') {
             const result = processLine(jsonStr, textBlockIndex, toolUseBlockIndex)

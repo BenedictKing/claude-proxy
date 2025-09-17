@@ -51,16 +51,15 @@ Claude API代理服务器配置工具
 }
 
 function parseArgs(args: string[]): { [key: string]: string } {
-  const parsed: { [key: string]: string } = {}
-  for (let i = 0; i < args.length; i++) {
-    if (args[i].startsWith('--')) {
-      const key = args[i].slice(2)
-      const value = args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : 'true'
-      parsed[key] = value
-      if (value !== 'true') i++
+  return args.reduce((acc, arg, i) => {
+    const match = arg.match(/^--(.+)/)
+    if (match) {
+      const key = match[1]
+      const nextArg = args[i + 1]
+      acc[key] = nextArg && !nextArg.startsWith('--') ? nextArg : 'true'
     }
-  }
-  return parsed
+    return acc
+  }, {} as { [key: string]: string })
 }
 
 function addUpstream(name: string, type: string, url: string, extraArgs?: string[]) {
