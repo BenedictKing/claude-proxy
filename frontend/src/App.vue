@@ -6,15 +6,25 @@
       color="primary"
       dark
       :height="$vuetify.display.mobile ? 72 : 88"
-      class="app-header"
+      class="app-header px-4"
     >
-      <v-toolbar-title class="d-flex align-center py-2">
-        <v-icon :class="$vuetify.display.mobile ? 'mr-3' : 'mr-4'" :size="$vuetify.display.mobile ? 28 : 36">mdi-rocket-launch</v-icon>
-        <div class="d-flex flex-column justify-center">
-          <div :class="$vuetify.display.mobile ? 'text-h6' : 'text-h5'" class="font-weight-bold mb-1">Claude API Proxy</div>
-          <div class="text-body-2 opacity-90 d-none d-sm-block">智能API代理管理平台</div>
+      <template #prepend>
+        <v-icon 
+          :class="$vuetify.display.mobile ? 'mr-3' : 'mr-4'" 
+          :size="$vuetify.display.mobile ? 28 : 36"
+        >
+          mdi-rocket-launch
+        </v-icon>
+      </template>
+      
+      <v-app-bar-title class="d-flex flex-column justify-center">
+        <div :class="$vuetify.display.mobile ? 'text-h6' : 'text-h5'" class="font-weight-bold mb-1">
+          Claude API Proxy
         </div>
-      </v-toolbar-title>
+        <div class="text-body-2 opacity-90 d-none d-sm-block">
+          智能API代理管理平台
+        </div>
+      </v-app-bar-title>
 
       <v-spacer></v-spacer>
 
@@ -106,7 +116,7 @@
         <v-card elevation="2" class="mb-6" rounded="lg">
           <v-card-text>
             <div class="d-flex flex-column flex-sm-row gap-3 align-center justify-space-between">
-              <div class="d-flex flex-wrap gap-3">
+              <div class="d-flex flex-wrap align-center ga-3">
                 <v-btn
                   color="primary"
                   size="large"
@@ -518,6 +528,8 @@ onMounted(async () => {
 <style scoped>
 .app-header {
   transition: height 0.3s ease;
+  padding-left: 16px !important;
+  padding-right: 16px !important;
 }
 
 .app-header .v-toolbar-title {
@@ -525,11 +537,30 @@ onMounted(async () => {
   width: auto !important;
 }
 
+/* 响应式内边距调整 */
+@media (min-width: 768px) {
+  .app-header {
+    padding-left: 24px !important;
+    padding-right: 24px !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .app-header {
+    padding-left: 32px !important;
+    padding-right: 32px !important;
+  }
+}
+
 /* 确保在不同屏幕尺寸下的文本对齐 */
 @media (max-width: 600px) {
   .app-header .v-toolbar-title .text-h6,
   .app-header .v-toolbar-title .text-h5 {
     line-height: 1.2;
+  }
+  .app-header {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
   }
 }
 </style>

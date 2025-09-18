@@ -23,14 +23,6 @@ export default defineConfig(({ mode }) => {
         }
       })
     ],
-    css: {
-      preprocessorOptions: {
-        scss: {
-          api: 'modern-compiler',
-          silenceDeprecations: ['legacy-js-api']
-        }
-      }
-    },
     resolve: {
       alias: {
         '@': resolve(__dirname, 'src')
