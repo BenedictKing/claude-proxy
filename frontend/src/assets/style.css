@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 自定义样式 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* 延迟颜色指示 */
+.latency-excellent {
+  @apply text-green-500;
+}
+
+.latency-good {
+  @apply text-yellow-500;
+}
+
+.latency-poor {
+  @apply text-red-500;
+}

@@ -1,22 +1,26 @@
 {
-  "name": "claude-proxy",
+  "name": "claude-proxy-monorepo",
   "version": "1.1.0",
   "license": "MIT",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
-    "start": "bun run server.ts",
-    "dev": "bun run dev-runner.ts",
-    "config": "bun run config-cli.ts",
-    "build": "bun build server.ts --target=bun --outdir=dist",
-    "type-check": "tsc --noEmit"
+    "dev": "bun --filter '*' dev",
+    "build": "bun --filter '*' build", 
+    "start": "bun --filter claude-proxy-backend start",
+    "type-check": "bun --filter '*' type-check",
+    "clean": "rm -rf */dist */node_modules node_modules"
   },
   "devDependencies": {
+    "bun-types": "latest",
     "prettier": "^3.6.2",
     "typescript": "^5.5.2"
   },
-  "dependencies": {
-    "@types/express": "^5.0.3",
-    "chokidar": "^3.6.0",
-    "dotenv": "^17.2.2",
-    "express": "^4.19.2"
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
   }
 }

@@ -1,13 +1,15 @@
 import express from 'express'
-import { Readable } from 'stream' // 新增导入
-import * as provider from './src/provider'
-import * as gemini from './src/gemini'
-import * as openaiold from './src/openaiold'
-import * as openai from './src/openai'
-import * as claude from './src/claude'
-import { configManager, UpstreamConfig } from './src/config'
-import { envConfigManager } from './src/env'
-import { maskApiKey } from './src/utils'
+import { Readable } from 'stream'
+import path from 'path'
+import * as provider from './providers/provider'
+import * as gemini from './providers/gemini'
+import * as openaiold from './providers/openaiold'
+import * as openai from './providers/openai'
+import * as claude from './providers/claude'
+import { configManager, UpstreamConfig } from './config/config'
+import { envConfigManager } from './config/env'
+import { maskApiKey } from './utils/index'
+import webRoutes from './api/web-routes'
 import chokidar from 'chokidar'
 import { Agent } from 'undici'
 
@@ -25,6 +27,43 @@ function maskHeaderValue(key: string, value: string): string {
 
 const app = express()
 app.use(express.json({ limit: '50mb' }))
+
+// CORS 配置 - 允许开发环境跨域访问
+app.use((req, res, next) => {
+  const origin = req.headers.origin
+  
+  // 开发环境允许所有localhost源，生产环境可以更严格
+  if (process.env.NODE_ENV === 'development') {
+    if (origin && origin.includes('localhost')) {
+      res.setHeader('Access-Control-Allow-Origin', origin)
+    }
+  } else {
+    // 生产环境可以设置具体的允许域名
+    res.setHeader('Access-Control-Allow-Origin', '*')
+  }
+  
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key')
+  res.setHeader('Access-Control-Allow-Credentials', 'true')
+  
+  // 处理预检请求
+  if (req.method === 'OPTIONS') {
+    res.status(200).end()
+    return
+  }
+  
+  next()
+})
+
+// Web管理界面API路由
+app.use(webRoutes)
+
+// 静态文件服务（前端构建产物）
+app.use(express.static(path.join(__dirname, '../../frontend/dist')))
+// SPA 路由支持
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../frontend/dist/index.html'))
+})
 
 // 开发模式检测
 const isDevelopment = process.env.NODE_ENV === 'development'
@@ -211,7 +250,7 @@ app.post('/v1/messages', async (req, res) => {
           )
         }
       } catch (error) {
-        console.log(`[${new Date().toISOString()}] 📦 请求体: [无法读取 - ${error.message}]`)
+        console.log(`[${new Date().toISOString()}] 📦 请求体: [无法读取 - ${error instanceof Error ? error.message : '未知错误'}]`)
       }
     }
 
@@ -444,7 +483,7 @@ function setupDevelopmentWatchers() {
   if (!isDevelopment || isManagedByRunner) return
 
   // 源码文件监听
-  const sourceWatcher = chokidar.watch(['src/**/*.ts', 'server.ts'], {
+  const sourceWatcher = chokidar.watch(['src/**/*.ts'], {
     ignored: [/node_modules/, 'config.json'],
     persistent: true,
     ignoreInitial: true
@@ -466,7 +505,7 @@ function setupDevelopmentWatchers() {
   })
 
   // 环境变量文件监听
-  const envWatcher = chokidar.watch(['.env', '.env.example'], {
+  const envWatcher = chokidar.watch(['../.env', '../.env.example'], {
     persistent: true,
     ignoreInitial: true
   })
@@ -499,6 +538,7 @@ setupDevelopmentWatchers()
 app.listen(envConfig.port, () => {
   console.log(`\n🚀 Claude API代理服务器已启动`)
   console.log(`📍 本地地址: http://localhost:${envConfig.port}`)
+  console.log(`🌐 管理界面: http://localhost:${envConfig.port}`)
   console.log(`📋 统一入口: POST /v1/messages`)
   console.log(`💚 健康检查: GET ${envConfig.healthCheckPath}`)
 

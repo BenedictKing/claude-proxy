@@ -212,3 +212,5 @@ CLAUDE.md
 *-lock.yaml
 config.json
 *.patch
+
+*.tsbuildinfo

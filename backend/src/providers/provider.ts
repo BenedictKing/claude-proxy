@@ -1,4 +1,4 @@
-import { UpstreamConfig } from './config'
+import { UpstreamConfig } from '../config/config'
 
 export interface Provider {
   convertToProviderRequest(

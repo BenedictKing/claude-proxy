@@ -1,14 +1,14 @@
+import * as types from '../types'
 import * as provider from './provider'
-import * as utils from './utils'
-import * as types from './types'
-import { redirectModel } from './config'
+import * as utils from '../utils'
+import { redirectModel } from '../config/config'
 
 export class impl implements provider.Provider {
   async convertToProviderRequest(
     request: Request,
     baseUrl: string,
     apiKey: string,
-    upstream?: import('./config').UpstreamConfig
+    upstream?: import('../config/config').UpstreamConfig
   ): Promise<Request> {
     const claudeRequest = (await request.json()) as types.ClaudeRequest
 

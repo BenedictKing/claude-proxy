@@ -1,0 +1,24 @@
+{
+  "name": "claude-proxy-backend",
+  "version": "1.1.0",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "bun run src/server.ts",
+    "dev": "bun run src/dev-runner.ts",
+    "config": "bun run src/config-cli.ts",
+    "build": "bun build src/server.ts --target=bun --outdir=dist",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@types/express": "^5.0.3",
+    "chokidar": "^3.6.0",
+    "dotenv": "^17.2.2",
+    "express": "^4.19.2",
+    "undici": "^6.0.0"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "typescript": "^5.5.2"
+  }
+}

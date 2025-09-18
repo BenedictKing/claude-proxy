@@ -1,0 +1,22 @@
+// Vuetify 样式变量配置
+
+// 先定义变量，再导入vuetify设置
+$border-radius-root: 12px !default;
+$btn-border-radius: 8px !default;
+$card-border-radius: 16px !default;
+$sheet-border-radius: 12px !default;
+
+// 自定义颜色
+$primary: #1976D2 !default;
+$secondary: #424242 !default;
+$accent: #82B1FF !default;
+$success: #4CAF50 !default;
+$info: #2196F3 !default;
+$warning: #FFC107 !default;
+$error: #FF5252 !default;
+
+// 字体配置
+$body-font-family: 'Inter', 'Roboto', sans-serif !default;
+$headings-font-family: 'Inter', 'Roboto', sans-serif !default;
+
+@use 'vuetify/settings';

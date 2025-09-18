@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { configManagerCLI, UpstreamConfig } from './src/config'
-import { maskApiKey } from './src/utils'
+import { configManagerCLI, UpstreamConfig } from './config/config'
+import { maskApiKey } from './utils'
 
 function showHelp() {
   console.log(`
@@ -137,7 +137,7 @@ function manageKeys(indexOrName: string, action: string, args: string[]) {
       if (upstream.apiKeys.length === 0) {
         console.log('  没有API密钥')
       } else {
-        upstream.apiKeys.forEach((key, i) => {
+        upstream.apiKeys.forEach((key: string, i: number) => {
           console.log(`  [${i}] ${maskApiKey(key)}`)
         })
       }

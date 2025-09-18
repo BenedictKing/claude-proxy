@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { maskApiKey } from './utils'
+import { maskApiKey } from '../utils'
 
 export interface UpstreamConfig {
   baseUrl: string
