@@ -408,7 +408,8 @@ const getLatencyLevel = () => {
 
 /* --- CURRENT CHANNEL (LIGHT) --- */
 .channel-card.current-channel {
-  border: 2px solid rgba(var(--v-theme-success-rgb), 0.4) !important;
+  border-width: 2px !important;
+  border-color: rgba(var(--v-theme-success-rgb), 0.4) !important;
   box-shadow: 
     0 8px 32px rgba(var(--v-theme-success-rgb), 0.15),
     0 4px 16px rgba(0, 0, 0, 0.08);
@@ -529,7 +530,8 @@ const getLatencyLevel = () => {
 
   /* --- CURRENT CHANNEL (DARK) --- */
   .channel-card.current-channel {
-    border: 2px solid rgba(var(--v-theme-success-rgb), 0.6) !important;
+    border-width: 2px !important;
+    border-color: rgba(var(--v-theme-success-rgb), 0.6) !important;
     box-shadow: 
       0 8px 32px rgba(var(--v-theme-success-rgb), 0.25),
       0 4px 16px rgba(0, 0, 0, 0.3);
