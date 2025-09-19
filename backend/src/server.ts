@@ -169,106 +169,154 @@ app.post('/v1/messages', async (req, res) => {
       return
     }
 
-    // 获取下一个上游和API密钥
+    // 获取上游配置
     let upstream: UpstreamConfig
-    let apiKey: string
     try {
       upstream = configManager.getNextUpstream()
-      apiKey = configManager.getNextApiKey(upstream)
     } catch (error) {
       console.error('获取上游配置失败:', error)
-      res.status(500).json({ error: '没有可用的上游配置或API密钥' })
+      res.status(500).json({ error: '没有可用的上游配置' })
       return
     }
 
-    if (envConfigManager.shouldLog('info')) {
-      console.log(
-        `[${new Date().toISOString()}] ${isDevelopment ? '🎯' : ''} 使用上游: ${upstream.name || upstream.serviceType} - ${upstream.baseUrl}`
-      )
-      console.log(`[${new Date().toISOString()}] ${isDevelopment ? '🔑' : ''} 使用API密钥: ${maskApiKey(apiKey)}`)
-    }
+    // 实现 failover 重试逻辑
+    const maxRetries = configManager.getConfig().loadBalance === 'failover' ? upstream.apiKeys.length : 1
+    const failedKeys = new Set<string>()
+    let providerResponse: Response | null = null
+    let lastError: Error | null = null
 
-    // 确定提供商实现
-    let providerImpl: provider.Provider
-    switch (upstream.serviceType) {
-      case 'gemini':
-        providerImpl = new gemini.impl()
-        break
-      case 'openai':
-        providerImpl = new openai.impl()
-        break
-      case 'openaiold':
-        providerImpl = new openaiold.impl()
-        break
-      case 'claude':
-        providerImpl = new claude.impl()
-        break
-      default:
-        res.status(400).json({ error: 'Unsupported type' })
-        return
-    }
-
-    // 构造提供商所需的 Request 对象
-    const headers = new Headers()
-    Object.entries(req.headers).forEach(([key, value]) => {
-      const lowerKey = key.toLowerCase()
-      if (typeof value === 'string' && lowerKey !== 'x-api-key' && lowerKey !== 'authorization') {
-        headers.set(key, value)
-      } else if (Array.isArray(value)) {
-        headers.set(key, value.join(', '))
-      }
-    })
-    const incomingRequest = new Request('http://localhost/v1/messages', {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(req.body)
-    })
-
-    // 协议转换：Claude -> Provider
-    const providerRequest = await providerImpl.convertToProviderRequest(
-      incomingRequest,
-      upstream.baseUrl,
-      apiKey,
-      upstream
-    )
-
-    // 记录实际发出的请求
-    if (isDevelopment || envConfigManager.getConfig().enableRequestLogs) {
-      console.log(`[${new Date().toISOString()}] 🌐 实际请求URL: ${providerRequest.url}`)
-      console.log(`[${new Date().toISOString()}] 📤 请求方法: ${providerRequest.method}`)
-      const reqHeaders: { [key: string]: string } = {}
-      providerRequest.headers.forEach((value, key) => {
-        reqHeaders[key] = maskHeaderValue(key, value)
-      })
-      console.log(`[${new Date().toISOString()}] 📋 请求头:`, JSON.stringify(reqHeaders, null, 2))
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const body = await providerRequest.clone().text()
-        if (body.length > 0) {
+        // 获取API密钥（排除已失败的密钥）
+        const apiKey = configManager.getNextApiKey(upstream, failedKeys)
+
+        if (envConfigManager.shouldLog('info')) {
           console.log(
-            `[${new Date().toISOString()}] 📦 请求体:`,
-            body.length > 500 ? body.substring(0, 500) + '...' : body
+            `[${new Date().toISOString()}] ${isDevelopment ? '🎯' : ''} 使用上游: ${upstream.name || upstream.serviceType} - ${upstream.baseUrl} (尝试 ${attempt + 1}/${maxRetries})`
           )
+          console.log(`[${new Date().toISOString()}] ${isDevelopment ? '🔑' : ''} 使用API密钥: ${maskApiKey(apiKey)}`)
+        }
+
+        // 确定提供商实现
+        let providerImpl: provider.Provider
+        switch (upstream.serviceType) {
+          case 'gemini':
+            providerImpl = new gemini.impl()
+            break
+          case 'openai':
+            providerImpl = new openai.impl()
+            break
+          case 'openaiold':
+            providerImpl = new openaiold.impl()
+            break
+          case 'claude':
+            providerImpl = new claude.impl()
+            break
+          default:
+            res.status(400).json({ error: 'Unsupported type' })
+            return
+        }
+
+        // 构造提供商所需的 Request 对象
+        const headers = new Headers()
+        Object.entries(req.headers).forEach(([key, value]) => {
+          const lowerKey = key.toLowerCase()
+          if (typeof value === 'string' && lowerKey !== 'x-api-key' && lowerKey !== 'authorization') {
+            headers.set(key, value)
+          } else if (Array.isArray(value)) {
+            headers.set(key, value.join(', '))
+          }
+        })
+        const incomingRequest = new Request('http://localhost/v1/messages', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(req.body)
+        })
+
+        // 协议转换：Claude -> Provider
+        const providerRequest = await providerImpl.convertToProviderRequest(
+          incomingRequest,
+          upstream.baseUrl,
+          apiKey,
+          upstream
+        )
+
+        // 记录实际发出的请求
+        if (isDevelopment || envConfigManager.getConfig().enableRequestLogs) {
+          console.log(`[${new Date().toISOString()}] 🌐 实际请求URL: ${providerRequest.url}`)
+          console.log(`[${new Date().toISOString()}] 📤 请求方法: ${providerRequest.method}`)
+          const reqHeaders: { [key: string]: string } = {}
+          providerRequest.headers.forEach((value, key) => {
+            reqHeaders[key] = maskHeaderValue(key, value)
+          })
+          console.log(`[${new Date().toISOString()}] 📋 请求头:`, JSON.stringify(reqHeaders, null, 2))
+          try {
+            const body = await providerRequest.clone().text()
+            if (body.length > 0) {
+              console.log(
+                `[${new Date().toISOString()}] 📦 请求体:`,
+                body.length > 500 ? body.substring(0, 500) + '...' : body
+              )
+            }
+          } catch (error) {
+            console.log(`[${new Date().toISOString()}] 📦 请求体: [无法读取 - ${error instanceof Error ? error.message : '未知错误'}]`)
+          }
+        }
+
+        // 根据配置决定是否跳过TLS验证
+        const fetchOptions: any = {}
+        if (upstream.insecureSkipVerify) {
+          if (isDevelopment) {
+            console.log(`[${new Date().toISOString()}] ⚠️ 正在跳过对 ${providerRequest.url} 的TLS证书验证`)
+          }
+          fetchOptions.dispatcher = new Agent({
+            connect: {
+              rejectUnauthorized: false
+            }
+          })
+        }
+
+        // 调用上游
+        providerResponse = await fetch(providerRequest, fetchOptions)
+
+        // 检查响应是否成功
+        if (providerResponse.ok || providerResponse.status < 500) {
+          // 2xx 或 4xx 状态码认为是成功的（4xx 是客户端错误，不需要重试）
+          break
+        } else {
+          // 5xx 状态码认为是服务器错误，可以重试
+          throw new Error(`上游服务器错误: ${providerResponse.status} ${providerResponse.statusText}`)
         }
       } catch (error) {
-        console.log(`[${new Date().toISOString()}] 📦 请求体: [无法读取 - ${error instanceof Error ? error.message : '未知错误'}]`)
-      }
-    }
-
-    // 根据配置决定是否跳过TLS验证
-    const fetchOptions: any = {}
-    if (upstream.insecureSkipVerify) {
-      if (isDevelopment) {
-        console.log(`[${new Date().toISOString()}] ⚠️ 正在跳过对 ${providerRequest.url} 的TLS证书验证`)
-      }
-      fetchOptions.dispatcher = new Agent({
-        connect: {
-          rejectUnauthorized: false
+        lastError = error instanceof Error ? error : new Error(String(error))
+        console.warn(`[${new Date().toISOString()}] ⚠️ API密钥失败，原因: ${lastError.message}`)
+        
+        // 如果不是 failover 策略或者这是最后一次尝试，直接抛出错误
+        if (configManager.getConfig().loadBalance !== 'failover' || attempt === maxRetries - 1) {
+          break
         }
-      })
+        
+        // 标记当前密钥为失败，继续尝试下一个
+        try {
+          const failedKey = configManager.getNextApiKey(upstream, failedKeys)
+          failedKeys.add(failedKey)
+          console.log(`[${new Date().toISOString()}] 🔄 Failover: 将尝试下一个API密钥`)
+        } catch (getKeyError) {
+          console.error('无法获取下一个API密钥:', getKeyError)
+          break
+        }
+      }
     }
 
-    // 调用上游
-    let providerResponse = await fetch(providerRequest, fetchOptions)
+    // 如果所有重试都失败了
+    if (!providerResponse) {
+      console.error(`[${new Date().toISOString()}] 💥 所有API密钥都失败了`)
+      res.status(500).json({ 
+        error: '所有上游API密钥都不可用', 
+        details: lastError?.message 
+      })
+      return
+    }
 
     // 记录响应信息
     if (isDevelopment || envConfigManager.getConfig().enableResponseLogs) {
