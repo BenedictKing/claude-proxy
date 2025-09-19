@@ -179,6 +179,26 @@ app.post('/v1/messages', async (req, res) => {
       return
     }
 
+    // 确定提供商实现
+    let providerImpl: provider.Provider
+    switch (upstream.serviceType) {
+      case 'gemini':
+        providerImpl = new gemini.impl()
+        break
+      case 'openai':
+        providerImpl = new openai.impl()
+        break
+      case 'openaiold':
+        providerImpl = new openaiold.impl()
+        break
+      case 'claude':
+        providerImpl = new claude.impl()
+        break
+      default:
+        res.status(400).json({ error: 'Unsupported type' })
+        return
+    }
+
     // 实现 failover 重试逻辑
     const maxRetries = configManager.getConfig().loadBalance === 'failover' ? upstream.apiKeys.length : 1
     const failedKeys = new Set<string>()
@@ -186,35 +206,16 @@ app.post('/v1/messages', async (req, res) => {
     let lastError: Error | null = null
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
+      let apiKey: string
       try {
         // 获取API密钥（排除已失败的密钥）
-        const apiKey = configManager.getNextApiKey(upstream, failedKeys)
+        apiKey = configManager.getNextApiKey(upstream, failedKeys)
 
         if (envConfigManager.shouldLog('info')) {
           console.log(
             `[${new Date().toISOString()}] ${isDevelopment ? '🎯' : ''} 使用上游: ${upstream.name || upstream.serviceType} - ${upstream.baseUrl} (尝试 ${attempt + 1}/${maxRetries})`
           )
           console.log(`[${new Date().toISOString()}] ${isDevelopment ? '🔑' : ''} 使用API密钥: ${maskApiKey(apiKey)}`)
-        }
-
-        // 确定提供商实现
-        let providerImpl: provider.Provider
-        switch (upstream.serviceType) {
-          case 'gemini':
-            providerImpl = new gemini.impl()
-            break
-          case 'openai':
-            providerImpl = new openai.impl()
-            break
-          case 'openaiold':
-            providerImpl = new openaiold.impl()
-            break
-          case 'claude':
-            providerImpl = new claude.impl()
-            break
-          default:
-            res.status(400).json({ error: 'Unsupported type' })
-            return
         }
 
         // 构造提供商所需的 Request 对象
@@ -297,12 +298,11 @@ app.post('/v1/messages', async (req, res) => {
         }
         
         // 标记当前密钥为失败，继续尝试下一个
-        try {
-          const failedKey = configManager.getNextApiKey(upstream, failedKeys)
-          failedKeys.add(failedKey)
+        if (apiKey) {
+          failedKeys.add(apiKey)
           console.log(`[${new Date().toISOString()}] 🔄 Failover: 将尝试下一个API密钥`)
-        } catch (getKeyError) {
-          console.error('无法获取下一个API密钥:', getKeyError)
+        } else {
+          // 如果无法获取密钥（例如，所有密钥都已尝试过），则没有可重试的密钥了
           break
         }
       }
