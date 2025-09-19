@@ -25,15 +25,15 @@ const lightTheme = {
 const darkTheme = {
   dark: true,
   colors: {
-    primary: '#2196F3',
-    secondary: '#616161',
+    primary: '#42a5f5', // 提高亮度以增加对比度
+    secondary: '#757575',
     accent: '#FF4081',
     error: '#FF5252',
-    info: '#2196F3',
-    success: '#4CAF50',
-    warning: '#FFC107',
-    background: '#121212',
-    surface: '#1E1E1E',
+    info: '#29B6F6',
+    success: '#66BB6A',
+    warning: '#FFA726',
+    background: '#1a1a1a', // 更深的背景
+    surface: '#2c2c2c', // 稍亮的卡片表面
   }
 }
 
