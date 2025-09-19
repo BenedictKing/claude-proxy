@@ -5,9 +5,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc && vite build",
-    "preview": "vite preview",
+    "dev": "SASS_SILENCE_DEPRECATIONS=legacy-js-api vite",
+    "build": "SASS_SILENCE_DEPRECATIONS=legacy-js-api vue-tsc && SASS_SILENCE_DEPRECATIONS=legacy-js-api vite build",
+    "preview": "SASS_SILENCE_DEPRECATIONS=legacy-js-api vite preview",
     "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {
@@ -22,7 +22,6 @@
     "autoprefixer": "^10.4.19",
     "daisyui": "^4.9.0",
     "postcss": "^8.4.38",
-    "sass": "^1.92.1",
     "sass-embedded": "^1.92.1",
     "tailwindcss": "^3.4.3",
     "typescript": "^5.4.0",

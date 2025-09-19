@@ -8,6 +8,7 @@ export interface UpstreamConfig {
   serviceType: 'gemini' | 'openai' | 'openaiold' | 'claude'
   name?: string
   description?: string // 备注字段，用于记录渠道详细信息
+  website?: string // 官方网站/控制台入口，供前端直接打开
   insecureSkipVerify?: boolean // 新增：是否跳过TLS证书验证
   modelMapping?: {
     opus?: string
@@ -396,6 +397,9 @@ class ConfigManager {
       console.log(`    [${index}] ${upstream.name || upstream.serviceType}${current}`)
       console.log(`        类型: ${upstream.serviceType}`)
       console.log(`        地址: ${upstream.baseUrl}`)
+      if (upstream.website) {
+        console.log(`        官网: ${upstream.website}`)
+      }
       if (upstream.description) {
         console.log(`        备注: ${upstream.description}`)
       }

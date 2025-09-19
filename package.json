@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "dev": "bun --filter '*' dev",
-    "build": "bun --filter '*' build", 
+    "build": "bun --filter '*' build",
     "start": "bun --filter claude-proxy-backend start",
     "type-check": "bun --filter '*' type-check",
     "clean": "rm -rf */dist */node_modules node_modules"

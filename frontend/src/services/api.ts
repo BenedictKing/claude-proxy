@@ -37,6 +37,7 @@ export interface Channel {
   baseUrl: string
   apiKeys: string[]
   description?: string
+  website?: string
   modelMapping?: Record<string, string>
   latency?: number
   status?: 'healthy' | 'error' | 'unknown'

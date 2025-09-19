@@ -23,6 +23,7 @@ Claude API代理服务器配置工具
   name                    上游名称
   type                    服务类型 (gemini, openaiold, openai, claude)
   url                     上游基础URL
+  --website <url>         官网/控制台地址（可选）
   index                   上游索引或名称
   action                  密钥操作 (add, remove, list)
   strategy                负载均衡策略 (round-robin, random, failover)
@@ -37,6 +38,7 @@ Claude API代理服务器配置工具
   bun run config key MyOpenAI list                 # 列出名为 MyOpenAI 的上游的API密钥
   bun run config update 1 --name "NewName"         # 更新索引为1的上游名称
   bun run config update MyOpenAI --description "备注" # 更新名为 MyOpenAI 的上游的备注
+  bun run config update MyOpenAI --website https://platform.openai.com # 更新上游官网
   bun run config update MyOpenAI --insecureSkipVerify true # 开启跳过TLS验证
   bun run config balance round-robin               # 设置负载均衡
   bun run config remove 0                          # 按索引删除上游
@@ -81,6 +83,9 @@ function addUpstream(name: string, type: string, url: string, extraArgs?: string
     if (flags.description) {
       upstream.description = flags.description
     }
+    if (flags.website) {
+      upstream.website = flags.website
+    }
     if (flags.insecureSkipVerify) {
       upstream.insecureSkipVerify = flags.insecureSkipVerify === 'true'
     }
@@ -97,12 +102,13 @@ function updateUpstream(indexOrName: string, args: string[]) {
   if (flags.url) update.baseUrl = flags.url
   if (flags.type) update.serviceType = flags.type as any
   if (flags.description) update.description = flags.description
+  if (flags.website) update.website = flags.website
   if (flags.insecureSkipVerify) {
     update.insecureSkipVerify = flags.insecureSkipVerify === 'true'
   }
 
   if (Object.keys(update).length === 0) {
-    console.error('错误: 请指定要更新的字段 (--name, --url, --type, --description, --insecureSkipVerify)')
+    console.error('错误: 请指定要更新的字段 (--name, --url, --type, --description, --website, --insecureSkipVerify)')
     return
   }
 

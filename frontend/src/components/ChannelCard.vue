@@ -20,13 +20,23 @@
               {{ getServiceIcon() }}
             </v-icon>
           </div>
-          <div>
-            <div class="text-h6 font-weight-bold channel-title">
-              {{ channel.name }}
+          <div class="d-flex align-center ga-2">
+            <div>
+              <div class="text-h6 font-weight-bold channel-title">
+                {{ channel.name }}
+              </div>
+              <div class="text-caption text-high-emphasis opacity-80">
+                {{ getServiceDisplayName() }}
+              </div>
             </div>
-            <div class="text-caption text-high-emphasis opacity-80">
-              {{ getServiceDisplayName() }}
-            </div>
+            <!-- 官网图标按钮（紧贴标题右侧） -->
+            <v-tooltip v-if="channel.website" text="打开官网" location="bottom">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" :href="channel.website" target="_blank" rel="noopener" size="small" variant="text" color="primary" icon>
+                  <v-icon size="18">mdi-open-in-new</v-icon>
+                </v-btn>
+              </template>
+            </v-tooltip>
           </div>
         </div>
         
@@ -44,7 +54,8 @@
               {{ channel.pinned ? 'mdi-pin' : 'mdi-pin-outline' }}
             </v-icon>
           </v-btn>
-          
+
+
           <v-chip
             :color="getServiceChipColor()"
             size="small"
@@ -81,11 +92,13 @@
       <div class="mb-4">
         <div class="d-flex align-center ga-2 mb-2">
           <v-icon size="16" color="medium-emphasis">mdi-web</v-icon>
-          <span class="text-body-2 font-weight-medium">URL:</span>
+          <span class="text-body-2 font-weight-medium">Base URL:</span>
           <div class="flex-1-1 text-truncate">
             <code class="text-caption bg-surface pa-1 rounded">{{ channel.baseUrl }}</code>
           </div>
         </div>
+
+        
       </div>
 
       <!-- 状态和延迟 -->
@@ -125,13 +138,15 @@
                 <span class="text-body-2 font-weight-medium">API密钥管理</span>
               </div>
               <v-chip
-                :color="channel.apiKeys.length ? 'success' : 'warning'"
-                size="small"
-                variant="tonal"
-                density="compact"
-                rounded="md"
-                class="mr-4"
+                :color="channel.apiKeys.length ? 'primary' : 'warning'"
+                size="large"
+                variant="flat"
+                density="comfortable"
+                rounded="lg"
+                class="mr-2 key-count-chip"
+                :style="keyChipStyle"
               >
+                <v-icon start size="16">mdi-key</v-icon>
                 {{ channel.apiKeys.length }}
               </v-chip>
             </div>
@@ -234,6 +249,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { Channel } from '../services/api'
 
 interface Props {
@@ -358,6 +374,15 @@ const getLatencyLevel = () => {
   if (props.channel.latency < 1000) return 'fair'
   return 'poor'
 }
+
+// Chip 动态文本颜色，避免在浅色背景上出现近黑文本
+const keyChipStyle = computed(() => {
+  const hasKeys = props.channel.apiKeys.length > 0
+  return {
+    color: hasKeys ? 'rgb(var(--v-theme-on-primary))' : 'rgb(var(--v-theme-on-warning))',
+    fontSize: '0.95rem'
+  }
+})
 </script>
 
 <style scoped>
@@ -476,6 +501,10 @@ const getLatencyLevel = () => {
 
 .pin-btn:hover {
   transform: scale(1.1);
+}
+
+.key-count-chip {
+  font-weight: 700;
 }
 
 /* --- KEYFRAMES --- */

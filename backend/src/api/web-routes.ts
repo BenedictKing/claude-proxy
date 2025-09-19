@@ -27,10 +27,15 @@ router.get('/api/channels', (req, res) => {
 // 添加渠道
 router.post('/api/channels', (req, res) => {
   try {
-    const { name, serviceType, baseUrl, apiKeys, description } = req.body
+    const { name, serviceType, baseUrl, apiKeys, description, website } = req.body
     
     if (!name || !serviceType || !baseUrl) {
       return res.status(400).json({ error: '缺少必填字段' })
+    }
+
+    // 可选官网校验
+    if (website) {
+      try { new URL(website) } catch { return res.status(400).json({ error: '官网URL无效' }) }
     }
 
     configManager.addUpstream({
@@ -38,7 +43,8 @@ router.post('/api/channels', (req, res) => {
       serviceType,
       baseUrl,
       apiKeys: apiKeys || [],
-      description
+      description,
+      website
     })
     
     res.json({ success: true })
@@ -55,6 +61,13 @@ router.put('/api/channels/:id', (req, res) => {
     
     if (id < 0 || id >= config.upstream.length) {
       return res.status(404).json({ error: '渠道未找到' })
+    }
+
+    // 校验官网地址（可选）
+    if (req.body && typeof req.body.website === 'string') {
+      if (req.body.website.trim() !== '') {
+        try { new URL(req.body.website) } catch { return res.status(400).json({ error: '官网URL无效' }) }
+      }
     }
 
     // 使用updateUpstream方法更新配置

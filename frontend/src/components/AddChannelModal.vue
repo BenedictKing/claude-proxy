@@ -68,6 +68,21 @@
               />
             </v-col>
 
+            <!-- 官网/控制台（可选） -->
+            <v-col cols="12">
+              <v-text-field
+                v-model="form.website"
+                label="官网/控制台 (可选)"
+                placeholder="例如：https://platform.openai.com"
+                prepend-inner-icon="mdi-open-in-new"
+                variant="outlined"
+                density="comfortable"
+                type="url"
+                :rules="[rules.urlOptional]"
+                :error-messages="errors.website"
+              />
+            </v-col>
+
             <!-- 描述 -->
             <v-col cols="12">
               <v-textarea
@@ -317,6 +332,7 @@ const form = reactive({
   name: '',
   serviceType: '' as 'openai' | 'openaiold' | 'gemini' | 'claude' | '',
   baseUrl: '',
+  website: '',
   description: '',
   apiKeys: [] as string[],
   modelMapping: {} as Record<string, string>
@@ -335,7 +351,8 @@ const newMapping = reactive({
 const errors = reactive({
   name: '',
   serviceType: '',
-  baseUrl: ''
+  baseUrl: '',
+  website: ''
 })
 
 // 验证规则
@@ -348,6 +365,10 @@ const rules = {
     } catch {
       return '请输入有效的URL'
     }
+  },
+  urlOptional: (value: string) => {
+    if (!value) return true
+    try { new URL(value); return true } catch { return '请输入有效的URL' }
   }
 }
 
@@ -407,6 +428,7 @@ const resetForm = () => {
   form.name = ''
   form.serviceType = ''
   form.baseUrl = ''
+  form.website = ''
   form.description = ''
   form.apiKeys = []
   form.modelMapping = {}
@@ -424,6 +446,7 @@ const loadChannelData = (channel: Channel) => {
   form.name = channel.name
   form.serviceType = channel.serviceType
   form.baseUrl = channel.baseUrl
+  form.website = channel.website || ''
   form.description = channel.description || ''
   form.apiKeys = [...channel.apiKeys]
   form.modelMapping = { ...(channel.modelMapping || {}) }
@@ -466,6 +489,7 @@ const handleSubmit = async () => {
     name: form.name.trim(),
     serviceType: form.serviceType as 'openai' | 'openaiold' | 'gemini' | 'claude',
     baseUrl: form.baseUrl.trim().replace(/\/$/, ''), // 移除末尾斜杠
+    website: form.website.trim() || undefined,
     description: form.description.trim(),
     apiKeys: form.apiKeys.filter(key => key.trim()),
     modelMapping: Object.keys(form.modelMapping).length > 0 ? form.modelMapping : undefined
