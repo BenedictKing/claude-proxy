@@ -28,7 +28,7 @@ router.get('/api/channels', (req, res) => {
 // 添加渠道
 router.post('/api/channels', (req, res) => {
   try {
-    const { name, serviceType, baseUrl, apiKeys, description, website } = req.body
+    const { name, serviceType, baseUrl, apiKeys, description, website, insecureSkipVerify } = req.body
     
     if (!name || !serviceType || !baseUrl) {
       return res.status(400).json({ error: '缺少必填字段' })
@@ -45,7 +45,8 @@ router.post('/api/channels', (req, res) => {
       baseUrl,
       apiKeys: apiKeys || [],
       description,
-      website
+      website,
+      insecureSkipVerify
     })
     
     res.json({ success: true })
