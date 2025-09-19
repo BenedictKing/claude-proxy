@@ -275,7 +275,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useTheme } from 'vuetify'
 import type { Channel } from '../services/api'
 
@@ -501,5 +501,20 @@ watch(() => props.channel, (newChannel) => {
   if (newChannel && props.show) {
     loadChannelData(newChannel)
   }
+})
+
+// ESC键监听
+const handleKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && props.show) {
+    handleCancel()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeydown)
 })
 </script>
