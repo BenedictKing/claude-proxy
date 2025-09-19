@@ -364,6 +364,17 @@ const getLatencyLevel = () => {
   border-radius: 16px;
 }
 
+/* 暗色模式适配 */
+@media (prefers-color-scheme: dark) {
+  .channel-card {
+    background: linear-gradient(145deg, #3a3a3a 0%, #2d2d2d 100%);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 
+      0 4px 16px rgba(0, 0, 0, 0.32),
+      0 1px 4px rgba(0, 0, 0, 0.16);
+  }
+}
+
 /* 普通卡片在非当前状态下的样式 */
 .channel-card:not(.current-channel) {
   border: 1px solid rgba(0, 0, 0, 0.08);
@@ -377,6 +388,20 @@ const getLatencyLevel = () => {
   border-color: rgba(0, 0, 0, 0.12);
 }
 
+/* 暗色模式下的普通卡片样式 */
+@media (prefers-color-scheme: dark) {
+  .channel-card:not(.current-channel) {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  
+  .channel-card:not(.current-channel):hover {
+    box-shadow: 
+      0 20px 40px rgba(0, 0, 0, 0.32),
+      0 8px 24px rgba(0, 0, 0, 0.24);
+    border-color: rgba(255, 255, 255, 0.18);
+  }
+}
+
 /* 渐变头部背景 */
 .card-header-gradient {
   background: linear-gradient(135deg, 
@@ -386,6 +411,16 @@ const getLatencyLevel = () => {
   position: relative;
   border-top-left-radius: inherit;
   border-top-right-radius: inherit;
+}
+
+/* 暗色模式下的头部渐变 */
+@media (prefers-color-scheme: dark) {
+  .card-header-gradient {
+    background: linear-gradient(135deg, 
+      rgba(33, 150, 243, 0.15) 0%, 
+      rgba(33, 150, 243, 0.08) 50%,
+      rgba(156, 39, 176, 0.12) 100%);
+  }
 }
 
 .card-header-gradient::before {
@@ -429,11 +464,94 @@ const getLatencyLevel = () => {
   text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
 }
 
+/* 暗色模式下的文字颜色 */
+@media (prefers-color-scheme: dark) {
+  .channel-title {
+    color: #ffffff !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  }
+  
+  /* 服务类型描述文字 */
+  .text-caption.text-high-emphasis {
+    color: #e0e0e0 !important;
+  }
+  
+  /* URL和密钥数量等信息文字 */
+  .text-body-2 {
+    color: #f5f5f5 !important;
+  }
+  
+  /* 次要信息文字 */
+  .text-medium-emphasis, .text-caption {
+    color: #b8b8b8 !important;
+  }
+  
+  /* URL代码块背景 */
+  code.text-caption.bg-surface {
+    background-color: #404040 !important;
+    color: #e8e8e8 !important;
+  }
+  
+  /* API密钥管理面板背景 */
+  .v-expansion-panel {
+    background-color: #404040 !important;
+  }
+  
+  .v-expansion-panel-title {
+    background-color: #404040 !important;
+    color: #f5f5f5 !important;
+  }
+  
+  .v-expansion-panel-text {
+    background-color: #383838 !important;
+    color: #f0f0f0 !important;
+  }
+  
+  /* API密钥条目背景 */
+  .bg-surface {
+    background-color: #484848 !important;
+    color: #e8e8e8 !important;
+  }
+  
+  /* 描述文字区域 */
+  .text-body-2.text-medium-emphasis {
+    color: #c8c8c8 !important;
+  }
+}
+
 /* 芯片样式优化 */
 .service-chip, .current-chip {
   backdrop-filter: blur(10px);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+/* 暗色模式下的服务图标和芯片 */
+@media (prefers-color-scheme: dark) {
+  .service-icon-wrapper {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.08) 100%);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+  }
+  
+  .channel-card:hover .service-icon-wrapper {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.32);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+  
+  .channel-card.current-channel .service-icon-wrapper {
+    background: linear-gradient(135deg, 
+      rgba(76, 175, 80, 0.15) 0%, 
+      rgba(255, 255, 255, 0.12) 100%);
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.25);
+    border-color: rgba(76, 175, 80, 0.3);
+  }
+  
+  .service-chip, .current-chip {
+    backdrop-filter: blur(15px);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.24);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+  }
 }
 
 /* 当前渠道特殊样式 */
@@ -470,6 +588,34 @@ const getLatencyLevel = () => {
     0 24px 48px rgba(76, 175, 80, 0.2),
     0 12px 32px rgba(0, 0, 0, 0.12);
   border-color: rgba(76, 175, 80, 0.6) !important;
+}
+
+/* 暗色模式下的当前渠道样式 */
+@media (prefers-color-scheme: dark) {
+  .channel-card.current-channel {
+    background: linear-gradient(145deg, 
+      #3a3a3a 0%, 
+      rgba(76, 175, 80, 0.12) 50%,
+      #2d362d 100%);
+    border: 2px solid rgba(76, 175, 80, 0.7) !important;
+    box-shadow: 
+      0 8px 32px rgba(76, 175, 80, 0.25),
+      0 4px 16px rgba(0, 0, 0, 0.32);
+  }
+  
+  .channel-card.current-channel .card-header-gradient {
+    background: linear-gradient(135deg, 
+      rgba(76, 175, 80, 0.18) 0%, 
+      rgba(76, 175, 80, 0.10) 50%,
+      rgba(139, 195, 74, 0.15) 100%);
+  }
+  
+  .channel-card.current-channel:hover {
+    box-shadow: 
+      0 24px 48px rgba(76, 175, 80, 0.28),
+      0 12px 32px rgba(0, 0, 0, 0.32);
+    border-color: rgba(76, 175, 80, 0.8) !important;
+  }
 }
 
 @keyframes shimmer {
@@ -553,6 +699,61 @@ const getLatencyLevel = () => {
   font-weight: 600;
 }
 
+/* 暗色模式下的状态指示器 */
+@media (prefers-color-scheme: dark) {
+  .status-badge {
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+  }
+  
+  .status-badge.status-healthy {
+    background: rgba(76, 175, 80, 0.2);
+    color: #a5d6a7 !important;
+    border-color: rgba(76, 175, 80, 0.4);
+  }
+  
+  .status-badge.status-error {
+    background: rgba(244, 67, 54, 0.2);
+    color: #ef9a9a !important;
+    border-color: rgba(244, 67, 54, 0.4);
+  }
+  
+  .status-badge.status-unknown {
+    background: rgba(158, 158, 158, 0.2);
+    color: #e0e0e0 !important;
+    border-color: rgba(158, 158, 158, 0.4);
+  }
+  
+  .latency-badge {
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+  }
+  
+  .latency-badge.latency-excellent {
+    background: rgba(76, 175, 80, 0.25);
+    color: #a5d6a7 !important;
+    border-color: rgba(76, 175, 80, 0.5);
+  }
+  
+  .latency-badge.latency-good {
+    background: rgba(255, 193, 7, 0.25);
+    color: #fff59d !important;
+    border-color: rgba(255, 193, 7, 0.5);
+  }
+  
+  .latency-badge.latency-fair {
+    background: rgba(255, 152, 0, 0.25);
+    color: #ffcc80 !important;
+    border-color: rgba(255, 152, 0, 0.5);
+  }
+  
+  .latency-badge.latency-poor {
+    background: rgba(244, 67, 54, 0.25);
+    color: #ef9a9a !important;
+    border-color: rgba(244, 67, 54, 0.5);
+  }
+}
+
 /* 操作按钮样式 */
 .action-buttons {
   margin-top: 8px;
@@ -577,6 +778,26 @@ const getLatencyLevel = () => {
 .action-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 暗色模式下的操作按钮 */
+@media (prefers-color-scheme: dark) {
+  .action-btn {
+    backdrop-filter: blur(15px);
+  }
+  
+  .action-btn:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.32);
+  }
+  
+  .action-btn.primary-action {
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4);
+  }
+  
+  .action-btn.danger-action:hover {
+    background: rgba(244, 67, 54, 0.15);
+    color: #ef5350;
+  }
 }
 
 /* Pin按钮样式 */
@@ -607,6 +828,29 @@ const getLatencyLevel = () => {
   background: linear-gradient(135deg, rgba(255, 193, 7, 0.3) 0%, rgba(255, 193, 7, 0.15) 100%);
   transform: scale(1.15) rotate(15deg);
   box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3);
+}
+
+/* 暗色模式下的按钮和芯片样式 */
+@media (prefers-color-scheme: dark) {
+  .pin-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  
+  .pin-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.32);
+  }
+  
+  .pin-btn[data-v-card="pinned"] {
+    background: linear-gradient(135deg, rgba(255, 193, 7, 0.25) 0%, rgba(255, 193, 7, 0.15) 100%);
+    border-color: rgba(255, 193, 7, 0.4);
+  }
+  
+  .pin-btn[data-v-card="pinned"]:hover {
+    background: linear-gradient(135deg, rgba(255, 193, 7, 0.4) 0%, rgba(255, 193, 7, 0.25) 100%);
+    box-shadow: 0 4px 12px rgba(255, 193, 7, 0.4);
+  }
 }
 
 /* Pinned渠道额外样式 */
