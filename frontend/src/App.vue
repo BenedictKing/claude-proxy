@@ -3,8 +3,8 @@
     <!-- 应用栏 -->
     <v-app-bar
       elevation="2"
-      color="primary"
-      dark
+      :color="currentTheme === 'dark' ? 'surface' : 'primary'"
+      :dark="currentTheme !== 'dark'"
       :height="$vuetify.display.mobile ? 72 : 88"
       class="app-header px-4"
     >

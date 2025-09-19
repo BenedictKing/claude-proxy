@@ -6,15 +6,15 @@
     persistent
   >
     <v-card rounded="lg">
-      <v-card-title class="d-flex align-center ga-3 pa-6 bg-primary text-white">
-        <v-avatar color="white" variant="tonal" size="40">
-          <v-icon color="primary">{{ isEditing ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
+      <v-card-title class="d-flex align-center ga-3 pa-6" :class="headerClasses">
+        <v-avatar :color="avatarColor" variant="tonal" size="40">
+          <v-icon :color="iconColor" size="20">{{ isEditing ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
         </v-avatar>
         <div>
           <div class="text-h5 font-weight-bold">
             {{ isEditing ? '编辑渠道' : '添加新渠道' }}
           </div>
-          <div class="text-body-2 text-blue-lighten-1">配置API渠道信息和密钥</div>
+          <div class="text-body-2" :class="subtitleClasses">配置API渠道信息和密钥</div>
         </div>
       </v-card-title>
 
@@ -140,14 +140,16 @@
 
                   <!-- 添加新映射 -->
                   <div class="d-flex align-center ga-2">
-                    <v-text-field
+                    <v-select
                       v-model="newMapping.source"
                       label="源模型名"
-                      placeholder="例如：opus"
+                      :items="sourceModelOptions"
                       variant="outlined"
                       density="comfortable"
                       hide-details
                       class="flex-1-1"
+                      clearable
+                      placeholder="选择源模型名"
                     />
                     <v-icon>mdi-arrow-right</v-icon>
                     <v-text-field
@@ -178,7 +180,7 @@
               <v-card variant="outlined" rounded="lg">
                 <v-card-title class="d-flex align-center justify-space-between pa-4 pb-2">
                   <div class="d-flex align-center ga-2">
-                    <v-icon color="primary">mdi-key</v-icon>
+                    <v-icon color="secondary">mdi-key</v-icon>
                     <span class="text-body-1 font-weight-bold">API密钥管理</span>
                   </div>
                   <v-chip size="small" color="info" variant="tonal">
@@ -274,6 +276,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
+import { useTheme } from 'vuetify'
 import type { Channel } from '../services/api'
 
 interface Props {
@@ -288,6 +291,9 @@ const emit = defineEmits<{
   save: [channel: Omit<Channel, 'index' | 'latency' | 'status'>]
 }>()
 
+// 主题
+const theme = useTheme()
+
 // 表单引用
 const formRef = ref()
 
@@ -297,6 +303,13 @@ const serviceTypeOptions = [
   { title: 'OpenAI (兼容旧版)', value: 'openaiold' },
   { title: 'Claude', value: 'claude' },
   { title: 'Gemini', value: 'gemini' }
+]
+
+// 源模型选项 (Claude模型的常用别名)
+const sourceModelOptions = [
+  { title: 'opus', value: 'opus' },
+  { title: 'sonnet', value: 'sonnet' },
+  { title: 'haiku', value: 'haiku' }
 ]
 
 // 表单数据
@@ -340,6 +353,29 @@ const rules = {
 
 // 计算属性
 const isEditing = computed(() => !!props.channel)
+
+// 动态header样式
+const headerClasses = computed(() => {
+  const isDark = theme.global.current.value.dark
+  return isDark 
+    ? 'bg-surface text-high-emphasis' 
+    : 'bg-primary text-white'
+})
+
+const avatarColor = computed(() => {
+  const isDark = theme.global.current.value.dark
+  return isDark ? 'primary' : 'primary'
+})
+
+const iconColor = computed(() => {
+  const isDark = theme.global.current.value.dark
+  return isDark ? 'white' : 'white'
+})
+
+const subtitleClasses = computed(() => {
+  const isDark = theme.global.current.value.dark
+  return isDark ? 'text-medium-emphasis' : 'text-blue-lighten-1'
+})
 
 const isFormValid = computed(() => {
   return form.name.trim() && 

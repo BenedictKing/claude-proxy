@@ -86,20 +86,6 @@
             <code class="text-caption bg-surface pa-1 rounded">{{ channel.baseUrl }}</code>
           </div>
         </div>
-        
-        <div class="d-flex align-center ga-2">
-          <v-icon size="16" color="medium-emphasis">mdi-key</v-icon>
-          <span class="text-body-2 font-weight-medium">密钥数量:</span>
-          <v-chip
-            :color="channel.apiKeys.length ? 'success' : 'warning'"
-            size="x-small"
-            variant="tonal"
-            density="compact"
-            rounded="md"
-          >
-            {{ channel.apiKeys.length }}
-          </v-chip>
-        </div>
       </div>
 
       <!-- 状态和延迟 -->
@@ -129,9 +115,21 @@
       <v-expansion-panels variant="accordion" rounded="lg" class="mb-4">
         <v-expansion-panel>
           <v-expansion-panel-title>
-            <div class="d-flex align-center ga-2">
-              <v-icon size="small">mdi-key-chain</v-icon>
-              <span class="text-body-2 font-weight-medium">API密钥管理</span>
+            <div class="d-flex align-center justify-space-between w-100">
+              <div class="d-flex align-center ga-2">
+                <v-icon size="small">mdi-key-chain</v-icon>
+                <span class="text-body-2 font-weight-medium">API密钥管理</span>
+              </div>
+              <v-chip
+                :color="channel.apiKeys.length ? 'success' : 'warning'"
+                size="small"
+                variant="tonal"
+                density="compact"
+                rounded="md"
+                class="mr-4"
+              >
+                {{ channel.apiKeys.length }}
+              </v-chip>
             </div>
           </v-expansion-panel-title>
           <v-expansion-panel-text>
@@ -357,7 +355,7 @@ const getLatencyLevel = () => {
   position: relative;
   overflow: hidden;
   background-color: rgb(var(--v-theme-surface));
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(var(--v-theme-success), 0.3);
   box-shadow: 
     0 4px 16px rgba(0, 0, 0, 0.05),
     0 1px 4px rgba(0, 0, 0, 0.02);
@@ -369,7 +367,7 @@ const getLatencyLevel = () => {
   box-shadow: 
     0 20px 40px rgba(0, 0, 0, 0.1),
     0 8px 24px rgba(0, 0, 0, 0.06);
-  border-color: rgba(0, 0, 0, 0.1);
+  border-color: rgba(var(--v-theme-success), 0.5);
 }
 
 .card-header-gradient {
@@ -409,26 +407,26 @@ const getLatencyLevel = () => {
 /* --- CURRENT CHANNEL (LIGHT) --- */
 .channel-card.current-channel {
   border-width: 2px !important;
-  border-color: rgba(var(--v-theme-success-rgb), 0.4) !important;
+  border-color: rgba(var(--v-theme-success), 0.4) !important;
   box-shadow: 
-    0 8px 32px rgba(var(--v-theme-success-rgb), 0.15),
+    0 8px 32px rgba(var(--v-theme-success), 0.15),
     0 4px 16px rgba(0, 0, 0, 0.08);
   transform: translateY(-2px) scale(1.01);
 }
 
 .channel-card.current-channel .card-header-gradient {
   background: linear-gradient(135deg, 
-    rgba(var(--v-theme-success-rgb), 0.12) 0%, 
-    rgba(var(--v-theme-success-rgb), 0.06) 50%,
+    rgba(var(--v-theme-success), 0.12) 0%, 
+    rgba(var(--v-theme-success), 0.06) 50%,
     rgba(139, 195, 74, 0.08) 100%);
 }
 
 .channel-card.current-channel:hover {
   transform: translateY(-8px) scale(1.03);
   box-shadow: 
-    0 24px 48px rgba(var(--v-theme-success-rgb), 0.2),
+    0 24px 48px rgba(var(--v-theme-success), 0.2),
     0 12px 32px rgba(0, 0, 0, 0.12);
-  border-color: rgba(var(--v-theme-success-rgb), 0.6) !important;
+  border-color: rgba(var(--v-theme-success), 0.6) !important;
 }
 
 /* --- INDICATORS (LIGHT) --- */
@@ -445,7 +443,7 @@ const getLatencyLevel = () => {
 .status-badge {
   background-color: rgba(0, 0, 0, 0.05);
 }
-.status-badge.status-healthy { color: rgb(var(--v-theme-success)); background-color: rgba(var(--v-theme-success-rgb), 0.1); }
+.status-badge.status-healthy { color: rgb(var(--v-theme-success)); background-color: rgba(var(--v-theme-success), 0.1); }
 .status-badge.status-error { color: rgb(var(--v-theme-error)); background-color: rgba(var(--v-theme-error-rgb), 0.1); }
 .status-badge.status-unknown { color: rgb(var(--v-theme-secondary)); background-color: rgba(var(--v-theme-secondary-rgb), 0.1); }
 
@@ -493,14 +491,14 @@ const getLatencyLevel = () => {
 */
 @media (prefers-color-scheme: dark) {
   .channel-card {
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(var(--v-theme-success), 0.4);
     box-shadow: 
       0 4px 24px rgba(0, 0, 0, 0.2),
       0 1px 8px rgba(0, 0, 0, 0.15);
   }
 
   .channel-card:not(.current-channel):hover {
-    border-color: rgba(255, 255, 255, 0.18);
+    border-color: rgba(var(--v-theme-success), 0.6);
     box-shadow: 
       0 20px 40px rgba(0, 0, 0, 0.3),
       0 8px 24px rgba(0, 0, 0, 0.2);
@@ -531,24 +529,24 @@ const getLatencyLevel = () => {
   /* --- CURRENT CHANNEL (DARK) --- */
   .channel-card.current-channel {
     border-width: 2px !important;
-    border-color: rgba(var(--v-theme-success-rgb), 0.6) !important;
+    border-color: rgba(var(--v-theme-success), 0.6) !important;
     box-shadow: 
-      0 8px 32px rgba(var(--v-theme-success-rgb), 0.25),
+      0 8px 32px rgba(var(--v-theme-success), 0.25),
       0 4px 16px rgba(0, 0, 0, 0.3);
   }
 
   .channel-card.current-channel .card-header-gradient {
     background: linear-gradient(135deg, 
-      rgba(var(--v-theme-success-rgb), 0.2) 0%, 
-      rgba(var(--v-theme-success-rgb), 0.12) 50%,
+      rgba(var(--v-theme-success), 0.2) 0%, 
+      rgba(var(--v-theme-success), 0.12) 50%,
       rgba(139, 195, 74, 0.15) 100%);
   }
   
   .channel-card.current-channel:hover {
     box-shadow: 
-      0 24px 48px rgba(var(--v-theme-success-rgb), 0.28),
+      0 24px 48px rgba(var(--v-theme-success), 0.28),
       0 12px 32px rgba(0, 0, 0, 0.32);
-    border-color: rgba(var(--v-theme-success-rgb), 0.8) !important;
+    border-color: rgba(var(--v-theme-success), 0.8) !important;
   }
 
   /* --- INDICATORS (DARK) --- */
