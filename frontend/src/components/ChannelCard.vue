@@ -2,6 +2,7 @@
   <v-card
     class="channel-card h-100"
     :class="{ 'current-channel': isCurrent }"
+    :data-pinned="channel.pinned"
     elevation="6"
     rounded="xl"
     hover
@@ -30,6 +31,19 @@
         </div>
         
         <div class="d-flex align-center ga-2">
+          <!-- Pin 按钮 -->
+          <v-btn
+            size="small"
+            variant="text"
+            :color="channel.pinned ? 'warning' : 'grey'"
+            class="pin-btn"
+            @click="$emit('togglePin', channel.index)"
+          >
+            <v-icon size="16">
+              {{ channel.pinned ? 'mdi-pin' : 'mdi-pin-outline' }}
+            </v-icon>
+          </v-btn>
+          
           <v-chip
             :color="getServiceChipColor()"
             size="small"
@@ -224,6 +238,7 @@ defineEmits<{
   addKey: [channelId: number]
   removeKey: [channelId: number, apiKey: string]
   ping: [channelId: number]
+  togglePin: [channelId: number]
 }>()
 
 // 获取服务类型对应的芯片颜色
@@ -544,6 +559,53 @@ const getLatencyLevel = () => {
 .action-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Pin按钮样式 */
+.pin-btn {
+  min-width: 32px !important;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.pin-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.pin-btn[data-v-card="pinned"] {
+  background: linear-gradient(135deg, rgba(255, 193, 7, 0.2) 0%, rgba(255, 193, 7, 0.1) 100%);
+  border-color: rgba(255, 193, 7, 0.3);
+  color: #f57c00;
+}
+
+.pin-btn[data-v-card="pinned"]:hover {
+  background: linear-gradient(135deg, rgba(255, 193, 7, 0.3) 0%, rgba(255, 193, 7, 0.15) 100%);
+  transform: scale(1.15) rotate(15deg);
+  box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3);
+}
+
+/* Pinned渠道额外样式 */
+.channel-card[data-pinned="true"] {
+  position: relative;
+}
+
+.channel-card[data-pinned="true"]::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 4px;
+  height: 4px;
+  background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(255, 193, 7, 0.6);
 }
 
 /* 动画效果 */

@@ -208,6 +208,7 @@
               @add-key="openAddKeyModal"
               @remove-key="removeApiKey"
               @ping="pingChannel"
+              @toggle-pin="toggleChannelPin"
             />
             </v-col>
           </transition-group>
@@ -304,6 +305,34 @@ const newApiKey = ref('')
 const isPingingAll = ref(false)
 const currentTheme = ref<'light' | 'dark' | 'auto'>('auto')
 
+// Pin状态管理 (使用localStorage持久化)
+const PINNED_CHANNELS_KEY = 'claude-proxy-pinned-channels'
+const pinnedChannels = ref<Set<number>>(new Set())
+
+// 从localStorage加载pin状态
+const loadPinnedChannels = () => {
+  try {
+    const saved = localStorage.getItem(PINNED_CHANNELS_KEY)
+    if (saved) {
+      const pinnedArray = JSON.parse(saved) as number[]
+      pinnedChannels.value = new Set(pinnedArray)
+    }
+  } catch (error) {
+    console.warn('加载pin状态失败:', error)
+    pinnedChannels.value = new Set()
+  }
+}
+
+// 保存pin状态到localStorage
+const savePinnedChannels = () => {
+  try {
+    const pinnedArray = Array.from(pinnedChannels.value)
+    localStorage.setItem(PINNED_CHANNELS_KEY, JSON.stringify(pinnedArray))
+  } catch (error) {
+    console.warn('保存pin状态失败:', error)
+  }
+}
+
 // Toast通知系统
 interface Toast {
   id: number
@@ -325,19 +354,32 @@ const currentChannelType = computed(() => {
   return current?.serviceType?.toUpperCase() || ''
 })
 
-// 自动排序渠道：当前渠道排在最前面
+// 自动排序渠道：当前渠道排在最前面，pinned渠道排在当前渠道后面
 const sortedChannels = computed(() => {
   if (!channelsData.value.channels) return []
   
   const channels = [...channelsData.value.channels]
   
-  // 将当前渠道排在最前面，其他渠道按原有顺序排列
+  // 排序逻辑：当前渠道 > pinned渠道 > 其他渠道
   return channels.sort((a, b) => {
     const aIsCurrent = a.index === channelsData.value.current
     const bIsCurrent = b.index === channelsData.value.current
+    const aIsPinned = pinnedChannels.value.has(a.index)
+    const bIsPinned = pinnedChannels.value.has(b.index)
     
+    // 当前渠道始终排在最前面
     if (aIsCurrent && !bIsCurrent) return -1
     if (!aIsCurrent && bIsCurrent) return 1
+    
+    // 如果都不是当前渠道，则比较pin状态
+    if (!aIsCurrent && !bIsCurrent) {
+      // pinned渠道排在非pinned渠道前面
+      if (aIsPinned && !bIsPinned) return -1
+      if (!aIsPinned && bIsPinned) return 1
+      
+      // 同样pin状态下，按index排序
+      return a.index - b.index
+    }
     
     // 保持原有顺序
     return a.index - b.index
@@ -381,10 +423,37 @@ const handleError = (error: unknown, defaultMessage: string) => {
   console.error(error)
 }
 
+// Pin相关函数
+const toggleChannelPin = (channelId: number) => {
+  if (pinnedChannels.value.has(channelId)) {
+    pinnedChannels.value.delete(channelId)
+    showToast('渠道已取消置顶', 'info')
+  } else {
+    pinnedChannels.value.add(channelId)
+    showToast('渠道已置顶', 'success')
+  }
+  savePinnedChannels()
+  updateChannelsPinnedStatus()
+}
+
+const isChannelPinned = (channelId: number): boolean => {
+  return pinnedChannels.value.has(channelId)
+}
+
+// 更新渠道的pinned状态
+const updateChannelsPinnedStatus = () => {
+  if (channelsData.value.channels) {
+    channelsData.value.channels.forEach(channel => {
+      channel.pinned = pinnedChannels.value.has(channel.index)
+    })
+  }
+}
+
 // 主要功能函数
 const refreshChannels = async () => {
   try {
     channelsData.value = await api.getChannels()
+    updateChannelsPinnedStatus()
   } catch (error) {
     handleError(error, '获取渠道列表失败')
   }
@@ -542,6 +611,9 @@ onMounted(async () => {
       setTheme('auto')
     }
   })
+  
+  // 加载pin状态
+  loadPinnedChannels()
   
   // 加载渠道数据
   await refreshChannels()

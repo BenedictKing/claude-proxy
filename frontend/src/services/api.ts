@@ -41,6 +41,7 @@ export interface Channel {
   latency?: number
   status?: 'healthy' | 'error' | 'unknown'
   index: number
+  pinned?: boolean
 }
 
 export interface ChannelsResponse {

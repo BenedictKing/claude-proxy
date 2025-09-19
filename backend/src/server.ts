@@ -280,13 +280,62 @@ app.post('/v1/messages', async (req, res) => {
         // 调用上游
         providerResponse = await fetch(providerRequest, fetchOptions)
 
-        // 检查响应是否成功
-        if (providerResponse.ok || providerResponse.status < 500) {
-          // 2xx 或 4xx 状态码认为是成功的（4xx 是客户端错误，不需要重试）
+        // 检查响应是否成功或是否需要failover
+        if (providerResponse.ok) {
+          // 2xx 状态码认为是成功的
           break
         } else {
-          // 5xx 状态码认为是服务器错误，可以重试
-          throw new Error(`上游服务器错误: ${providerResponse.status} ${providerResponse.statusText}`)
+          // 检查是否是需要failover的错误
+          let shouldFailover = false
+          let errorMessage = `上游错误: ${providerResponse.status} ${providerResponse.statusText}`
+          
+          // 尝试解析错误响应体来判断是否需要failover
+          try {
+            const errorBody = await providerResponse.clone().json()
+            
+            // 检查特定的错误类型：积分不足、密钥无效、余额不足等
+            if (errorBody.error) {
+              const errorMsg = errorBody.error.message || errorBody.error || ''
+              if (typeof errorMsg === 'string') {
+                const lowerErrorMsg = errorMsg.toLowerCase()
+                // 这些错误应该触发failover到下一个密钥
+                if (lowerErrorMsg.includes('积分不足') || 
+                    lowerErrorMsg.includes('insufficient') ||
+                    lowerErrorMsg.includes('invalid') ||
+                    lowerErrorMsg.includes('unauthorized') ||
+                    lowerErrorMsg.includes('quota') ||
+                    lowerErrorMsg.includes('rate limit') ||
+                    lowerErrorMsg.includes('credit') ||
+                    lowerErrorMsg.includes('balance')) {
+                  shouldFailover = true
+                  errorMessage = `API密钥错误: ${errorMsg}`
+                }
+              }
+            }
+            
+            // 401/403 状态码通常是认证/授权问题，应该failover
+            if (providerResponse.status === 401 || providerResponse.status === 403) {
+              shouldFailover = true
+            }
+            
+            // 400 Bad Request 中的特定错误也可能需要failover
+            if (providerResponse.status === 400 && shouldFailover) {
+              // 已经在上面的错误消息检查中设置了shouldFailover
+            }
+            
+          } catch (parseError) {
+            // 无法解析响应体，使用状态码判断
+            if (providerResponse.status === 401 || providerResponse.status === 403 || providerResponse.status >= 500) {
+              shouldFailover = true
+            }
+          }
+          
+          if (shouldFailover) {
+            throw new Error(errorMessage)
+          } else {
+            // 其他错误（如模型不存在、请求格式错误等）不需要failover，直接返回给客户端
+            break
+          }
         }
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error))
@@ -300,6 +349,8 @@ app.post('/v1/messages', async (req, res) => {
         // 标记当前密钥为失败，继续尝试下一个
         if (apiKey) {
           failedKeys.add(apiKey)
+          // 同时在内存中标记密钥失败
+          configManager.markKeyAsFailed(apiKey)
           console.log(`[${new Date().toISOString()}] 🔄 Failover: 将尝试下一个API密钥`)
         } else {
           // 如果无法获取密钥（例如，所有密钥都已尝试过），则没有可重试的密钥了

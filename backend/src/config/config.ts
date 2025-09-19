@@ -64,12 +64,23 @@ class ConfigManager {
   private config: Config
   private requestCount: number = 0
   private watcher: fs.FSWatcher | null = null
+  // 失败密钥的内存缓存：记录密钥失败的时间戳
+  private failedKeysCache: Map<string, { timestamp: number; failureCount: number }> = new Map()
+  // 密钥恢复时间（毫秒）- 5分钟后重新尝试失败的密钥
+  private readonly KEY_RECOVERY_TIME = 5 * 60 * 1000
+  // 最大失败次数 - 超过此次数的密钥将被延长恢复时间
+  private readonly MAX_FAILURE_COUNT = 3
 
   constructor(enableWatcher: boolean = true) {
     this.config = this.loadConfig()
     if (enableWatcher) {
       this.startConfigWatcher()
     }
+    
+    // 启动定期清理过期失败记录的定时器
+    setInterval(() => {
+      this.cleanupExpiredFailures()
+    }, 60000) // 每分钟清理一次
   }
 
   public findUpstreamIndex(indexOrName: number | string): number {
@@ -255,37 +266,117 @@ class ConfigManager {
     }
   }
 
+  // 清理过期的失败记录
+  private cleanupExpiredFailures(): void {
+    const now = Date.now()
+    for (const [apiKey, failure] of this.failedKeysCache.entries()) {
+      const recoveryTime = failure.failureCount > this.MAX_FAILURE_COUNT 
+        ? this.KEY_RECOVERY_TIME * 2 // 频繁失败的密钥延长恢复时间
+        : this.KEY_RECOVERY_TIME
+      
+      if (now - failure.timestamp > recoveryTime) {
+        this.failedKeysCache.delete(apiKey)
+        console.log(`[${new Date().toISOString()}] 🔄 API密钥 ${maskApiKey(apiKey)} 已从失败列表中恢复`)
+      }
+    }
+  }
+
+  // 标记API密钥失败
+  markKeyAsFailed(apiKey: string): void {
+    const existing = this.failedKeysCache.get(apiKey)
+    if (existing) {
+      existing.failureCount++
+      existing.timestamp = Date.now()
+    } else {
+      this.failedKeysCache.set(apiKey, {
+        timestamp: Date.now(),
+        failureCount: 1
+      })
+    }
+    
+    const failure = this.failedKeysCache.get(apiKey)!
+    const recoveryTime = failure.failureCount > this.MAX_FAILURE_COUNT 
+      ? this.KEY_RECOVERY_TIME * 2 
+      : this.KEY_RECOVERY_TIME
+    
+    console.log(`[${new Date().toISOString()}] ❌ 标记API密钥失败: ${maskApiKey(apiKey)} (失败次数: ${failure.failureCount}, 恢复时间: ${Math.round(recoveryTime / 60000)}分钟)`)
+  }
+
+  // 检查API密钥是否在失败列表中
+  isKeyFailed(apiKey: string): boolean {
+    const failure = this.failedKeysCache.get(apiKey)
+    if (!failure) return false
+    
+    const now = Date.now()
+    const recoveryTime = failure.failureCount > this.MAX_FAILURE_COUNT 
+      ? this.KEY_RECOVERY_TIME * 2 
+      : this.KEY_RECOVERY_TIME
+    
+    return (now - failure.timestamp) < recoveryTime
+  }
+
+  // 获取可用的API密钥列表（排除失败的密钥）
+  getAvailableKeys(upstream: UpstreamConfig): string[] {
+    return upstream.apiKeys.filter(key => !this.isKeyFailed(key))
+  }
+
   getNextApiKey(upstream: UpstreamConfig, failedKeys: Set<string> = new Set()): string {
     if (upstream.apiKeys.length === 0) {
       throw new Error(`上游 "${upstream.name}" 没有可用的API密钥`)
     }
 
-    const keys = upstream.apiKeys.filter(key => !failedKeys.has(key))
+    // 综合考虑临时失败密钥和内存中的失败密钥
+    const availableKeys = upstream.apiKeys.filter(key => 
+      !failedKeys.has(key) && !this.isKeyFailed(key)
+    )
     
-    if (keys.length === 0) {
-      throw new Error(`上游 "${upstream.name}" 的所有API密钥都已失效`)
+    if (availableKeys.length === 0) {
+      // 如果所有密钥都失效，检查是否有可以恢复的密钥
+      const allFailedKeys = upstream.apiKeys.filter(key => failedKeys.has(key) || this.isKeyFailed(key))
+      if (allFailedKeys.length === upstream.apiKeys.length) {
+        // 如果所有密钥都在内存失败缓存中，尝试选择失败时间最早的密钥
+        let oldestFailedKey: string | null = null
+        let oldestTime = Date.now()
+        
+        for (const key of upstream.apiKeys) {
+          if (!failedKeys.has(key)) { // 排除本次请求已经尝试过的密钥
+            const failure = this.failedKeysCache.get(key)
+            if (failure && failure.timestamp < oldestTime) {
+              oldestTime = failure.timestamp
+              oldestFailedKey = key
+            }
+          }
+        }
+        
+        if (oldestFailedKey) {
+          console.log(`[${new Date().toISOString()}] ⚠️ 所有密钥都失效，尝试最早失败的密钥: ${maskApiKey(oldestFailedKey)}`)
+          return oldestFailedKey
+        }
+      }
+      
+      throw new Error(`上游 "${upstream.name}" 的所有API密钥都暂时不可用`)
     }
 
     switch (this.config.loadBalance) {
       case 'round-robin': {
         this.requestCount++
-        const selectedKey = keys[(this.requestCount - 1) % keys.length]
+        const selectedKey = availableKeys[(this.requestCount - 1) % availableKeys.length]
         console.log(
-          `[${new Date().toISOString()}] 轮询选择密钥 ${maskApiKey(selectedKey)} (${((this.requestCount - 1) % keys.length) + 1}/${keys.length})`
+          `[${new Date().toISOString()}] 轮询选择密钥 ${maskApiKey(selectedKey)} (${((this.requestCount - 1) % availableKeys.length) + 1}/${availableKeys.length})`
         )
         return selectedKey
       }
       case 'random': {
-        const randomIndex = Math.floor(Math.random() * keys.length)
-        const selectedKey = keys[randomIndex]
+        const randomIndex = Math.floor(Math.random() * availableKeys.length)
+        const selectedKey = availableKeys[randomIndex]
         console.log(
-          `[${new Date().toISOString()}] 随机选择密钥 ${maskApiKey(selectedKey)} (${randomIndex + 1}/${keys.length})`
+          `[${new Date().toISOString()}] 随机选择密钥 ${maskApiKey(selectedKey)} (${randomIndex + 1}/${availableKeys.length})`
         )
         return selectedKey
       }
       case 'failover':
       default: {
-        const selectedKey = keys[0]
+        const selectedKey = availableKeys[0]
         const keyIndex = upstream.apiKeys.indexOf(selectedKey) + 1
         console.log(`[${new Date().toISOString()}] 故障转移选择密钥 ${maskApiKey(selectedKey)} (${keyIndex}/${upstream.apiKeys.length})`)
         return selectedKey
