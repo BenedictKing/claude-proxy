@@ -4,7 +4,6 @@
     <v-app-bar
       elevation="2"
       :color="currentTheme === 'dark' ? 'surface' : 'primary'"
-      :dark="currentTheme !== 'dark'"
       :height="$vuetify.display.mobile ? 72 : 88"
       class="app-header px-4"
     >
@@ -120,7 +119,7 @@
                 <v-btn
                   color="primary"
                   size="large"
-                  @click="showAddChannelModal = true"
+                  @click="openAddChannelModal"
                   prepend-icon="mdi-plus"
                   variant="elevated"
                 >
@@ -224,7 +223,7 @@
           <v-btn
             color="primary"
             size="x-large"
-            @click="showAddChannelModal = true"
+            @click="openAddChannelModal"
             prepend-icon="mdi-plus"
             variant="elevated"
           >
@@ -493,6 +492,11 @@ const deleteChannel = async (channelId: number) => {
   }
 }
 
+const openAddChannelModal = () => {
+  editingChannel.value = null
+  showAddChannelModal.value = true
+}
+
 const setCurrentChannel = async (channelId: number) => {
   try {
     await api.setCurrentChannel(channelId)
@@ -588,14 +592,21 @@ const toggleTheme = () => {
 
 const setTheme = (themeName: 'light' | 'dark' | 'auto') => {
   currentTheme.value = themeName
-  
+  const apply = (isDark: boolean) => {
+    // Sync Vuetify theme
+    theme.global.name.value = isDark ? 'dark' : 'light'
+    // Sync DaisyUI theme on <html data-theme="...">
+    const daisyTheme = isDark ? 'night' : 'emerald'
+    document.documentElement.setAttribute('data-theme', daisyTheme)
+  }
+
   if (themeName === 'auto') {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    theme.global.name.value = prefersDark ? 'dark' : 'light'
+    apply(prefersDark)
   } else {
-    theme.global.name.value = themeName
+    apply(themeName === 'dark')
   }
-  
+
   localStorage.setItem('theme', themeName)
 }
 
@@ -606,11 +617,9 @@ onMounted(async () => {
   setTheme(savedTheme)
   
   // 监听系统主题变化
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    if (currentTheme.value === 'auto') {
-      setTheme('auto')
-    }
-  })
+  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+  const handlePref = () => { if (currentTheme.value === 'auto') setTheme('auto') }
+  mediaQuery.addEventListener('change', handlePref)
   
   // 加载pin状态
   loadPinnedChannels()

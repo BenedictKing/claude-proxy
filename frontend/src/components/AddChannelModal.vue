@@ -7,8 +7,8 @@
   >
     <v-card rounded="lg">
       <v-card-title class="d-flex align-center ga-3 pa-6" :class="headerClasses">
-        <v-avatar :color="avatarColor" variant="tonal" size="40">
-          <v-icon :color="iconColor" size="20">{{ isEditing ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
+        <v-avatar :color="avatarColor" variant="flat" size="40">
+          <v-icon :style="headerIconStyle" size="20">{{ isEditing ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
         </v-avatar>
         <div>
           <div class="text-h5 font-weight-bold">
@@ -87,7 +87,7 @@
               <v-card variant="outlined" rounded="lg">
                 <v-card-title class="d-flex align-center justify-space-between pa-4 pb-2">
                   <div class="d-flex align-center ga-2">
-                    <v-icon color="secondary">mdi-swap-horizontal</v-icon>
+                    <v-icon color="primary">mdi-swap-horizontal</v-icon>
                     <span class="text-body-1 font-weight-bold">模型重定向 (可选)</span>
                   </div>
                   <v-chip size="small" color="secondary" variant="tonal">
@@ -112,13 +112,13 @@
                         color="surface-variant"
                       >
                         <template v-slot:prepend>
-                          <v-icon size="small" color="medium-emphasis">mdi-arrow-right</v-icon>
+                          <v-icon size="small" color="primary">mdi-arrow-right</v-icon>
                         </template>
                         
                         <v-list-item-title>
                           <div class="d-flex align-center ga-2">
                             <code class="text-caption">{{ source }}</code>
-                            <v-icon size="small">mdi-arrow-right</v-icon>
+                            <v-icon size="small" color="primary">mdi-arrow-right</v-icon>
                             <code class="text-caption">{{ target }}</code>
                           </div>
                         </v-list-item-title>
@@ -131,7 +131,7 @@
                             variant="text"
                             @click="removeModelMapping(source)"
                           >
-                            <v-icon size="small">mdi-close</v-icon>
+                            <v-icon size="small" color="error">mdi-close</v-icon>
                           </v-btn>
                         </template>
                       </v-list-item>
@@ -151,7 +151,7 @@
                       clearable
                       placeholder="选择源模型名"
                     />
-                    <v-icon>mdi-arrow-right</v-icon>
+                    <v-icon color="primary">mdi-arrow-right</v-icon>
                     <v-text-field
                       v-model="newMapping.target"
                       label="目标模型名"
@@ -180,7 +180,7 @@
               <v-card variant="outlined" rounded="lg">
                 <v-card-title class="d-flex align-center justify-space-between pa-4 pb-2">
                   <div class="d-flex align-center ga-2">
-                    <v-icon color="secondary">mdi-key</v-icon>
+                    <v-icon color="primary">mdi-key</v-icon>
                     <span class="text-body-1 font-weight-bold">API密钥管理</span>
                   </div>
                   <v-chip size="small" color="info" variant="tonal">
@@ -201,7 +201,7 @@
                         color="surface-variant"
                       >
                         <template v-slot:prepend>
-                          <v-icon size="small" color="medium-emphasis">mdi-key</v-icon>
+                          <v-icon size="small" color="primary">mdi-key</v-icon>
                         </template>
                         
                         <v-list-item-title>
@@ -216,7 +216,7 @@
                             variant="text"
                             @click="removeApiKey(index)"
                           >
-                            <v-icon size="small">mdi-close</v-icon>
+                            <v-icon size="small" color="error">mdi-close</v-icon>
                           </v-btn>
                         </template>
                       </v-list-item>
@@ -357,25 +357,18 @@ const isEditing = computed(() => !!props.channel)
 // 动态header样式
 const headerClasses = computed(() => {
   const isDark = theme.global.current.value.dark
-  return isDark 
-    ? 'bg-surface text-high-emphasis' 
-    : 'bg-primary text-white'
+  // Dark: keep neutral surface header; Light: use brand primary header
+  return isDark ? 'bg-surface text-high-emphasis' : 'bg-primary text-white'
 })
 
-const avatarColor = computed(() => {
-  const isDark = theme.global.current.value.dark
-  return isDark ? 'primary' : 'primary'
-})
+const avatarColor = computed(() => 'primary')
 
-const iconColor = computed(() => {
-  const isDark = theme.global.current.value.dark
-  return isDark ? 'white' : 'white'
-})
+// Use Vuetify theme "on-primary" token so icon isn't fixed white
+const headerIconStyle = computed(() => ({
+  color: 'rgb(var(--v-theme-on-primary))'
+}))
 
-const subtitleClasses = computed(() => {
-  const isDark = theme.global.current.value.dark
-  return isDark ? 'text-medium-emphasis' : 'text-blue-lighten-1'
-})
+const subtitleClasses = computed(() => 'text-medium-emphasis')
 
 const isFormValid = computed(() => {
   return form.name.trim() && 

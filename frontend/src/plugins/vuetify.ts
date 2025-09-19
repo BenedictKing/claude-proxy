@@ -7,33 +7,33 @@ import * as directives from 'vuetify/directives'
 import 'vuetify/styles'
 import '@mdi/font/css/materialdesignicons.css'
 
+// Align Vuetify colors to DaisyUI "emerald" (light)
 const lightTheme = {
   dark: false,
   colors: {
-    primary: '#1976D2',
-    secondary: '#424242',
-    accent: '#82B1FF',
-    error: '#FF5252',
-    info: '#2196F3',
-    success: '#4CAF50',
-    warning: '#FFC107',
-    background: '#FAFAFA',
-    surface: '#FFFFFF',
+    // Use DaisyUI emerald palette directly
+    primary: '#66cc8a',
+    secondary: '#377cfb',
+    accent: '#f68067',
+    // Keep semantic colors to Vuetify defaults to avoid ad-hoc mixing
+    background: '#ffffff', // base-100
+    surface: '#f9fafb'     // aligns with neutral-content tone
   }
 }
 
+// Align Vuetify colors to DaisyUI "night" (dark)
 const darkTheme = {
   dark: true,
   colors: {
-    primary: '#42a5f5', // 提高亮度以增加对比度
-    secondary: '#757575',
-    accent: '#FF4081',
-    error: '#FF5252',
-    info: '#29B6F6',
-    success: '#66BB6A',
-    warning: '#FFA726',
-    background: '#1a1a1a', // 更深的背景
-    surface: '#2c2c2c', // 稍亮的卡片表面
+    primary: '#38BDF8',
+    secondary: '#818CF8',
+    accent: '#F471B5',
+    info: '#0CA5E9',
+    success: '#2DD4BF',
+    warning: '#F4BF50',
+    error: '#FB7085',
+    background: '#0F172A', // base-100
+    surface: '#1E293B'     // neutral
   }
 }
 
@@ -51,7 +51,7 @@ export default createVuetify({
     defaultTheme: 'light',
     themes: {
       light: lightTheme,
-      dark: darkTheme,
-    },
-  },
+      dark: darkTheme
+    }
+  }
 })

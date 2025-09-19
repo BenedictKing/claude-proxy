@@ -9,6 +9,7 @@ export default {
   },
   plugins: [require("daisyui")],
   daisyui: {
-    themes: ["light", "dark"],
+    // Use mature, built-in palettes
+    themes: ["emerald", "night"],
   },
 }

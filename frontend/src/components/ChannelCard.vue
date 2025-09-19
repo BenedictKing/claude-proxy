@@ -91,16 +91,20 @@
       <!-- 状态和延迟 -->
       <div class="d-flex align-center justify-space-between mb-4">
         <div class="status-indicator">
-          <div class="status-badge" :class="`status-${channel.status || 'unknown'}`">
-            <v-icon 
-              :color="getStatusColor()"
-              size="16"
-              class="status-icon"
-            >
-              {{ getStatusIcon() }}
-            </v-icon>
-            <span class="status-text">{{ getStatusText() }}</span>
-          </div>
+          <v-tooltip :text="getStatusTooltip()" location="bottom">
+            <template #activator="{ props }">
+              <div class="status-badge cursor-help" v-bind="props" :class="`status-${channel.status || 'unknown'}`">
+                <v-icon 
+                  :color="getStatusColor()"
+                  size="16"
+                  class="status-icon"
+                >
+                  {{ getStatusIcon() }}
+                </v-icon>
+                <span class="status-text">{{ getStatusText() }}</span>
+              </div>
+            </template>
+          </v-tooltip>
         </div>
         
         <div v-if="channel.latency !== null" class="latency-indicator">
@@ -294,9 +298,17 @@ const getStatusText = () => {
   const textMap: Record<string, string> = {
     'healthy': '健康',
     'error': '错误',
-    'unknown': '未知'
+    'unknown': '未检测'
   }
   return textMap[props.channel.status || 'unknown']
+}
+
+// 状态解释文案（悬浮提示）
+const getStatusTooltip = () => {
+  const status = props.channel.status || 'unknown'
+  if (status === 'healthy') return '连接正常：最近一次检测通过'
+  if (status === 'error') return '连接异常：请检查基础 URL、网络或 API 密钥'
+  return '尚未检测：请点击“测试延迟”进行检测'
 }
 
 // 从掩码的密钥获取原始密钥（用于删除操作）
@@ -355,7 +367,7 @@ const getLatencyLevel = () => {
   position: relative;
   overflow: hidden;
   background-color: rgb(var(--v-theme-surface));
-  border: 1px solid rgba(var(--v-theme-success), 0.3);
+  border: 1px solid rgba(var(--v-theme-primary), 0.28);
   box-shadow: 
     0 4px 16px rgba(0, 0, 0, 0.05),
     0 1px 4px rgba(0, 0, 0, 0.02);
@@ -367,14 +379,14 @@ const getLatencyLevel = () => {
   box-shadow: 
     0 20px 40px rgba(0, 0, 0, 0.1),
     0 8px 24px rgba(0, 0, 0, 0.06);
-  border-color: rgba(var(--v-theme-success), 0.5);
+  border-color: rgba(var(--v-theme-primary), 0.5);
 }
 
 .card-header-gradient {
-  background: linear-gradient(135deg, 
-    rgba(var(--v-theme-primary-rgb), 0.05) 0%, 
-    rgba(var(--v-theme-primary-rgb), 0.02) 50%,
-    rgba(156, 39, 176, 0.03) 100%);
+  background: linear-gradient(135deg,
+    rgba(var(--v-theme-primary), 0.12) 0%,
+    rgba(var(--v-theme-primary), 0.06) 50%,
+    rgba(var(--v-theme-accent), 0.08) 100%);
   position: relative;
   border-top-left-radius: inherit;
   border-top-right-radius: inherit;
@@ -407,7 +419,7 @@ const getLatencyLevel = () => {
 /* --- CURRENT CHANNEL (LIGHT) --- */
 .channel-card.current-channel {
   border-width: 2px !important;
-  border-color: rgba(var(--v-theme-success), 0.4) !important;
+  border-color: rgba(var(--v-theme-primary), 0.5) !important;
   box-shadow: 
     0 8px 32px rgba(var(--v-theme-success), 0.15),
     0 4px 16px rgba(0, 0, 0, 0.08);
@@ -416,17 +428,17 @@ const getLatencyLevel = () => {
 
 .channel-card.current-channel .card-header-gradient {
   background: linear-gradient(135deg, 
-    rgba(var(--v-theme-success), 0.12) 0%, 
-    rgba(var(--v-theme-success), 0.06) 50%,
+    rgba(var(--v-theme-primary), 0.16) 0%, 
+    rgba(var(--v-theme-primary), 0.08) 50%,
     rgba(139, 195, 74, 0.08) 100%);
 }
 
 .channel-card.current-channel:hover {
   transform: translateY(-8px) scale(1.03);
   box-shadow: 
-    0 24px 48px rgba(var(--v-theme-success), 0.2),
+    0 24px 48px rgba(var(--v-theme-primary), 0.22),
     0 12px 32px rgba(0, 0, 0, 0.12);
-  border-color: rgba(var(--v-theme-success), 0.6) !important;
+  border-color: rgba(var(--v-theme-primary), 0.65) !important;
 }
 
 /* --- INDICATORS (LIGHT) --- */
@@ -443,9 +455,9 @@ const getLatencyLevel = () => {
 .status-badge {
   background-color: rgba(0, 0, 0, 0.05);
 }
-.status-badge.status-healthy { color: rgb(var(--v-theme-success)); background-color: rgba(var(--v-theme-success), 0.1); }
-.status-badge.status-error { color: rgb(var(--v-theme-error)); background-color: rgba(var(--v-theme-error-rgb), 0.1); }
-.status-badge.status-unknown { color: rgb(var(--v-theme-secondary)); background-color: rgba(var(--v-theme-secondary-rgb), 0.1); }
+.status-badge.status-healthy { color: rgb(var(--v-theme-success)); background-color: rgba(var(--v-theme-success), 0.12); }
+.status-badge.status-error { color: rgb(var(--v-theme-error)); background-color: rgba(var(--v-theme-error), 0.12); }
+.status-badge.status-unknown { color: rgb(var(--v-theme-secondary)); background-color: rgba(var(--v-theme-secondary), 0.12); }
 
 .latency-badge {
   font-weight: 600;
@@ -489,77 +501,77 @@ const getLatencyLevel = () => {
 ██████╔╝██║  ██║██║  ██║██║  ██╗
 ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝
 */
-@media (prefers-color-scheme: dark) {
-  .channel-card {
-    border: 1px solid rgba(var(--v-theme-success), 0.4);
-    box-shadow: 
-      0 4px 24px rgba(0, 0, 0, 0.2),
-      0 1px 8px rgba(0, 0, 0, 0.15);
-  }
-
-  .channel-card:not(.current-channel):hover {
-    border-color: rgba(var(--v-theme-success), 0.6);
-    box-shadow: 
-      0 20px 40px rgba(0, 0, 0, 0.3),
-      0 8px 24px rgba(0, 0, 0, 0.2);
-  }
-
-  .card-header-gradient {
-    background: linear-gradient(135deg, 
-      rgba(var(--v-theme-primary-rgb), 0.15) 0%, 
-      rgba(var(--v-theme-primary-rgb), 0.08) 50%,
-      rgba(156, 39, 176, 0.12) 100%);
-  }
-
-  .service-icon-wrapper {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.08) 100%);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-  }
-  
-  .channel-card:hover .service-icon-wrapper {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.32);
-    border-color: rgba(255, 255, 255, 0.2);
-  }
-  
-  .service-chip, .current-chip {
-    border: 1px solid rgba(255, 255, 255, 0.15);
-  }
-
-  /* --- CURRENT CHANNEL (DARK) --- */
-  .channel-card.current-channel {
-    border-width: 2px !important;
-    border-color: rgba(var(--v-theme-success), 0.6) !important;
-    box-shadow: 
-      0 8px 32px rgba(var(--v-theme-success), 0.25),
-      0 4px 16px rgba(0, 0, 0, 0.3);
-  }
-
-  .channel-card.current-channel .card-header-gradient {
-    background: linear-gradient(135deg, 
-      rgba(var(--v-theme-success), 0.2) 0%, 
-      rgba(var(--v-theme-success), 0.12) 50%,
-      rgba(139, 195, 74, 0.15) 100%);
-  }
-  
-  .channel-card.current-channel:hover {
-    box-shadow: 
-      0 24px 48px rgba(var(--v-theme-success), 0.28),
-      0 12px 32px rgba(0, 0, 0, 0.32);
-    border-color: rgba(var(--v-theme-success), 0.8) !important;
-  }
-
-  /* --- INDICATORS (DARK) --- */
-  .status-badge {
-    background-color: rgba(255, 255, 255, 0.1);
-  }
-  .status-badge.status-healthy { color: #a5d6a7; background-color: rgba(102, 187, 106, 0.2); }
-  .status-badge.status-error { color: #ef9a9a; background-color: rgba(255, 82, 82, 0.2); }
-  .status-badge.status-unknown { color: #bdbdbd; background-color: rgba(117, 117, 117, 0.2); }
-  
-  .latency-badge.latency-excellent { color: #a5d6a7; background: rgba(102, 187, 106, 0.25); }
-  .latency-badge.latency-good { color: #fff59d; background: rgba(255, 236, 179, 0.2); }
-  .latency-badge.latency-fair { color: #ffcc80; background: rgba(255, 167, 38, 0.25); }
-  .latency-badge.latency-poor { color: #ef9a9a; background: rgba(255, 82, 82, 0.25); }
+/* Prefer Vuetify theme class over media query to honor manual toggles */
+.v-theme--dark .channel-card {
+  border: 1px solid rgba(var(--v-theme-primary), 0.45);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.28),
+    0 1px 8px rgba(0, 0, 0, 0.18);
 }
+
+.v-theme--dark .channel-card:not(.current-channel):hover {
+  border-color: rgba(var(--v-theme-primary), 0.65);
+  box-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.36),
+    0 8px 24px rgba(0, 0, 0, 0.24);
+}
+
+.v-theme--dark .card-header-gradient {
+  background: linear-gradient(135deg,
+    rgba(var(--v-theme-primary), 0.18) 0%,
+    rgba(var(--v-theme-primary), 0.10) 50%,
+    rgba(156, 39, 176, 0.16) 100%);
+}
+
+.v-theme--dark .service-icon-wrapper {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.08) 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.v-theme--dark .channel-card:hover .service-icon-wrapper {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.32);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.v-theme--dark .service-chip,
+.v-theme--dark .current-chip {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* --- CURRENT CHANNEL (DARK) --- */
+.v-theme--dark .channel-card.current-channel {
+  border-width: 2px !important;
+  border-color: rgba(var(--v-theme-primary), 0.7) !important;
+  box-shadow:
+    0 8px 32px rgba(var(--v-theme-primary), 0.3),
+    0 4px 16px rgba(0, 0, 0, 0.32);
+}
+
+.v-theme--dark .channel-card.current-channel .card-header-gradient {
+  background: linear-gradient(135deg,
+    rgba(var(--v-theme-primary), 0.24) 0%,
+    rgba(var(--v-theme-primary), 0.14) 50%,
+    rgba(139, 195, 74, 0.18) 100%);
+}
+
+.v-theme--dark .channel-card.current-channel:hover {
+  box-shadow:
+    0 24px 48px rgba(var(--v-theme-primary), 0.34),
+    0 12px 32px rgba(0, 0, 0, 0.36);
+  border-color: rgba(var(--v-theme-primary), 0.85) !important;
+}
+
+/* --- INDICATORS (DARK) --- */
+.v-theme--dark .status-badge {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+.v-theme--dark .status-badge.status-healthy { color: #b6e3be; background-color: rgba(52, 211, 153, 0.2); }
+.v-theme--dark .status-badge.status-error { color: #f4b4b4; background-color: rgba(248, 113, 113, 0.22); }
+.v-theme--dark .status-badge.status-unknown { color: #cbd5e1; background-color: rgba(148, 163, 184, 0.2); }
+
+.v-theme--dark .latency-badge.latency-excellent { color: #b6e3be; background: rgba(52, 211, 153, 0.25); }
+.v-theme--dark .latency-badge.latency-good { color: #fde68a; background: rgba(251, 191, 36, 0.22); }
+.v-theme--dark .latency-badge.latency-fair { color: #fcd49b; background: rgba(251, 146, 60, 0.25); }
+.v-theme--dark .latency-badge.latency-poor { color: #f4b4b4; background: rgba(248, 113, 113, 0.28); }
 </style>

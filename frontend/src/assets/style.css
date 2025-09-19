@@ -13,15 +13,4 @@
   opacity: 0;
 }
 
-/* 延迟颜色指示 */
-.latency-excellent {
-  @apply text-green-500;
-}
-
-.latency-good {
-  @apply text-yellow-500;
-}
-
-.latency-poor {
-  @apply text-red-500;
-}
+/* 说明：与组件内样式避免重复，移除旧的 latency-* 类 */
