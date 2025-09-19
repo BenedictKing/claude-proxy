@@ -47,7 +47,7 @@
               <v-card-text class="pb-2">
                 <div class="d-flex align-center justify-space-between">
                   <div>
-                    <div class="text-h4 primary--text font-weight-bold">{{ channelsData.channels?.length || 0 }}</div>
+                    <div class="text-h4 text-primary font-weight-bold">{{ channelsData.channels?.length || 0 }}</div>
                     <div class="text-subtitle-1 text-medium-emphasis">总渠道数</div>
                     <div class="text-caption text-medium-emphasis">已配置的API渠道</div>
                   </div>
@@ -64,9 +64,9 @@
               <v-card-text class="pb-2">
                 <div class="d-flex align-center justify-space-between">
                   <div>
-                    <div class="text-h6 success--text font-weight-bold text-truncate" style="max-width: 120px;">{{ getCurrentChannelName() }}</div>
+                    <div class="text-h6 text-success font-weight-bold text-truncate" style="max-width: 120px;">{{ getCurrentChannelName() }}</div>
                     <div class="text-subtitle-1 text-medium-emphasis">当前渠道</div>
-                    <div class="text-caption success--text font-weight-medium">{{ currentChannelType }}</div>
+                    <div class="text-caption text-success font-weight-medium">{{ currentChannelType }}</div>
                   </div>
                   <v-avatar size="60" color="success">
                     <v-icon size="30" color="white">mdi-check-circle</v-icon>
@@ -81,7 +81,7 @@
               <v-card-text class="pb-2">
                 <div class="d-flex align-center justify-space-between">
                   <div>
-                    <div class="text-h6 info--text font-weight-bold text-capitalize">{{ channelsData.loadBalance || 'none' }}</div>
+                    <div class="text-h6 text-info font-weight-bold text-capitalize">{{ channelsData.loadBalance || 'none' }}</div>
                     <div class="text-subtitle-1 text-medium-emphasis">负载均衡</div>
                     <div class="text-caption text-medium-emphasis">自动分配策略</div>
                   </div>
@@ -98,7 +98,7 @@
               <v-card-text class="pb-2">
                 <div class="d-flex align-center justify-space-between">
                   <div>
-                    <div class="text-h6 success--text font-weight-bold">运行中</div>
+                    <div class="text-h6 text-success font-weight-bold">运行中</div>
                     <div class="text-subtitle-1 text-medium-emphasis">系统状态</div>
                     <div class="text-caption text-medium-emphasis">服务正常运行</div>
                   </div>
