@@ -72,11 +72,16 @@ router.put('/api/channels/:id', (req, res) => {
       }
     }
 
-    // 使用updateUpstream方法更新配置
-    configManager.updateUpstream(id, {
+    // 准备更新数据。
+    // 1. 确保即使前端未传递 insecureSkipVerify（当值为 false 时），也能正确更新为 false。
+    // 2. 直接使用 req.body 中的 apiKeys，以修复在模态框中修改密钥列表无效的问题。
+    const updateData = {
       ...req.body,
-      apiKeys: config.upstream[id].apiKeys  // 保留原有密钥
-    })
+      insecureSkipVerify: !!req.body.insecureSkipVerify,
+    };
+
+    // 使用准备好的数据更新配置
+    configManager.updateUpstream(id, updateData);
     
     res.json({ success: true })
   } catch (error) {
