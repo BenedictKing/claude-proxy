@@ -51,8 +51,8 @@
                     <div class="text-subtitle-1 text-medium-emphasis">总渠道数</div>
                     <div class="text-caption text-medium-emphasis">已配置的API渠道</div>
                   </div>
-                  <v-avatar size="60" color="primary">
-                    <v-icon size="30" color="white">mdi-server-network</v-icon>
+                  <v-avatar size="60" color="primary" variant="tonal">
+                    <v-icon size="30" color="primary">mdi-server-network</v-icon>
                   </v-avatar>
                 </div>
               </v-card-text>
@@ -68,8 +68,8 @@
                     <div class="text-subtitle-1 text-medium-emphasis">当前渠道</div>
                     <div class="text-caption text-success font-weight-medium">{{ currentChannelType }}</div>
                   </div>
-                  <v-avatar size="60" color="success">
-                    <v-icon size="30" color="white">mdi-check-circle</v-icon>
+                  <v-avatar size="60" color="success" variant="tonal">
+                    <v-icon size="30" color="success">mdi-check-circle</v-icon>
                   </v-avatar>
                 </div>
               </v-card-text>
@@ -85,8 +85,8 @@
                     <div class="text-subtitle-1 text-medium-emphasis">负载均衡</div>
                     <div class="text-caption text-medium-emphasis">自动分配策略</div>
                   </div>
-                  <v-avatar size="60" color="info">
-                    <v-icon size="30" color="white">mdi-swap-horizontal</v-icon>
+                  <v-avatar size="60" color="info" variant="tonal">
+                    <v-icon size="30" color="info">mdi-swap-horizontal</v-icon>
                   </v-avatar>
                 </div>
               </v-card-text>
@@ -102,8 +102,8 @@
                     <div class="text-subtitle-1 text-medium-emphasis">系统状态</div>
                     <div class="text-caption text-medium-emphasis">服务正常运行</div>
                   </div>
-                  <v-avatar size="60" color="success">
-                    <v-icon size="30" color="white">mdi-heart-pulse</v-icon>
+                  <v-avatar size="60" color="success" variant="tonal">
+                    <v-icon size="30" color="success">mdi-heart-pulse</v-icon>
                   </v-avatar>
                 </div>
               </v-card-text>
@@ -127,22 +127,22 @@
                 </v-btn>
                 
                 <v-btn
-                  color="success"
+                  color="info"
                   size="large"
                   @click="pingAllChannels"
                   prepend-icon="mdi-speedometer"
-                  variant="elevated"
+                  variant="outlined"
                   :loading="isPingingAll"
                 >
                   测试全部延迟
                 </v-btn>
 
                 <v-btn
-                  color="surface-variant"
+                  color="secondary"
                   size="large"
                   @click="refreshChannels"
                   prepend-icon="mdi-refresh"
-                  variant="elevated"
+                  variant="tonal"
                 >
                   刷新
                 </v-btn>
@@ -675,7 +675,7 @@ onMounted(async () => {
 
 .channel-col {
   transition: all 0.4s ease;
-  max-width: 550px;
+  max-width: 640px;
   margin: 0 auto;
 }
 

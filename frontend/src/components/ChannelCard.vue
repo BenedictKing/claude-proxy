@@ -2,6 +2,7 @@
   <v-card
     class="channel-card h-100"
     :class="{ 'current-channel': isCurrent }"
+    :style="serviceStyle"
     :data-pinned="channel.pinned"
     elevation="0"
     rounded="xl"
@@ -30,7 +31,7 @@
               </div>
             </div>
             <!-- 官网图标按钮（紧贴标题右侧） -->
-            <v-tooltip v-if="channel.website" text="打开官网" location="bottom">
+            <v-tooltip v-if="channel.website" text="打开官网" location="bottom" :open-delay="150">
               <template #activator="{ props }">
                 <v-btn v-bind="props" :href="channel.website" target="_blank" rel="noopener" size="small" variant="text" color="primary" icon>
                   <v-icon size="18">mdi-open-in-new</v-icon>
@@ -44,7 +45,7 @@
           <!-- Pin 按钮 -->
           <v-btn
             size="small"
-            variant="text"
+            :variant="channel.pinned ? 'tonal' : 'text'"
             :color="channel.pinned ? 'warning' : 'grey'"
             class="pin-btn"
             rounded="lg"
@@ -59,12 +60,12 @@
           <v-chip
             :color="getServiceChipColor()"
             size="small"
-            variant="flat"
+            variant="tonal"
             density="comfortable"
-            rounded="lg"
+            rounded="pill"
             class="service-chip"
           >
-            {{ channel.serviceType.toUpperCase() }}
+            <span class="font-weight-bold">{{ channel.serviceType.toUpperCase() }}</span>
           </v-chip>
           <v-chip
             v-if="isCurrent"
@@ -101,10 +102,10 @@
         
       </div>
 
-      <!-- 状态和延迟 -->
-      <div class="d-flex align-center justify-space-between mb-4">
+      <!-- 状态和延迟（右对齐、间距更紧凑） -->
+      <div class="d-flex align-center justify-end ga-4 mb-4">
         <div class="status-indicator">
-          <v-tooltip :text="getStatusTooltip()" location="bottom">
+          <v-tooltip :text="getStatusTooltip()" location="bottom" :open-delay="150">
             <template #activator="{ props }">
               <div class="status-badge cursor-help" v-bind="props" :class="`status-${channel.status || 'unknown'}`">
                 <v-icon 
@@ -119,7 +120,6 @@
             </template>
           </v-tooltip>
         </div>
-        
         <div v-if="channel.latency !== null" class="latency-indicator">
           <div class="latency-badge" :class="`latency-${getLatencyLevel()}`">
             <v-icon size="14" class="latency-icon">mdi-speedometer</v-icon>
@@ -138,15 +138,15 @@
                 <span class="text-body-2 font-weight-medium">API密钥管理</span>
               </div>
               <v-chip
-                :color="channel.apiKeys.length ? 'primary' : 'warning'"
+                :color="channel.apiKeys.length ? 'secondary' : 'warning'"
                 size="large"
-                variant="flat"
+                variant="tonal"
                 density="comfortable"
                 rounded="lg"
                 class="mr-2 key-count-chip"
                 :style="keyChipStyle"
               >
-                <v-icon start size="16">mdi-key</v-icon>
+                <v-icon start size="18">mdi-key</v-icon>
                 {{ channel.apiKeys.length }}
               </v-chip>
             </div>
@@ -194,7 +194,7 @@
       </v-expansion-panels>
 
       <!-- 操作按钮 -->
-      <div class="action-buttons d-flex flex-wrap ga-2">
+      <div class="action-buttons d-flex flex-wrap ga-2 justify-end w-100">
         <v-btn 
           v-if="!isCurrent"
           size="small"
@@ -272,12 +272,12 @@ defineEmits<{
 // 获取服务类型对应的芯片颜色
 const getServiceChipColor = () => {
   const colorMap: Record<string, string> = {
-    'openai': 'primary',
-    'openaiold': 'info',
-    'claude': 'success',
-    'gemini': 'warning'
+    openai: 'info',
+    openaiold: 'secondary',
+    claude: 'success',
+    gemini: 'accent'
   }
-  return colorMap[props.channel.serviceType] || 'surface-variant'
+  return colorMap[props.channel.serviceType] || 'primary'
 }
 
 // 获取延迟对应的颜色
@@ -379,9 +379,23 @@ const getLatencyLevel = () => {
 const keyChipStyle = computed(() => {
   const hasKeys = props.channel.apiKeys.length > 0
   return {
-    color: hasKeys ? 'rgb(var(--v-theme-on-primary))' : 'rgb(var(--v-theme-on-warning))',
+    color: hasKeys ? 'rgb(var(--v-theme-on-secondary))' : 'rgb(var(--v-theme-on-warning))',
     fontSize: '0.95rem'
   }
+})
+
+// 根据服务类型设置卡片强调色（明暗模式自动随主题变量变更）
+const serviceStyle = computed(() => {
+  const map: Record<string, string> = {
+    openai: 'var(--v-theme-info)',
+    openaiold: 'var(--v-theme-secondary)',
+    claude: 'var(--v-theme-success)',
+    gemini: 'var(--v-theme-accent)'
+  }
+  const value = map[props.channel.serviceType] || 'var(--v-theme-primary)'
+  return {
+    '--card-accent-rgb': value
+  } as Record<string, string>
 })
 </script>
 
@@ -391,27 +405,47 @@ const keyChipStyle = computed(() => {
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
-  background-color: rgb(var(--v-theme-surface));
-  border: 1px solid rgba(var(--v-theme-primary), 0.28);
+  /* 类型底色：在 surface 上叠加轻度同色系着色 */
+  background: linear-gradient(
+    0deg,
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.06),
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.06)
+  ), rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.28);
   box-shadow: 
     0 4px 16px rgba(0, 0, 0, 0.05),
     0 1px 4px rgba(0, 0, 0, 0.02);
   border-radius: 16px;
 }
 
+/* 左侧彩色强调条，突出渠道类型颜色 */
+.channel-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: linear-gradient(
+    to bottom,
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.9),
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.5)
+  );
+}
+
 .channel-card:not(.current-channel):hover {
-  transform: translateY(-6px) scale(1.02);
+  transform: translateY(-4px) scale(1.01);
   box-shadow: 
-    0 20px 40px rgba(0, 0, 0, 0.1),
-    0 8px 24px rgba(0, 0, 0, 0.06);
-  border-color: rgba(var(--v-theme-primary), 0.5);
+    0 16px 32px rgba(0, 0, 0, 0.08),
+    0 6px 18px rgba(0, 0, 0, 0.05);
+  border-color: rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.45);
 }
 
 .card-header-gradient {
   background: linear-gradient(135deg,
-    rgba(var(--v-theme-primary), 0.12) 0%,
-    rgba(var(--v-theme-primary), 0.06) 50%,
-    rgba(var(--v-theme-accent), 0.08) 100%);
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.20) 0%,
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.10) 50%,
+    rgba(var(--v-theme-accent), 0.12) 100%);
   position: relative;
   border-top-left-radius: inherit;
   border-top-right-radius: inherit;
@@ -424,9 +458,11 @@ const keyChipStyle = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.6) 100%);
+  background: linear-gradient(135deg,
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.18) 0%,
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.10) 100%);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.25);
   transition: all 0.3s ease;
 }
 
@@ -436,15 +472,14 @@ const keyChipStyle = computed(() => {
 }
 
 .service-chip, .current-chip {
-  backdrop-filter: blur(10px);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border: none;
 }
 
 /* --- CURRENT CHANNEL (LIGHT) --- */
 .channel-card.current-channel {
   border-width: 2px !important;
-  border-color: rgba(var(--v-theme-primary), 0.5) !important;
+  border-color: rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.5) !important;
   box-shadow: 
     0 8px 32px rgba(var(--v-theme-success), 0.15),
     0 4px 16px rgba(0, 0, 0, 0.08);
@@ -453,17 +488,17 @@ const keyChipStyle = computed(() => {
 
 .channel-card.current-channel .card-header-gradient {
   background: linear-gradient(135deg, 
-    rgba(var(--v-theme-primary), 0.16) 0%, 
-    rgba(var(--v-theme-primary), 0.08) 50%,
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.16) 0%, 
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.08) 50%,
     rgba(139, 195, 74, 0.08) 100%);
 }
 
 .channel-card.current-channel:hover {
-  transform: translateY(-8px) scale(1.03);
+  transform: translateY(-6px) scale(1.02);
   box-shadow: 
-    0 24px 48px rgba(var(--v-theme-primary), 0.22),
-    0 12px 32px rgba(0, 0, 0, 0.12);
-  border-color: rgba(var(--v-theme-primary), 0.65) !important;
+    0 20px 40px rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.20),
+    0 10px 28px rgba(0, 0, 0, 0.10);
+  border-color: rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.6) !important;
 }
 
 /* --- INDICATORS (LIGHT) --- */
@@ -532,14 +567,20 @@ const keyChipStyle = computed(() => {
 */
 /* Prefer Vuetify theme class over media query to honor manual toggles */
 .v-theme--dark .channel-card {
-  border: 1px solid rgba(var(--v-theme-primary), 0.45);
+  /* 暗色下加深类型底色透明度，保证可见 */
+  background: linear-gradient(
+    0deg,
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.12),
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.12)
+  ), rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.45);
   box-shadow:
     0 4px 24px rgba(0, 0, 0, 0.28),
     0 1px 8px rgba(0, 0, 0, 0.18);
 }
 
 .v-theme--dark .channel-card:not(.current-channel):hover {
-  border-color: rgba(var(--v-theme-primary), 0.65);
+  border-color: rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.65);
   box-shadow:
     0 20px 40px rgba(0, 0, 0, 0.36),
     0 8px 24px rgba(0, 0, 0, 0.24);
@@ -547,15 +588,25 @@ const keyChipStyle = computed(() => {
 
 .v-theme--dark .card-header-gradient {
   background: linear-gradient(135deg,
-    rgba(var(--v-theme-primary), 0.18) 0%,
-    rgba(var(--v-theme-primary), 0.10) 50%,
-    rgba(156, 39, 176, 0.16) 100%);
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.28) 0%,
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.16) 50%,
+    rgba(156, 39, 176, 0.18) 100%);
 }
 
 .v-theme--dark .service-icon-wrapper {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.08) 100%);
+  background: linear-gradient(135deg,
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.25) 0%,
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.15) 100%);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.35);
+}
+
+.v-theme--dark .channel-card::before {
+  background: linear-gradient(
+    to bottom,
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.95),
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.6)
+  );
 }
 
 .v-theme--dark .channel-card:hover .service-icon-wrapper {
@@ -565,30 +616,30 @@ const keyChipStyle = computed(() => {
 
 .v-theme--dark .service-chip,
 .v-theme--dark .current-chip {
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: none;
 }
 
 /* --- CURRENT CHANNEL (DARK) --- */
 .v-theme--dark .channel-card.current-channel {
   border-width: 2px !important;
-  border-color: rgba(var(--v-theme-primary), 0.7) !important;
+  border-color: rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.7) !important;
   box-shadow:
-    0 8px 32px rgba(var(--v-theme-primary), 0.3),
+    0 8px 32px rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.3),
     0 4px 16px rgba(0, 0, 0, 0.32);
 }
 
 .v-theme--dark .channel-card.current-channel .card-header-gradient {
   background: linear-gradient(135deg,
-    rgba(var(--v-theme-primary), 0.24) 0%,
-    rgba(var(--v-theme-primary), 0.14) 50%,
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.24) 0%,
+    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.14) 50%,
     rgba(139, 195, 74, 0.18) 100%);
 }
 
 .v-theme--dark .channel-card.current-channel:hover {
   box-shadow:
-    0 24px 48px rgba(var(--v-theme-primary), 0.34),
+    0 24px 48px rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.34),
     0 12px 32px rgba(0, 0, 0, 0.36);
-  border-color: rgba(var(--v-theme-primary), 0.85) !important;
+  border-color: rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.85) !important;
 }
 
 /* --- INDICATORS (DARK) --- */
