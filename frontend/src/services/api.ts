@@ -38,6 +38,7 @@ export interface Channel {
   apiKeys: string[]
   description?: string
   website?: string
+  insecureSkipVerify?: boolean
   modelMapping?: Record<string, string>
   latency?: number
   status?: 'healthy' | 'error' | 'unknown'

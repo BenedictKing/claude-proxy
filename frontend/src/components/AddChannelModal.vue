@@ -83,6 +83,25 @@
               />
             </v-col>
 
+            <!-- 跳过 TLS 证书验证 -->
+            <v-col cols="12">
+              <div class="d-flex align-center justify-space-between">
+                <div class="d-flex align-center ga-2">
+                  <v-icon color="warning">mdi-shield-alert</v-icon>
+                  <div>
+                    <div class="text-body-1 font-weight-medium">跳过 TLS 证书验证</div>
+                    <div class="text-caption text-medium-emphasis">仅在自签名或域名不匹配时临时启用，生产环境请关闭</div>
+                  </div>
+                </div>
+                <v-switch
+                  inset
+                  color="warning"
+                  hide-details
+                  v-model="form.insecureSkipVerify"
+                />
+              </div>
+            </v-col>
+
             <!-- 描述 -->
             <v-col cols="12">
               <v-textarea
@@ -333,6 +352,7 @@ const form = reactive({
   serviceType: '' as 'openai' | 'openaiold' | 'gemini' | 'claude' | '',
   baseUrl: '',
   website: '',
+  insecureSkipVerify: false,
   description: '',
   apiKeys: [] as string[],
   modelMapping: {} as Record<string, string>
@@ -429,6 +449,7 @@ const resetForm = () => {
   form.serviceType = ''
   form.baseUrl = ''
   form.website = ''
+  form.insecureSkipVerify = false
   form.description = ''
   form.apiKeys = []
   form.modelMapping = {}
@@ -447,6 +468,7 @@ const loadChannelData = (channel: Channel) => {
   form.serviceType = channel.serviceType
   form.baseUrl = channel.baseUrl
   form.website = channel.website || ''
+  form.insecureSkipVerify = !!channel.insecureSkipVerify
   form.description = channel.description || ''
   form.apiKeys = [...channel.apiKeys]
   form.modelMapping = { ...(channel.modelMapping || {}) }
@@ -490,6 +512,7 @@ const handleSubmit = async () => {
     serviceType: form.serviceType as 'openai' | 'openaiold' | 'gemini' | 'claude',
     baseUrl: form.baseUrl.trim().replace(/\/$/, ''), // 移除末尾斜杠
     website: form.website.trim() || undefined,
+    insecureSkipVerify: form.insecureSkipVerify || undefined,
     description: form.description.trim(),
     apiKeys: form.apiKeys.filter(key => key.trim()),
     modelMapping: Object.keys(form.modelMapping).length > 0 ? form.modelMapping : undefined
