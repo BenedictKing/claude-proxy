@@ -2,35 +2,57 @@
   <v-card
     class="channel-card h-100"
     :class="{ 'current-channel': isCurrent }"
-    elevation="3"
-    rounded="lg"
+    elevation="6"
+    rounded="xl"
     hover
   >
-    <v-card-title class="d-flex align-center justify-space-between pa-4 pb-2">
-      <div class="text-h6 font-weight-bold text-truncate" style="max-width: 200px;">
-        {{ channel.name }}
-      </div>
-      <div class="d-flex align-center ga-2">
-        <v-chip
-          :color="getServiceChipColor()"
-          size="small"
-          variant="elevated"
-          density="compact"
-        >
-          {{ channel.serviceType.toUpperCase() }}
-        </v-chip>
-        <v-chip
-          v-if="isCurrent"
-          color="success"
-          size="small"
-          variant="elevated"
-          density="compact"
-        >
-          <v-icon start size="small">mdi-check</v-icon>
-          当前
-        </v-chip>
-      </div>
-    </v-card-title>
+    <!-- 渐变头部背景 -->
+    <div class="card-header-gradient">
+      <v-card-title class="d-flex align-center justify-space-between pa-4 pb-3 position-relative">
+        <div class="d-flex align-center ga-3">
+          <!-- 服务类型图标 -->
+          <div class="service-icon-wrapper">
+            <v-icon 
+              :color="getServiceIconColor()"
+              size="24"
+            >
+              {{ getServiceIcon() }}
+            </v-icon>
+          </div>
+          <div>
+            <div class="text-h6 font-weight-bold channel-title">
+              {{ channel.name }}
+            </div>
+            <div class="text-caption text-high-emphasis opacity-80">
+              {{ getServiceDisplayName() }}
+            </div>
+          </div>
+        </div>
+        
+        <div class="d-flex align-center ga-2">
+          <v-chip
+            :color="getServiceChipColor()"
+            size="small"
+            variant="flat"
+            density="comfortable"
+            class="service-chip"
+          >
+            {{ channel.serviceType.toUpperCase() }}
+          </v-chip>
+          <v-chip
+            v-if="isCurrent"
+            color="success"
+            size="small"
+            variant="flat"
+            density="comfortable"
+            class="current-chip"
+          >
+            <v-icon start size="small">mdi-check-circle</v-icon>
+            当前
+          </v-chip>
+        </div>
+      </v-card-title>
+    </div>
 
     <v-card-text class="px-4 py-2">
       <!-- 描述 -->
@@ -64,29 +86,24 @@
 
       <!-- 状态和延迟 -->
       <div class="d-flex align-center justify-space-between mb-4">
-        <div class="d-flex align-center ga-2">
-          <span class="text-caption">状态:</span>
-          <div class="d-flex align-center ga-1">
+        <div class="status-indicator">
+          <div class="status-badge" :class="`status-${channel.status || 'unknown'}`">
             <v-icon 
               :color="getStatusColor()"
-              size="small"
+              size="16"
+              class="status-icon"
             >
               {{ getStatusIcon() }}
             </v-icon>
-            <span class="text-caption">{{ getStatusText() }}</span>
+            <span class="status-text">{{ getStatusText() }}</span>
           </div>
         </div>
         
-        <div v-if="channel.latency !== null" class="d-flex align-center ga-1">
-          <span class="text-caption">延迟:</span>
-          <v-chip
-            :color="getLatencyColor()"
-            size="x-small"
-            variant="tonal"
-            density="compact"
-          >
-            {{ channel.latency }}ms
-          </v-chip>
+        <div v-if="channel.latency !== null" class="latency-indicator">
+          <div class="latency-badge" :class="`latency-${getLatencyLevel()}`">
+            <v-icon size="14" class="latency-icon">mdi-speedometer</v-icon>
+            <span class="latency-text">{{ channel.latency }}ms</span>
+          </div>
         </div>
       </div>
 
@@ -140,22 +157,24 @@
       </v-expansion-panels>
 
       <!-- 操作按钮 -->
-      <div class="d-flex flex-wrap ga-2">
+      <div class="action-buttons d-flex flex-wrap ga-2">
         <v-btn 
           v-if="!isCurrent"
           size="small"
           color="success"
-          variant="tonal"
+          variant="flat"
+          class="action-btn primary-action"
           @click="$emit('setCurrent', channel.index)"
-          prepend-icon="mdi-check"
+          prepend-icon="mdi-check-circle"
         >
           设为当前
         </v-btn>
         
         <v-btn
           size="small"
-          color="info"
-          variant="tonal"
+          color="primary"
+          variant="outlined"
+          class="action-btn"
           @click="$emit('ping', channel.index)"
           prepend-icon="mdi-speedometer"
         >
@@ -164,8 +183,9 @@
         
         <v-btn
           size="small"
-          color="warning"
-          variant="tonal"
+          color="info"
+          variant="outlined"
+          class="action-btn"
           @click="$emit('edit', channel)"
           prepend-icon="mdi-pencil"
         >
@@ -175,7 +195,8 @@
         <v-btn
           size="small"
           color="error"
-          variant="tonal"
+          variant="text"
+          class="action-btn danger-action"
           @click="$emit('delete', channel.index)"
           prepend-icon="mdi-delete"
         >
@@ -259,46 +280,163 @@ const getStatusText = () => {
 const getOriginalKey = (maskedKey: string) => {
   return maskedKey
 }
+
+// 获取服务类型图标
+const getServiceIcon = () => {
+  const iconMap: Record<string, string> = {
+    'openai': 'mdi-robot',
+    'openaiold': 'mdi-robot-outline',
+    'claude': 'mdi-message-processing',
+    'gemini': 'mdi-diamond-stone'
+  }
+  return iconMap[props.channel.serviceType] || 'mdi-api'
+}
+
+// 获取服务类型图标颜色
+const getServiceIconColor = () => {
+  const colorMap: Record<string, string> = {
+    'openai': 'primary',
+    'openaiold': 'info',
+    'claude': 'orange',
+    'gemini': 'purple'
+  }
+  return colorMap[props.channel.serviceType] || 'grey'
+}
+
+// 获取服务类型显示名称
+const getServiceDisplayName = () => {
+  const nameMap: Record<string, string> = {
+    'openai': 'OpenAI API',
+    'openaiold': 'OpenAI Legacy',
+    'claude': 'Claude API',
+    'gemini': 'Gemini API'
+  }
+  return nameMap[props.channel.serviceType] || 'Custom API'
+}
+
+// 获取延迟等级
+const getLatencyLevel = () => {
+  if (!props.channel.latency) return 'unknown'
+  
+  if (props.channel.latency < 200) return 'excellent'
+  if (props.channel.latency < 500) return 'good'
+  if (props.channel.latency < 1000) return 'fair'
+  return 'poor'
+}
 </script>
 
 <style scoped>
 .channel-card {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafe 100%);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(20px);
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.08),
+    0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 .channel-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
-}
-
-.channel-card.current-channel {
-  border: 2px solid rgb(var(--v-theme-success));
-  background: linear-gradient(135deg, 
-    rgba(var(--v-theme-success), 0.08) 0%, 
-    rgba(var(--v-theme-success), 0.03) 50%,
-    rgba(var(--v-theme-success), 0.08) 100%);
+  transform: translateY(-6px) scale(1.02);
   box-shadow: 
-    0 0 0 2px rgba(var(--v-theme-success), 0.2),
-    0 8px 32px rgba(var(--v-theme-success), 0.15),
-    0 0 20px rgba(var(--v-theme-success), 0.1);
-  transform: translateY(-1px) scale(1.02);
+    0 20px 40px rgba(0, 0, 0, 0.12),
+    0 8px 24px rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.08);
 }
 
-.channel-card.current-channel::before {
+/* 渐变头部背景 */
+.card-header-gradient {
+  background: linear-gradient(135deg, 
+    rgba(33, 150, 243, 0.08) 0%, 
+    rgba(33, 150, 243, 0.03) 50%,
+    rgba(156, 39, 176, 0.05) 100%);
+  position: relative;
+}
+
+.card-header-gradient::before {
   content: '';
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(45deg, 
-    transparent 30%, 
-    rgba(var(--v-theme-success), 0.05) 50%,
-    transparent 70%);
-  pointer-events: none;
+  background: linear-gradient(90deg, 
+    transparent 0%, 
+    rgba(255, 255, 255, 0.4) 50%, 
+    transparent 100%);
+  transform: translateX(-100%);
   animation: shimmer 3s ease-in-out infinite;
+}
+
+/* 服务图标包装器 */
+.service-icon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.6) 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  transition: all 0.3s ease;
+}
+
+.channel-card:hover .service-icon-wrapper {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  border-color: rgba(255, 255, 255, 0.9);
+}
+
+/* 渠道标题样式 */
+.channel-title {
+  color: #1a1a1a;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+}
+
+/* 芯片样式优化 */
+.service-chip, .current-chip {
+  backdrop-filter: blur(10px);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+/* 当前渠道特殊样式 */
+.channel-card.current-channel {
+  background: linear-gradient(145deg, 
+    #ffffff 0%, 
+    rgba(76, 175, 80, 0.04) 50%,
+    #f8fff8 100%);
+  border: 2px solid rgba(76, 175, 80, 0.4);
+  box-shadow: 
+    0 8px 32px rgba(76, 175, 80, 0.15),
+    0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px) scale(1.01);
+}
+
+.channel-card.current-channel .card-header-gradient {
+  background: linear-gradient(135deg, 
+    rgba(76, 175, 80, 0.12) 0%, 
+    rgba(76, 175, 80, 0.06) 50%,
+    rgba(139, 195, 74, 0.08) 100%);
+}
+
+.channel-card.current-channel .service-icon-wrapper {
+  background: linear-gradient(135deg, 
+    rgba(76, 175, 80, 0.1) 0%, 
+    rgba(255, 255, 255, 0.9) 100%);
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.15);
+  border-color: rgba(76, 175, 80, 0.2);
+}
+
+.channel-card.current-channel:hover {
+  transform: translateY(-8px) scale(1.03);
+  box-shadow: 
+    0 24px 48px rgba(76, 175, 80, 0.2),
+    0 12px 32px rgba(0, 0, 0, 0.12);
+  border-color: rgba(76, 175, 80, 0.6);
 }
 
 @keyframes shimmer {
@@ -306,30 +444,121 @@ const getOriginalKey = (maskedKey: string) => {
   100% { transform: translateX(100%); }
 }
 
-.channel-card.current-channel:hover {
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 
-    0 0 0 2px rgba(var(--v-theme-success), 0.3),
-    0 12px 40px rgba(var(--v-theme-success), 0.2),
-    0 0 30px rgba(var(--v-theme-success), 0.15);
+/* 状态指示器样式 */
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  transition: all 0.3s ease;
 }
 
-/* 当前渠道标题发光效果 */
-.channel-card.current-channel .v-card-title {
-  position: relative;
+.status-badge.status-healthy {
+  background: rgba(76, 175, 80, 0.08);
+  color: #2e7d32;
+  border-color: rgba(76, 175, 80, 0.2);
 }
 
-.channel-card.current-channel .v-card-title::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, 
-    transparent, 
-    rgba(var(--v-theme-success), 0.6), 
-    transparent);
-  border-radius: 1px;
+.status-badge.status-error {
+  background: rgba(244, 67, 54, 0.08);
+  color: #c62828;
+  border-color: rgba(244, 67, 54, 0.2);
+}
+
+.status-badge.status-unknown {
+  background: rgba(158, 158, 158, 0.08);
+  color: #616161;
+  border-color: rgba(158, 158, 158, 0.2);
+}
+
+.status-text {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* 延迟指示器样式 */
+.latency-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  transition: all 0.3s ease;
+}
+
+.latency-badge.latency-excellent {
+  background: rgba(76, 175, 80, 0.1);
+  color: #2e7d32;
+  border-color: rgba(76, 175, 80, 0.3);
+}
+
+.latency-badge.latency-good {
+  background: rgba(255, 193, 7, 0.1);
+  color: #f57c00;
+  border-color: rgba(255, 193, 7, 0.3);
+}
+
+.latency-badge.latency-fair {
+  background: rgba(255, 152, 0, 0.1);
+  color: #e65100;
+  border-color: rgba(255, 152, 0, 0.3);
+}
+
+.latency-badge.latency-poor {
+  background: rgba(244, 67, 54, 0.1);
+  color: #c62828;
+  border-color: rgba(244, 67, 54, 0.3);
+}
+
+.latency-text {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* 操作按钮样式 */
+.action-buttons {
+  margin-top: 8px;
+}
+
+.action-btn {
+  backdrop-filter: blur(10px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.action-btn.primary-action {
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.action-btn.danger-action:hover {
+  background: rgba(244, 67, 54, 0.1);
+  color: #c62828;
+}
+
+.action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 动画效果 */
+.channel-card {
+  animation: slideInUp 0.6s ease-out;
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>
