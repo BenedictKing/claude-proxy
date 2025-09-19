@@ -3,7 +3,7 @@
     class="channel-card h-100"
     :class="{ 'current-channel': isCurrent }"
     :data-pinned="channel.pinned"
-    elevation="6"
+    elevation="0"
     rounded="xl"
     hover
   >
@@ -37,6 +37,7 @@
             variant="text"
             :color="channel.pinned ? 'warning' : 'grey'"
             class="pin-btn"
+            rounded="lg"
             @click="$emit('togglePin', channel.index)"
           >
             <v-icon size="16">
@@ -49,6 +50,7 @@
             size="small"
             variant="flat"
             density="comfortable"
+            rounded="lg"
             class="service-chip"
           >
             {{ channel.serviceType.toUpperCase() }}
@@ -59,6 +61,7 @@
             size="small"
             variant="flat"
             density="comfortable"
+            rounded="lg"
             class="current-chip"
           >
             <v-icon start size="small">mdi-check-circle</v-icon>
@@ -92,6 +95,7 @@
             size="x-small"
             variant="tonal"
             density="compact"
+            rounded="md"
           >
             {{ channel.apiKeys.length }}
           </v-chip>
@@ -122,7 +126,7 @@
       </div>
 
       <!-- API密钥管理 -->
-      <v-expansion-panels variant="accordion" class="mb-4">
+      <v-expansion-panels variant="accordion" rounded="lg" class="mb-4">
         <v-expansion-panel>
           <v-expansion-panel-title>
             <div class="d-flex align-center ga-2">
@@ -138,6 +142,7 @@
                 color="primary"
                 icon
                 variant="elevated"
+                rounded="lg"
                 @click="$emit('addKey', channel.index)"
               >
                 <v-icon>mdi-plus</v-icon>
@@ -156,6 +161,7 @@
                   color="error"
                   icon
                   variant="text"
+                  rounded="md"
                   @click="$emit('removeKey', channel.index, getOriginalKey(key))"
                 >
                   <v-icon size="small">mdi-close</v-icon>
@@ -177,6 +183,7 @@
           size="small"
           color="success"
           variant="flat"
+          rounded="lg"
           class="action-btn primary-action"
           @click="$emit('setCurrent', channel.index)"
           prepend-icon="mdi-check-circle"
@@ -188,6 +195,7 @@
           size="small"
           color="primary"
           variant="outlined"
+          rounded="lg"
           class="action-btn"
           @click="$emit('ping', channel.index)"
           prepend-icon="mdi-speedometer"
@@ -199,6 +207,7 @@
           size="small"
           color="info"
           variant="outlined"
+          rounded="lg"
           class="action-btn"
           @click="$emit('edit', channel)"
           prepend-icon="mdi-pencil"
@@ -210,6 +219,7 @@
           size="small"
           color="error"
           variant="text"
+          rounded="lg"
           class="action-btn danger-action"
           @click="$emit('delete', channel.index)"
           prepend-icon="mdi-delete"
@@ -346,19 +356,25 @@ const getLatencyLevel = () => {
   position: relative;
   overflow: hidden;
   background: linear-gradient(145deg, #ffffff 0%, #f8fafe 100%);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   backdrop-filter: blur(20px);
   box-shadow: 
     0 4px 16px rgba(0, 0, 0, 0.08),
     0 1px 4px rgba(0, 0, 0, 0.04);
+  border-radius: 16px;
 }
 
-.channel-card:hover {
+/* 普通卡片在非当前状态下的样式 */
+.channel-card:not(.current-channel) {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.channel-card:not(.current-channel):hover {
   transform: translateY(-6px) scale(1.02);
   box-shadow: 
     0 20px 40px rgba(0, 0, 0, 0.12),
     0 8px 24px rgba(0, 0, 0, 0.08);
-  border-color: rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.12);
 }
 
 /* 渐变头部背景 */
@@ -424,7 +440,7 @@ const getLatencyLevel = () => {
     #ffffff 0%, 
     rgba(76, 175, 80, 0.04) 50%,
     #f8fff8 100%);
-  border: 2px solid rgba(76, 175, 80, 0.4);
+  border: 2px solid rgba(76, 175, 80, 0.4) !important;
   box-shadow: 
     0 8px 32px rgba(76, 175, 80, 0.15),
     0 4px 16px rgba(0, 0, 0, 0.08);
@@ -451,7 +467,7 @@ const getLatencyLevel = () => {
   box-shadow: 
     0 24px 48px rgba(76, 175, 80, 0.2),
     0 12px 32px rgba(0, 0, 0, 0.12);
-  border-color: rgba(76, 175, 80, 0.6);
+  border-color: rgba(76, 175, 80, 0.6) !important;
 }
 
 @keyframes shimmer {
@@ -543,7 +559,7 @@ const getLatencyLevel = () => {
 .action-btn {
   backdrop-filter: blur(10px);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 8px;
+  border-radius: 12px !important;
   font-weight: 500;
 }
 
@@ -566,7 +582,7 @@ const getLatencyLevel = () => {
   min-width: 32px !important;
   width: 32px;
   height: 32px;
-  border-radius: 8px !important;
+  border-radius: 12px !important;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   backdrop-filter: blur(8px);
   background: rgba(255, 255, 255, 0.1);
