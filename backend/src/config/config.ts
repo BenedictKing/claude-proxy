@@ -236,12 +236,16 @@ class ConfigManager {
     return currentUpstream
   }
 
-  getNextApiKey(upstream: UpstreamConfig): string {
+  getNextApiKey(upstream: UpstreamConfig, failedKeys: Set<string> = new Set()): string {
     if (upstream.apiKeys.length === 0) {
       throw new Error(`上游 "${upstream.name}" 没有可用的API密钥`)
     }
 
-    const keys = upstream.apiKeys
+    const keys = upstream.apiKeys.filter(key => !failedKeys.has(key))
+    
+    if (keys.length === 0) {
+      throw new Error(`上游 "${upstream.name}" 的所有API密钥都已失效`)
+    }
 
     switch (this.config.loadBalance) {
       case 'round-robin': {
@@ -263,7 +267,8 @@ class ConfigManager {
       case 'failover':
       default: {
         const selectedKey = keys[0]
-        console.log(`[${new Date().toISOString()}] 故障转移选择密钥 ${maskApiKey(selectedKey)} (主密钥)`)
+        const keyIndex = upstream.apiKeys.indexOf(selectedKey) + 1
+        console.log(`[${new Date().toISOString()}] 故障转移选择密钥 ${maskApiKey(selectedKey)} (${keyIndex}/${upstream.apiKeys.length})`)
         return selectedKey
       }
     }

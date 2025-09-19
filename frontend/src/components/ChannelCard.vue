@@ -262,8 +262,74 @@ const getOriginalKey = (maskedKey: string) => {
 </script>
 
 <style scoped>
+.channel-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.channel-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+}
+
 .channel-card.current-channel {
   border: 2px solid rgb(var(--v-theme-success));
-  box-shadow: 0 0 0 2px rgba(var(--v-theme-success), 0.2);
+  background: linear-gradient(135deg, 
+    rgba(var(--v-theme-success), 0.08) 0%, 
+    rgba(var(--v-theme-success), 0.03) 50%,
+    rgba(var(--v-theme-success), 0.08) 100%);
+  box-shadow: 
+    0 0 0 2px rgba(var(--v-theme-success), 0.2),
+    0 8px 32px rgba(var(--v-theme-success), 0.15),
+    0 0 20px rgba(var(--v-theme-success), 0.1);
+  transform: translateY(-1px) scale(1.02);
+}
+
+.channel-card.current-channel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, 
+    transparent 30%, 
+    rgba(var(--v-theme-success), 0.05) 50%,
+    transparent 70%);
+  pointer-events: none;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.channel-card.current-channel:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 
+    0 0 0 2px rgba(var(--v-theme-success), 0.3),
+    0 12px 40px rgba(var(--v-theme-success), 0.2),
+    0 0 30px rgba(var(--v-theme-success), 0.15);
+}
+
+/* 当前渠道标题发光效果 */
+.channel-card.current-channel .v-card-title {
+  position: relative;
+}
+
+.channel-card.current-channel .v-card-title::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(var(--v-theme-success), 0.6), 
+    transparent);
+  border-radius: 1px;
 }
 </style>

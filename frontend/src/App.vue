@@ -44,7 +44,7 @@
         <!-- 统计卡片 -->
         <v-row class="mb-6">
           <v-col cols="12" sm="6" md="3">
-            <v-card elevation="3" class="h-100">
+            <v-card elevation="3" class="h-100 stat-card" hover>
               <v-card-text class="pb-2">
                 <div class="d-flex align-center justify-space-between">
                   <div>
@@ -189,13 +189,16 @@
 
         <!-- 渠道列表 -->
         <v-row v-if="channelsData.channels?.length">
-          <v-col
-            v-for="channel in channelsData.channels"
-            :key="channel.index"
-            cols="12"
-            md="6"
-            xl="4"
-          >
+          <transition-group name="channel-list" tag="div" class="d-contents">
+            <v-col
+              v-for="channel in sortedChannels"
+              :key="channel.index"
+              cols="12"
+              md="6"
+              lg="4"
+              xl="4"
+              class="channel-col"
+            >
             <ChannelCard
               :channel="channel"
               :is-current="channel.index === channelsData.current"
@@ -206,7 +209,8 @@
               @remove-key="removeApiKey"
               @ping="pingChannel"
             />
-          </v-col>
+            </v-col>
+          </transition-group>
         </v-row>
 
         <!-- 空状态 -->
@@ -319,6 +323,25 @@ const getCurrentChannelName = () => {
 const currentChannelType = computed(() => {
   const current = channelsData.value.channels?.find(c => c.index === channelsData.value.current)
   return current?.serviceType?.toUpperCase() || ''
+})
+
+// 自动排序渠道：当前渠道排在最前面
+const sortedChannels = computed(() => {
+  if (!channelsData.value.channels) return []
+  
+  const channels = [...channelsData.value.channels]
+  
+  // 将当前渠道排在最前面，其他渠道按原有顺序排列
+  return channels.sort((a, b) => {
+    const aIsCurrent = a.index === channelsData.value.current
+    const bIsCurrent = b.index === channelsData.value.current
+    
+    if (aIsCurrent && !bIsCurrent) return -1
+    if (!aIsCurrent && bIsCurrent) return 1
+    
+    // 保持原有顺序
+    return a.index - b.index
+  })
 })
 
 // Toast工具函数
@@ -562,5 +585,35 @@ onMounted(async () => {
     padding-left: 12px !important;
     padding-right: 12px !important;
   }
+}
+
+/* 渠道列表动画效果 */
+.d-contents {
+  display: contents;
+}
+
+.channel-col {
+  transition: all 0.4s ease;
+  max-width: 550px;
+  margin: 0 auto;
+}
+
+.channel-list-enter-active,
+.channel-list-leave-active {
+  transition: all 0.4s ease;
+}
+
+.channel-list-enter-from {
+  opacity: 0;
+  transform: translateY(30px) scale(0.95);
+}
+
+.channel-list-leave-to {
+  opacity: 0;
+  transform: translateY(-30px) scale(0.95);
+}
+
+.channel-list-move {
+  transition: transform 0.4s ease;
 }
 </style>

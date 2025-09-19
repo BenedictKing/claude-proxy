@@ -82,6 +82,97 @@
               />
             </v-col>
 
+            <!-- 模型重定向配置 -->
+            <v-col cols="12" v-if="form.serviceType">
+              <v-card variant="outlined" rounded="lg">
+                <v-card-title class="d-flex align-center justify-space-between pa-4 pb-2">
+                  <div class="d-flex align-center ga-2">
+                    <v-icon color="secondary">mdi-swap-horizontal</v-icon>
+                    <span class="text-body-1 font-weight-bold">模型重定向 (可选)</span>
+                  </div>
+                  <v-chip size="small" color="secondary" variant="tonal">
+                    自动转换模型名称
+                  </v-chip>
+                </v-card-title>
+
+                <v-card-text class="pt-2">
+                  <div class="text-body-2 text-medium-emphasis mb-4">
+                    配置模型名称映射，将请求中的模型名重定向到目标模型。例如：将 "opus" 重定向到 "claude-3-5-sonnet"
+                  </div>
+
+                  <!-- 现有映射列表 -->
+                  <div v-if="Object.keys(form.modelMapping).length" class="mb-4">
+                    <v-list density="compact" class="bg-transparent">
+                      <v-list-item 
+                        v-for="[source, target] in Object.entries(form.modelMapping)"
+                        :key="source"
+                        class="mb-2"
+                        rounded="lg"
+                        variant="tonal"
+                        color="surface-variant"
+                      >
+                        <template v-slot:prepend>
+                          <v-icon size="small" color="medium-emphasis">mdi-arrow-right</v-icon>
+                        </template>
+                        
+                        <v-list-item-title>
+                          <div class="d-flex align-center ga-2">
+                            <code class="text-caption">{{ source }}</code>
+                            <v-icon size="small">mdi-arrow-right</v-icon>
+                            <code class="text-caption">{{ target }}</code>
+                          </div>
+                        </v-list-item-title>
+
+                        <template v-slot:append>
+                          <v-btn
+                            size="small"
+                            color="error"
+                            icon
+                            variant="text"
+                            @click="removeModelMapping(source)"
+                          >
+                            <v-icon size="small">mdi-close</v-icon>
+                          </v-btn>
+                        </template>
+                      </v-list-item>
+                    </v-list>
+                  </div>
+
+                  <!-- 添加新映射 -->
+                  <div class="d-flex align-center ga-2">
+                    <v-text-field
+                      v-model="newMapping.source"
+                      label="源模型名"
+                      placeholder="例如：opus"
+                      variant="outlined"
+                      density="comfortable"
+                      hide-details
+                      class="flex-1-1"
+                    />
+                    <v-icon>mdi-arrow-right</v-icon>
+                    <v-text-field
+                      v-model="newMapping.target"
+                      label="目标模型名"
+                      placeholder="例如：claude-3-5-sonnet"
+                      variant="outlined"
+                      density="comfortable"
+                      hide-details
+                      class="flex-1-1"
+                      @keyup.enter="addModelMapping"
+                    />
+                    <v-btn
+                      color="secondary"
+                      variant="elevated"
+                      @click="addModelMapping"
+                      :disabled="!newMapping.source.trim() || !newMapping.target.trim()"
+                    >
+                      添加
+                    </v-btn>
+                  </div>
+                </v-card-text>
+              </v-card>
+            </v-col>
+
             <!-- API密钥管理 -->
             <v-col cols="12">
               <v-card variant="outlined" rounded="lg">
@@ -214,11 +305,18 @@ const form = reactive({
   serviceType: '' as 'openai' | 'openaiold' | 'gemini' | 'claude' | '',
   baseUrl: '',
   description: '',
-  apiKeys: [] as string[]
+  apiKeys: [] as string[],
+  modelMapping: {} as Record<string, string>
 })
 
 // 新API密钥输入
 const newApiKey = ref('')
+
+// 新模型映射输入
+const newMapping = reactive({
+  source: '',
+  target: ''
+})
 
 // 表单验证错误
 const errors = reactive({
@@ -282,7 +380,10 @@ const resetForm = () => {
   form.baseUrl = ''
   form.description = ''
   form.apiKeys = []
+  form.modelMapping = {}
   newApiKey.value = ''
+  newMapping.source = ''
+  newMapping.target = ''
   
   // 清除错误信息
   errors.name = ''
@@ -296,6 +397,7 @@ const loadChannelData = (channel: Channel) => {
   form.baseUrl = channel.baseUrl
   form.description = channel.description || ''
   form.apiKeys = [...channel.apiKeys]
+  form.modelMapping = { ...(channel.modelMapping || {}) }
 }
 
 const addApiKey = () => {
@@ -310,6 +412,20 @@ const removeApiKey = (index: number) => {
   form.apiKeys.splice(index, 1)
 }
 
+const addModelMapping = () => {
+  const source = newMapping.source.trim()
+  const target = newMapping.target.trim()
+  if (source && target && !form.modelMapping[source]) {
+    form.modelMapping[source] = target
+    newMapping.source = ''
+    newMapping.target = ''
+  }
+}
+
+const removeModelMapping = (source: string) => {
+  delete form.modelMapping[source]
+}
+
 const handleSubmit = async () => {
   if (!formRef.value) return
   
@@ -322,7 +438,8 @@ const handleSubmit = async () => {
     serviceType: form.serviceType as 'openai' | 'openaiold' | 'gemini' | 'claude',
     baseUrl: form.baseUrl.trim().replace(/\/$/, ''), // 移除末尾斜杠
     description: form.description.trim(),
-    apiKeys: form.apiKeys.filter(key => key.trim())
+    apiKeys: form.apiKeys.filter(key => key.trim()),
+    modelMapping: Object.keys(form.modelMapping).length > 0 ? form.modelMapping : undefined
   }
   
   emit('save', channelData)

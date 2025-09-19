@@ -27,14 +27,14 @@ claude-proxy/
 - `VITE_APP_ENV` - 应用环境标识
 
 #### 开发环境专用变量
-- `VITE_BACKEND_URL` - 完整后端URL，默认 `http://localhost:4444`
+- `VITE_BACKEND_URL` - 完整后端URL，默认 `http://localhost:3000`
 - `VITE_FRONTEND_PORT` - 前端开发服务器端口，默认 `5173`
 
 ### 后端配置
 
 后端端口通过以下方式配置：
 ```typescript
-const PORT = process.env.PORT || 4444
+const PORT = process.env.PORT || 3000
 ```
 
 ## 配置文件内容
@@ -44,7 +44,7 @@ const PORT = process.env.PORT || 4444
 # 前端环境配置
 
 # 后端API服务器配置
-VITE_BACKEND_URL=http://localhost:4444
+VITE_BACKEND_URL=http://localhost:3000
 
 # 前端开发服务器配置
 VITE_FRONTEND_PORT=5173
@@ -59,7 +59,7 @@ VITE_PROXY_API_PATH=/v1
 # 开发环境配置
 
 # 后端API服务器配置
-VITE_BACKEND_URL=http://localhost:4444
+VITE_BACKEND_URL=http://localhost:3000
 
 # 前端开发服务器配置  
 VITE_FRONTEND_PORT=5173
@@ -126,7 +126,7 @@ server: {
 
 ### 开发环境启动
 ```bash
-# 启动后端（端口 4444）
+# 启动后端（端口 3000）
 cd backend && bun run dev
 
 # 启动前端（端口 5173）
@@ -180,7 +180,7 @@ VITE_FRONTEND_PORT=3000
 ```javascript
 console.log('🔗 API Configuration:', {
   API_BASE: '/api',
-  BACKEND_URL: 'http://localhost:4444',
+  BACKEND_URL: 'http://localhost:3000',
   IS_DEV: true,
   IS_PROD: false
 })
