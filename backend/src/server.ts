@@ -206,7 +206,7 @@ app.post('/v1/messages', async (req, res) => {
     let lastError: Error | null = null
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
-      let apiKey: string
+      let apiKey: string | undefined
       try {
         // 获取API密钥（排除已失败的密钥）
         apiKey = configManager.getNextApiKey(upstream, failedKeys)
