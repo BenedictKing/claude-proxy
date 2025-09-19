@@ -384,6 +384,8 @@ const getLatencyLevel = () => {
     rgba(33, 150, 243, 0.03) 50%,
     rgba(156, 39, 176, 0.05) 100%);
   position: relative;
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
 }
 
 .card-header-gradient::before {
