@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { Agent, fetch as undiciFetch } from 'undici'
 import { configManager } from '../config/config'
 import { maskApiKey } from '../utils/index'
 
@@ -172,10 +173,19 @@ router.get('/api/ping/:id', async (req, res) => {
           break
       }
       
-      await fetch(testUrl, {
-        method: 'HEAD',
-        signal: controller.signal
-      })
+      const isBun = typeof (globalThis as any).Bun !== 'undefined'
+      if (isBun) {
+        const bunOpts: any = {}
+        if (channel.insecureSkipVerify) {
+          bunOpts.tls = { rejectUnauthorized: false }
+        }
+        await fetch(testUrl, { method: 'HEAD', signal: controller.signal, ...bunOpts } as any)
+      } else {
+        const dispatcher = channel.insecureSkipVerify
+          ? new Agent({ connect: { rejectUnauthorized: false, checkServerIdentity: () => undefined } as any })
+          : undefined
+        await undiciFetch(testUrl, { method: 'HEAD', signal: controller.signal, dispatcher } as any)
+      }
       
       clearTimeout(timeoutId)
       const latency = Date.now() - startTime
