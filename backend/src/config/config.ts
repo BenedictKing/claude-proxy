@@ -227,13 +227,32 @@ class ConfigManager {
       throw new Error('没有配置任何带有API密钥的上游')
     }
 
-    const currentUpstream = this.config.upstream[this.config.currentUpstream]
-    if (!currentUpstream || currentUpstream.apiKeys.length === 0) {
-      // 如果当前选定的上游不可用，则抛出错误，而不是自动切换
-      throw new Error(`当前选定的上游 "${currentUpstream?.name || this.config.currentUpstream}" 没有可用的API密钥`)
-    }
+    let selectedUpstream: UpstreamConfig
 
-    return currentUpstream
+    switch (this.config.loadBalance) {
+      case 'random': {
+        const randomIndex = Math.floor(Math.random() * upstreams.length)
+        selectedUpstream = upstreams[randomIndex]
+        console.log(`[${new Date().toISOString()}] 随机选择上游: ${selectedUpstream.name}`)
+        return selectedUpstream
+      }
+      case 'round-robin': {
+        this.requestCount++
+        const selectedIndex = (this.requestCount - 1) % upstreams.length
+        selectedUpstream = upstreams[selectedIndex]
+        console.log(`[${new Date().toISOString()}] 轮询选择上游: ${selectedUpstream.name}`)
+        return selectedUpstream
+      }
+      case 'failover':
+      default: {
+        const currentUpstream = this.config.upstream[this.config.currentUpstream]
+        if (!currentUpstream || currentUpstream.apiKeys.length === 0) {
+          // 如果当前选定的上游不可用，则抛出错误，而不是自动切换
+          throw new Error(`当前选定的上游 "${currentUpstream?.name || this.config.currentUpstream}" 没有可用的API密钥`)
+        }
+        return currentUpstream
+      }
+    }
   }
 
   getNextApiKey(upstream: UpstreamConfig, failedKeys: Set<string> = new Set()): string {
