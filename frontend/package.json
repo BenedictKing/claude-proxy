@@ -5,9 +5,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "SASS_SILENCE_DEPRECATIONS=legacy-js-api vite",
-    "build": "SASS_SILENCE_DEPRECATIONS=legacy-js-api vue-tsc && SASS_SILENCE_DEPRECATIONS=legacy-js-api vite build",
-    "preview": "SASS_SILENCE_DEPRECATIONS=legacy-js-api vite preview",
+    "dev": "vite",
+    "build": "vue-tsc && vite build",
+    "preview": "vite preview",
     "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {

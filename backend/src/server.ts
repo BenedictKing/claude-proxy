@@ -11,7 +11,7 @@ import { envConfigManager } from './config/env'
 import { maskApiKey } from './utils/index'
 import webRoutes from './api/web-routes'
 import chokidar from 'chokidar'
-import { Agent } from 'undici'
+import { Agent, fetch as undiciFetch } from 'undici'
 
 // 敏感头统一掩码配置与函数
 const SENSITIVE_HEADER_KEYS = new Set(['authorization', 'x-api-key', 'x-goog-api-key'])
@@ -264,21 +264,27 @@ app.post('/v1/messages', async (req, res) => {
           }
         }
 
-        // 根据配置决定是否跳过TLS验证
-        const fetchOptions: any = {}
-        if (upstream.insecureSkipVerify) {
-          if (isDevelopment) {
+        // 调用上游（Bun 与 Node 使用不同的选项）
+        const isBun = typeof (globalThis as any).Bun !== 'undefined'
+        if (isBun) {
+          const bunOpts: any = {}
+          if (upstream.insecureSkipVerify) {
             console.log(`[${new Date().toISOString()}] ⚠️ 正在跳过对 ${providerRequest.url} 的TLS证书验证`)
+            bunOpts.tls = { rejectUnauthorized: false }
           }
-          fetchOptions.dispatcher = new Agent({
-            connect: {
-              rejectUnauthorized: false
+          providerResponse = await fetch(providerRequest as any, bunOpts)
+        } else {
+          const fetchOptions: any = {}
+          if (upstream.insecureSkipVerify) {
+            console.log(`[${new Date().toISOString()}] ⚠️ 正在跳过对 ${providerRequest.url} 的TLS证书验证`)
+            const insecureConnect: any = {
+              rejectUnauthorized: false,
+              checkServerIdentity: () => undefined
             }
-          })
+            fetchOptions.dispatcher = new Agent({ connect: insecureConnect })
+          }
+          providerResponse = await undiciFetch(providerRequest as any, fetchOptions)
         }
-
-        // 调用上游
-        providerResponse = await fetch(providerRequest, fetchOptions)
 
         // 检查响应是否成功或是否需要failover
         if (providerResponse.ok) {

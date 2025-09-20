@@ -232,14 +232,30 @@
                         class="mb-2"
                         rounded="lg"
                         variant="tonal"
-                        color="surface-variant"
+                        :color="duplicateKeyIndex === index ? 'error' : 'surface-variant'"
+                        :class="{ 'animate-pulse': duplicateKeyIndex === index }"
                       >
                         <template v-slot:prepend>
-                          <v-icon size="small" color="primary">mdi-key</v-icon>
+                          <v-icon 
+                            size="small" 
+                            :color="duplicateKeyIndex === index ? 'error' : 'primary'"
+                          >
+                            {{ duplicateKeyIndex === index ? 'mdi-alert' : 'mdi-key' }}
+                          </v-icon>
                         </template>
                         
                         <v-list-item-title>
-                          <code class="text-caption">{{ maskApiKey(key) }}</code>
+                          <div class="d-flex align-center justify-space-between">
+                            <code class="text-caption">{{ maskApiKey(key) }}</code>
+                            <v-chip 
+                              v-if="duplicateKeyIndex === index"
+                              size="x-small"
+                              color="error"
+                              variant="text"
+                            >
+                              重复密钥
+                            </v-chip>
+                          </div>
                         </v-list-item-title>
 
                         <template v-slot:append>
@@ -268,7 +284,9 @@
                       density="comfortable"
                       type="password"
                       @keyup.enter="addApiKey"
-                      hide-details
+                      :error="!!apiKeyError"
+                      :error-messages="apiKeyError"
+                      @input="apiKeyError = ''; duplicateKeyIndex = -1"
                     />
                     <v-btn
                       color="primary"
@@ -358,8 +376,15 @@ const form = reactive({
   modelMapping: {} as Record<string, string>
 })
 
+// 原始密钥映射 (掩码密钥 -> 原始密钥)
+const originalKeyMap = ref<Map<string, string>>(new Map())
+
 // 新API密钥输入
 const newApiKey = ref('')
+
+// 密钥重复检测状态
+const apiKeyError = ref('')
+const duplicateKeyIndex = ref(-1)
 
 // 新模型映射输入
 const newMapping = reactive({
@@ -457,6 +482,13 @@ const resetForm = () => {
   newMapping.source = ''
   newMapping.target = ''
   
+  // 清空原始密钥映射
+  originalKeyMap.value.clear()
+  
+  // 清空密钥错误状态
+  apiKeyError.value = ''
+  duplicateKeyIndex.value = -1
+  
   // 清除错误信息
   errors.name = ''
   errors.serviceType = ''
@@ -470,20 +502,77 @@ const loadChannelData = (channel: Channel) => {
   form.website = channel.website || ''
   form.insecureSkipVerify = !!channel.insecureSkipVerify
   form.description = channel.description || ''
+  
+  // 编辑模式下，channel.apiKeys 是掩码的，需要标记为已存在的密钥
+  // 这些密钥在提交时将被保持原样（不会修改）
   form.apiKeys = [...channel.apiKeys]
+  
+  // 清空原始密钥映射（编辑模式下，我们保持现有密钥不变）
+  originalKeyMap.value.clear()
+  
   form.modelMapping = { ...(channel.modelMapping || {}) }
 }
 
 const addApiKey = () => {
   const key = newApiKey.value.trim()
-  if (key && !form.apiKeys.includes(key)) {
-    form.apiKeys.push(key)
+  if (!key) return
+
+  // 重置错误状态
+  apiKeyError.value = ''
+  duplicateKeyIndex.value = -1
+
+  // 检查是否与现有密钥重复
+  const duplicateIndex = findDuplicateKeyIndex(key)
+  if (duplicateIndex !== -1) {
+    apiKeyError.value = '该密钥已存在'
+    duplicateKeyIndex.value = duplicateIndex
+    // 清除输入框，让用户重新输入
     newApiKey.value = ''
+    return
   }
+
+  // 新添加的密钥：显示掩码版本，但保存原始版本的映射
+  const maskedKey = maskApiKey(key)
+  form.apiKeys.push(maskedKey)
+  originalKeyMap.value.set(maskedKey, key)
+  newApiKey.value = ''
+}
+
+// 检查密钥是否重复，返回重复密钥的索引，如果没有重复返回-1
+const findDuplicateKeyIndex = (newKey: string): number => {
+  for (let i = 0; i < form.apiKeys.length; i++) {
+    const existingKey = form.apiKeys[i]
+    
+    // 如果是新添加的密钥（有原始密钥映射），比较原始密钥
+    if (originalKeyMap.value.has(existingKey)) {
+      if (originalKeyMap.value.get(existingKey) === newKey) {
+        return i
+      }
+    } else {
+      // 如果是编辑模式下的现有密钥（已掩码），无法完全比较
+      // 但可以通过掩码形式进行基本检查
+      if (existingKey === newKey || maskApiKey(newKey) === existingKey) {
+        return i
+      }
+    }
+  }
+  return -1
 }
 
 const removeApiKey = (index: number) => {
+  const removedKey = form.apiKeys[index]
   form.apiKeys.splice(index, 1)
+  // 清理原始密钥映射
+  originalKeyMap.value.delete(removedKey)
+  
+  // 如果删除的是当前高亮的重复密钥，清除高亮状态
+  if (duplicateKeyIndex.value === index) {
+    duplicateKeyIndex.value = -1
+    apiKeyError.value = ''
+  } else if (duplicateKeyIndex.value > index) {
+    // 如果删除的密钥在高亮密钥之前，调整高亮索引
+    duplicateKeyIndex.value--
+  }
 }
 
 const addModelMapping = () => {
@@ -506,6 +595,17 @@ const handleSubmit = async () => {
   const { valid } = await formRef.value.validate()
   if (!valid) return
   
+  // 处理API密钥：将掩码密钥转换为原始密钥（用于新添加的密钥）
+  const processedApiKeys = form.apiKeys.map(key => {
+    // 如果是新添加的密钥，使用原始密钥
+    if (originalKeyMap.value.has(key)) {
+      return originalKeyMap.value.get(key)!
+    }
+    // 如果是编辑模式下的现有密钥（已掩码），直接返回
+    // 后端会智能处理这些掩码密钥
+    return key
+  }).filter(key => key.trim())
+  
   // 类型断言，因为表单验证已经确保serviceType不为空
   const channelData = {
     name: form.name.trim(),
@@ -514,7 +614,7 @@ const handleSubmit = async () => {
     website: form.website.trim() || undefined,
     insecureSkipVerify: form.insecureSkipVerify || undefined,
     description: form.description.trim(),
-    apiKeys: form.apiKeys.filter(key => key.trim()),
+    apiKeys: processedApiKeys,
     modelMapping: Object.keys(form.modelMapping).length > 0 ? form.modelMapping : undefined
   }
   
@@ -558,3 +658,18 @@ onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
 })
 </script>
+
+<style scoped>
+.animate-pulse {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+</style>

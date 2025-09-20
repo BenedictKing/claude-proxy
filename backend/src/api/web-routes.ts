@@ -72,12 +72,39 @@ router.put('/api/channels/:id', (req, res) => {
       }
     }
 
-    // 准备更新数据。
-    // 1. 确保即使前端未传递 insecureSkipVerify（当值为 false 时），也能正确更新为 false。
-    // 2. 直接使用 req.body 中的 apiKeys，以修复在模态框中修改密钥列表无效的问题。
+    // 获取当前渠道的原始密钥
+    const currentChannel = config.upstream[id]
+    const currentMaskedKeys = currentChannel.apiKeys.map(k => maskApiKey(k))
+    
+    // 处理API密钥：过滤掉掩码密钥，保留新添加的原始密钥
+    let processedApiKeys = req.body.apiKeys || []
+    if (Array.isArray(processedApiKeys)) {
+      processedApiKeys = processedApiKeys.filter(key => {
+        // 如果是掩码密钥（与当前掩码密钥匹配），则保留原始密钥
+        const maskedIndex = currentMaskedKeys.indexOf(key)
+        if (maskedIndex !== -1) {
+          // 这是一个现有的掩码密钥，用原始密钥替换
+          return false // 先过滤掉，后面会添加原始密钥
+        }
+        // 这是新添加的原始密钥
+        return true
+      })
+      
+      // 添加仍然保留的原始密钥
+      req.body.apiKeys.forEach(key => {
+        const maskedIndex = currentMaskedKeys.indexOf(key)
+        if (maskedIndex !== -1) {
+          // 这个掩码密钥对应的原始密钥应该保留
+          processedApiKeys.push(currentChannel.apiKeys[maskedIndex])
+        }
+      })
+    }
+
+    // 准备更新数据
     const updateData = {
       ...req.body,
       insecureSkipVerify: !!req.body.insecureSkipVerify,
+      apiKeys: processedApiKeys
     };
 
     // 使用准备好的数据更新配置
@@ -132,8 +159,24 @@ router.post('/api/channels/:id/keys', (req, res) => {
 router.delete('/api/channels/:id/keys/:key', (req, res) => {
   try {
     const id = parseInt(req.params.id)
-    const apiKey = decodeURIComponent(req.params.key)
-    configManager.removeApiKey(id, apiKey)
+    const maskedKey = decodeURIComponent(req.params.key)
+    
+    // 获取当前渠道配置
+    const config = configManager.getConfig()
+    if (id < 0 || id >= config.upstream.length) {
+      return res.status(404).json({ error: '渠道未找到' })
+    }
+    
+    const channel = config.upstream[id]
+    
+    // 找到对应的原始密钥
+    const originalKey = channel.apiKeys.find(key => maskApiKey(key) === maskedKey)
+    
+    if (!originalKey) {
+      return res.status(404).json({ error: 'API密钥未找到' })
+    }
+    
+    configManager.removeApiKey(id, originalKey)
     res.json({ success: true })
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : '未知错误' })
