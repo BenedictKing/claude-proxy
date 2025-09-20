@@ -187,7 +187,7 @@
         </v-card>
 
         <!-- 渠道列表 -->
-        <v-row v-if="channelsData.channels?.length">
+        <v-row v-if="channelsData.channels?.length" justify="start">
           <transition-group name="channel-list" tag="div" class="d-contents">
             <v-col
               v-for="channel in sortedChannels"
@@ -676,7 +676,6 @@ onMounted(async () => {
 .channel-col {
   transition: all 0.4s ease;
   max-width: 640px;
-  margin: 0 auto;
 }
 
 .channel-list-enter-active,

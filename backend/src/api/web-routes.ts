@@ -12,7 +12,7 @@ router.get('/api/channels', (req, res) => {
     res.json({
       channels: config.upstream.map((u, index) => ({
         ...u,
-        apiKeys: u.apiKeys.map(k => maskApiKey(k)),
+        apiKeys: u.apiKeys, // 返回原始密钥给前端
         index,
         latency: null,
         status: 'unknown'
@@ -28,7 +28,7 @@ router.get('/api/channels', (req, res) => {
 // 添加渠道
 router.post('/api/channels', (req, res) => {
   try {
-    const { name, serviceType, baseUrl, apiKeys, description, website, insecureSkipVerify } = req.body
+    const { name, serviceType, baseUrl, apiKeys, description, website, insecureSkipVerify, modelMapping } = req.body
     
     if (!name || !serviceType || !baseUrl) {
       return res.status(400).json({ error: '缺少必填字段' })
@@ -46,7 +46,8 @@ router.post('/api/channels', (req, res) => {
       apiKeys: apiKeys || [],
       description,
       website,
-      insecureSkipVerify
+      insecureSkipVerify,
+      modelMapping
     })
     
     res.json({ success: true })
@@ -72,39 +73,11 @@ router.put('/api/channels/:id', (req, res) => {
       }
     }
 
-    // 获取当前渠道的原始密钥
-    const currentChannel = config.upstream[id]
-    const currentMaskedKeys = currentChannel.apiKeys.map(k => maskApiKey(k))
-    
-    // 处理API密钥：过滤掉掩码密钥，保留新添加的原始密钥
-    let processedApiKeys = req.body.apiKeys || []
-    if (Array.isArray(processedApiKeys)) {
-      processedApiKeys = processedApiKeys.filter(key => {
-        // 如果是掩码密钥（与当前掩码密钥匹配），则保留原始密钥
-        const maskedIndex = currentMaskedKeys.indexOf(key)
-        if (maskedIndex !== -1) {
-          // 这是一个现有的掩码密钥，用原始密钥替换
-          return false // 先过滤掉，后面会添加原始密钥
-        }
-        // 这是新添加的原始密钥
-        return true
-      })
-      
-      // 添加仍然保留的原始密钥
-      req.body.apiKeys.forEach(key => {
-        const maskedIndex = currentMaskedKeys.indexOf(key)
-        if (maskedIndex !== -1) {
-          // 这个掩码密钥对应的原始密钥应该保留
-          processedApiKeys.push(currentChannel.apiKeys[maskedIndex])
-        }
-      })
-    }
-
-    // 准备更新数据
+    // 准备更新数据，直接使用前端传来的原始密钥
     const updateData = {
       ...req.body,
       insecureSkipVerify: !!req.body.insecureSkipVerify,
-      apiKeys: processedApiKeys
+      apiKeys: req.body.apiKeys || []
     };
 
     // 使用准备好的数据更新配置
@@ -159,7 +132,7 @@ router.post('/api/channels/:id/keys', (req, res) => {
 router.delete('/api/channels/:id/keys/:key', (req, res) => {
   try {
     const id = parseInt(req.params.id)
-    const maskedKey = decodeURIComponent(req.params.key)
+    const apiKey = decodeURIComponent(req.params.key) // 前端现在传递原始密钥
     
     // 获取当前渠道配置
     const config = configManager.getConfig()
@@ -167,16 +140,7 @@ router.delete('/api/channels/:id/keys/:key', (req, res) => {
       return res.status(404).json({ error: '渠道未找到' })
     }
     
-    const channel = config.upstream[id]
-    
-    // 找到对应的原始密钥
-    const originalKey = channel.apiKeys.find(key => maskApiKey(key) === maskedKey)
-    
-    if (!originalKey) {
-      return res.status(404).json({ error: 'API密钥未找到' })
-    }
-    
-    configManager.removeApiKey(id, originalKey)
+    configManager.removeApiKey(id, apiKey)
     res.json({ success: true })
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : '未知错误' })

@@ -10,11 +10,7 @@ export interface UpstreamConfig {
   description?: string // 备注字段，用于记录渠道详细信息
   website?: string // 官方网站/控制台入口，供前端直接打开
   insecureSkipVerify?: boolean // 新增：是否跳过TLS证书验证
-  modelMapping?: {
-    opus?: string
-    sonnet?: string
-    haiku?: string
-  }
+  modelMapping?: Record<string, string> // 模型重定向映射
 }
 
 export interface Config {
@@ -29,18 +25,16 @@ export function redirectModel(model: string, upstream: UpstreamConfig): string {
     return model
   }
 
-  let modelType: 'opus' | 'sonnet' | 'haiku' | null = null
-
-  if (model.includes('opus')) {
-    modelType = 'opus'
-  } else if (model.includes('sonnet')) {
-    modelType = 'sonnet'
-  } else if (model.includes('haiku')) {
-    modelType = 'haiku'
+  // 直接检查映射中是否有匹配的键
+  if (upstream.modelMapping[model]) {
+    return upstream.modelMapping[model]
   }
 
-  if (modelType && upstream.modelMapping[modelType]) {
-    return upstream.modelMapping[modelType]!
+  // 如果没有直接匹配，检查是否有包含关系的映射
+  for (const [sourceModel, targetModel] of Object.entries(upstream.modelMapping)) {
+    if (model.includes(sourceModel) || sourceModel.includes(model)) {
+      return targetModel
+    }
   }
 
   return model

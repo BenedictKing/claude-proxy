@@ -172,7 +172,7 @@
                 :key="index"
                 class="d-flex align-center justify-space-between pa-2 bg-surface rounded"
               >
-                <code class="text-caption flex-1-1 text-truncate mr-2">{{ key }}</code>
+                <code class="text-caption flex-1-1 text-truncate mr-2">{{ maskApiKey(key) }}</code>
                 <v-btn
                   size="x-small"
                   color="error"
@@ -327,9 +327,15 @@ const getStatusTooltip = () => {
   return '尚未检测：请点击“测试延迟”进行检测'
 }
 
-// 从掩码的密钥获取原始密钥（用于删除操作）
-const getOriginalKey = (maskedKey: string) => {
-  return maskedKey
+// 掩码API密钥用于显示
+const maskApiKey = (key: string): string => {
+  if (key.length <= 10) return key.slice(0, 3) + '***' + key.slice(-2)
+  return key.slice(0, 8) + '***' + key.slice(-5)
+}
+
+// 获取原始密钥（用于删除操作），现在直接传递原始密钥
+const getOriginalKey = (originalKey: string) => {
+  return originalKey
 }
 
 // 获取服务类型图标

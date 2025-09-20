@@ -182,7 +182,6 @@
                       density="comfortable"
                       hide-details
                       class="flex-1-1"
-                      clearable
                       placeholder="选择源模型名"
                     />
                     <v-icon color="primary">mdi-arrow-right</v-icon>
@@ -503,11 +502,10 @@ const loadChannelData = (channel: Channel) => {
   form.insecureSkipVerify = !!channel.insecureSkipVerify
   form.description = channel.description || ''
   
-  // 编辑模式下，channel.apiKeys 是掩码的，需要标记为已存在的密钥
-  // 这些密钥在提交时将被保持原样（不会修改）
+  // 直接存储原始密钥，不需要映射关系
   form.apiKeys = [...channel.apiKeys]
   
-  // 清空原始密钥映射（编辑模式下，我们保持现有密钥不变）
+  // 清空原始密钥映射（现在不需要了）
   originalKeyMap.value.clear()
   
   form.modelMapping = { ...(channel.modelMapping || {}) }
@@ -531,39 +529,18 @@ const addApiKey = () => {
     return
   }
 
-  // 新添加的密钥：显示掩码版本，但保存原始版本的映射
-  const maskedKey = maskApiKey(key)
-  form.apiKeys.push(maskedKey)
-  originalKeyMap.value.set(maskedKey, key)
+  // 直接存储原始密钥
+  form.apiKeys.push(key)
   newApiKey.value = ''
 }
 
 // 检查密钥是否重复，返回重复密钥的索引，如果没有重复返回-1
 const findDuplicateKeyIndex = (newKey: string): number => {
-  for (let i = 0; i < form.apiKeys.length; i++) {
-    const existingKey = form.apiKeys[i]
-    
-    // 如果是新添加的密钥（有原始密钥映射），比较原始密钥
-    if (originalKeyMap.value.has(existingKey)) {
-      if (originalKeyMap.value.get(existingKey) === newKey) {
-        return i
-      }
-    } else {
-      // 如果是编辑模式下的现有密钥（已掩码），无法完全比较
-      // 但可以通过掩码形式进行基本检查
-      if (existingKey === newKey || maskApiKey(newKey) === existingKey) {
-        return i
-      }
-    }
-  }
-  return -1
+  return form.apiKeys.findIndex(existingKey => existingKey === newKey)
 }
 
 const removeApiKey = (index: number) => {
-  const removedKey = form.apiKeys[index]
   form.apiKeys.splice(index, 1)
-  // 清理原始密钥映射
-  originalKeyMap.value.delete(removedKey)
   
   // 如果删除的是当前高亮的重复密钥，清除高亮状态
   if (duplicateKeyIndex.value === index) {
@@ -595,16 +572,8 @@ const handleSubmit = async () => {
   const { valid } = await formRef.value.validate()
   if (!valid) return
   
-  // 处理API密钥：将掩码密钥转换为原始密钥（用于新添加的密钥）
-  const processedApiKeys = form.apiKeys.map(key => {
-    // 如果是新添加的密钥，使用原始密钥
-    if (originalKeyMap.value.has(key)) {
-      return originalKeyMap.value.get(key)!
-    }
-    // 如果是编辑模式下的现有密钥（已掩码），直接返回
-    // 后端会智能处理这些掩码密钥
-    return key
-  }).filter(key => key.trim())
+  // 直接使用原始密钥，不需要转换
+  const processedApiKeys = form.apiKeys.filter(key => key.trim())
   
   // 类型断言，因为表单验证已经确保serviceType不为空
   const channelData = {
@@ -615,7 +584,7 @@ const handleSubmit = async () => {
     insecureSkipVerify: form.insecureSkipVerify || undefined,
     description: form.description.trim(),
     apiKeys: processedApiKeys,
-    modelMapping: Object.keys(form.modelMapping).length > 0 ? form.modelMapping : undefined
+    modelMapping: form.modelMapping
   }
   
   emit('save', channelData)
