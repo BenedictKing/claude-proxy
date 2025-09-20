@@ -169,13 +169,16 @@ app.post('/v1/messages', async (req, res) => {
       return
     }
 
-    // 获取上游配置
+    // 获取当前选中的上游配置
     let upstream: UpstreamConfig
     try {
-      upstream = configManager.getNextUpstream()
+      upstream = configManager.getCurrentUpstream()
+      if (!upstream.apiKeys.length) {
+        throw new Error(`当前渠道 "${upstream.name || upstream.serviceType}" 没有配置API密钥`)
+      }
     } catch (error) {
-      console.error('获取上游配置失败:', error)
-      res.status(500).json({ error: '没有可用的上游配置' })
+      console.error('获取当前渠道配置失败:', error)
+      res.status(500).json({ error: '当前渠道配置错误或没有可用的API密钥' })
       return
     }
 
@@ -199,8 +202,8 @@ app.post('/v1/messages', async (req, res) => {
         return
     }
 
-    // 实现 failover 重试逻辑
-    const maxRetries = configManager.getConfig().loadBalance === 'failover' ? upstream.apiKeys.length : 1
+    // 实现 failover 重试逻辑 - 只在当前渠道的API密钥之间重试
+    const maxRetries = upstream.apiKeys.length
     const failedKeys = new Set<string>()
     let providerResponse: Response | null = null
     let lastError: Error | null = null
@@ -283,14 +286,14 @@ app.post('/v1/messages', async (req, res) => {
             }
             fetchOptions.dispatcher = new Agent({ connect: insecureConnect })
           }
-          providerResponse = await undiciFetch(providerRequest as any, fetchOptions)
+          providerResponse = await undiciFetch(providerRequest as any, fetchOptions) as any
         }
 
         // 检查响应是否成功或是否需要failover
-        if (providerResponse.ok) {
+        if (providerResponse && providerResponse.ok) {
           // 2xx 状态码认为是成功的
           break
-        } else {
+        } else if (providerResponse) {
           // 检查是否是需要failover的错误
           let shouldFailover = false
           let errorMessage = `上游错误: ${providerResponse.status} ${providerResponse.statusText}`
@@ -347,8 +350,8 @@ app.post('/v1/messages', async (req, res) => {
         lastError = error instanceof Error ? error : new Error(String(error))
         console.warn(`[${new Date().toISOString()}] ⚠️ API密钥失败，原因: ${lastError.message}`)
         
-        // 如果不是 failover 策略或者这是最后一次尝试，直接抛出错误
-        if (configManager.getConfig().loadBalance !== 'failover' || attempt === maxRetries - 1) {
+        // 如果这是最后一次尝试，直接抛出错误
+        if (attempt === maxRetries - 1) {
           break
         }
         
@@ -357,7 +360,7 @@ app.post('/v1/messages', async (req, res) => {
           failedKeys.add(apiKey)
           // 同时在内存中标记密钥失败
           configManager.markKeyAsFailed(apiKey)
-          console.log(`[${new Date().toISOString()}] 🔄 Failover: 将尝试下一个API密钥`)
+          console.log(`[${new Date().toISOString()}] 🔄 将尝试当前渠道的下一个API密钥`)
         } else {
           // 如果无法获取密钥（例如，所有密钥都已尝试过），则没有可重试的密钥了
           break

@@ -228,37 +228,15 @@ class ConfigManager {
   }
 
   getNextUpstream(): UpstreamConfig {
-    const upstreams = this.config.upstream.filter(u => u.apiKeys.length > 0)
-    if (upstreams.length === 0) {
-      throw new Error('没有配置任何带有API密钥的上游')
+    // 始终返回当前选中的渠道，负载均衡只应用于该渠道内的API密钥
+    const currentUpstream = this.config.upstream[this.config.currentUpstream]
+    if (!currentUpstream) {
+      throw new Error(`当前渠道索引 ${this.config.currentUpstream} 无效`)
     }
-
-    let selectedUpstream: UpstreamConfig
-
-    switch (this.config.loadBalance) {
-      case 'random': {
-        const randomIndex = Math.floor(Math.random() * upstreams.length)
-        selectedUpstream = upstreams[randomIndex]
-        console.log(`[${new Date().toISOString()}] 随机选择上游: ${selectedUpstream.name}`)
-        return selectedUpstream
-      }
-      case 'round-robin': {
-        this.requestCount++
-        const selectedIndex = (this.requestCount - 1) % upstreams.length
-        selectedUpstream = upstreams[selectedIndex]
-        console.log(`[${new Date().toISOString()}] 轮询选择上游: ${selectedUpstream.name}`)
-        return selectedUpstream
-      }
-      case 'failover':
-      default: {
-        const currentUpstream = this.config.upstream[this.config.currentUpstream]
-        if (!currentUpstream || currentUpstream.apiKeys.length === 0) {
-          // 如果当前选定的上游不可用，则抛出错误，而不是自动切换
-          throw new Error(`当前选定的上游 "${currentUpstream?.name || this.config.currentUpstream}" 没有可用的API密钥`)
-        }
-        return currentUpstream
-      }
+    if (currentUpstream.apiKeys.length === 0) {
+      throw new Error(`当前渠道 "${currentUpstream.name || currentUpstream.serviceType}" 没有配置API密钥`)
     }
+    return currentUpstream
   }
 
   // 清理过期的失败记录

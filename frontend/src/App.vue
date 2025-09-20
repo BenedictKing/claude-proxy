@@ -82,8 +82,8 @@
                 <div class="d-flex align-center justify-space-between">
                   <div>
                     <div class="text-h6 text-info font-weight-bold text-capitalize">{{ channelsData.loadBalance || 'none' }}</div>
-                    <div class="text-subtitle-1 text-medium-emphasis">负载均衡</div>
-                    <div class="text-caption text-medium-emphasis">自动分配策略</div>
+                    <div class="text-subtitle-1 text-medium-emphasis">API密钥分配</div>
+                    <div class="text-caption text-medium-emphasis">当前渠道内密钥使用策略</div>
                   </div>
                   <v-avatar size="60" color="info" variant="tonal">
                     <v-icon size="30" color="info">mdi-swap-horizontal</v-icon>
@@ -158,7 +158,7 @@
                     append-icon="mdi-chevron-down"
                     variant="elevated"
                   >
-                    负载均衡: {{ channelsData.loadBalance }}
+                    API密钥分配: {{ channelsData.loadBalance }}
                   </v-btn>
                 </template>
                 <v-list>
@@ -167,18 +167,21 @@
                       <v-icon>mdi-rotate-right</v-icon>
                     </template>
                     <v-list-item-title>轮询 (Round Robin)</v-list-item-title>
+                    <v-list-item-subtitle>按顺序依次使用当前渠道的API密钥</v-list-item-subtitle>
                   </v-list-item>
                   <v-list-item @click="updateLoadBalance('random')">
                     <template v-slot:prepend>
                       <v-icon>mdi-dice-6</v-icon>
                     </template>
                     <v-list-item-title>随机 (Random)</v-list-item-title>
+                    <v-list-item-subtitle>随机选择当前渠道的API密钥</v-list-item-subtitle>
                   </v-list-item>
                   <v-list-item @click="updateLoadBalance('failover')">
                     <template v-slot:prepend>
                       <v-icon>mdi-backup-restore</v-icon>
                     </template>
                     <v-list-item-title>故障转移 (Failover)</v-list-item-title>
+                    <v-list-item-subtitle>优先使用第一个密钥，失败时自动切换</v-list-item-subtitle>
                   </v-list-item>
                 </v-list>
               </v-menu>
