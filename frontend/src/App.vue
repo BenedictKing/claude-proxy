@@ -47,12 +47,12 @@
               <v-card-text class="pb-2">
                 <div class="d-flex align-center justify-space-between">
                   <div>
-                    <div class="text-h4 text-primary font-weight-bold">{{ channelsData.channels?.length || 0 }}</div>
+                    <div class="text-h4 text-info font-weight-bold">{{ channelsData.channels?.length || 0 }}</div>
                     <div class="text-subtitle-1 text-medium-emphasis">总渠道数</div>
                     <div class="text-caption text-medium-emphasis">已配置的API渠道</div>
                   </div>
-                  <v-avatar size="60" color="primary" variant="tonal">
-                    <v-icon size="30" color="primary">mdi-server-network</v-icon>
+                  <v-avatar size="60" color="info" variant="tonal">
+                    <v-icon size="30" color="info">mdi-server-network</v-icon>
                   </v-avatar>
                 </div>
               </v-card-text>
