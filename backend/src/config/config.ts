@@ -41,6 +41,8 @@ export function redirectModel(model: string, upstream: UpstreamConfig): string {
 }
 
 const CONFIG_FILE = path.join(process.cwd(), 'config.json')
+const BACKUP_DIR = path.join(process.cwd(), 'config.backups')
+const MAX_BACKUPS = 10
 
 const DEFAULT_CONFIG: Config = {
   upstream: [
@@ -151,10 +153,55 @@ class ConfigManager {
 
   private saveConfig(config: Config): void {
     try {
+      // 在写入新配置前，为现有配置创建时间戳备份并进行保留策略（最多10个）
+      this.backupCurrentConfig()
+
       fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2))
     } catch (error) {
       console.error('保存配置文件失败:', error)
       throw error
+    }
+  }
+
+  // 备份当前配置文件到专用目录，并保留最近的10个备份
+  private backupCurrentConfig(): void {
+    try {
+      if (!fs.existsSync(CONFIG_FILE)) return // 首次生成时无备份
+
+      // 确保备份目录存在
+      if (!fs.existsSync(BACKUP_DIR)) {
+        fs.mkdirSync(BACKUP_DIR, { recursive: true })
+      }
+
+      // 读取当前配置内容并写入到带时间戳的备份文件
+      const content = fs.readFileSync(CONFIG_FILE, 'utf-8')
+      const ts = new Date().toISOString().replace(/[:.]/g, '-')
+      const backupFile = path.join(BACKUP_DIR, `config-${ts}.json`)
+      fs.writeFileSync(backupFile, content)
+
+      // 备份轮转：仅保留最近的 MAX_BACKUPS 个
+      const entries = fs
+        .readdirSync(BACKUP_DIR)
+        .filter(f => f.startsWith('config-') && f.endsWith('.json'))
+        .map(f => ({
+          file: f,
+          mtime: fs.statSync(path.join(BACKUP_DIR, f)).mtimeMs
+        }))
+        .sort((a, b) => b.mtime - a.mtime)
+
+      if (entries.length > MAX_BACKUPS) {
+        const toRemove = entries.slice(MAX_BACKUPS)
+        for (const e of toRemove) {
+          try {
+            fs.unlinkSync(path.join(BACKUP_DIR, e.file))
+          } catch (err) {
+            console.warn('删除旧备份失败:', e.file, err)
+          }
+        }
+      }
+    } catch (err) {
+      // 备份失败不应阻止配置写入，但要记录警告
+      console.warn('备份配置文件失败（将继续写入新配置）:', err)
     }
   }
 
@@ -210,6 +257,19 @@ class ConfigManager {
     } else {
       console.log('API密钥不存在')
     }
+  }
+
+  // 将当前上游中的某个API密钥移动到列表末尾（用于余额不足等情况的降级处理）
+  deprioritizeApiKeyForCurrentUpstream(apiKey: string): void {
+    const upstream = this.config.upstream[this.config.currentUpstream]
+    const idx = upstream.apiKeys.indexOf(apiKey)
+    if (idx === -1 || idx === upstream.apiKeys.length - 1) {
+      return
+    }
+    upstream.apiKeys.splice(idx, 1)
+    upstream.apiKeys.push(apiKey)
+    this.saveConfig(this.config)
+    console.log(`[${new Date().toISOString()}] 🔽 已将API密钥移动到末尾以降低优先级: ${maskApiKey(apiKey)}`)
   }
 
   setUpstream(indexOrName: number | string): void {

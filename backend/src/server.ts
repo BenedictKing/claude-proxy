@@ -207,6 +207,10 @@ app.post('/v1/messages', async (req, res) => {
     const failedKeys = new Set<string>()
     let providerResponse: Response | null = null
     let lastError: Error | null = null
+    // 记录最后一次需要failover的上游错误，用于所有密钥都失败时回传原始错误
+    let lastFailoverError: { status: number; body?: any; text?: string } | null = null
+    // 候选降级密钥（仅当后续有密钥成功调用时，才将这些密钥移到列表末尾）
+    const deprioritizeCandidates = new Set<string>()
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       let apiKey: string | undefined
@@ -296,15 +300,18 @@ app.post('/v1/messages', async (req, res) => {
         } else if (providerResponse) {
           // 检查是否是需要failover的错误
           let shouldFailover = false
+          let isQuotaRelated = false
           let errorMessage = `上游错误: ${providerResponse.status} ${providerResponse.statusText}`
           
           // 尝试解析错误响应体来判断是否需要failover
           try {
-            const errorBody = await providerResponse.clone().json()
+            const cloneForParse = providerResponse.clone()
+            const errorBody = await cloneForParse.json()
             
             // 检查特定的错误类型：积分不足、密钥无效、余额不足等
             if (errorBody.error) {
               const errorMsg = errorBody.error.message || errorBody.error || ''
+              const errorType = (errorBody.error.type || '').toString().toLowerCase()
               if (typeof errorMsg === 'string') {
                 const lowerErrorMsg = errorMsg.toLowerCase()
                 // 这些错误应该触发failover到下一个密钥
@@ -315,9 +322,25 @@ app.post('/v1/messages', async (req, res) => {
                     lowerErrorMsg.includes('quota') ||
                     lowerErrorMsg.includes('rate limit') ||
                     lowerErrorMsg.includes('credit') ||
-                    lowerErrorMsg.includes('balance')) {
+                    lowerErrorMsg.includes('balance') ||
+                    errorType.includes('permission') ||
+                    errorType.includes('insufficient') ||
+                    errorType.includes('over_quota') ||
+                    errorType.includes('billing')) {
                   shouldFailover = true
                   errorMessage = `API密钥错误: ${errorMsg}`
+                  // 标记是否为额度/余额相关问题（供成功后降级使用）
+                  if (
+                    lowerErrorMsg.includes('积分不足') ||
+                    lowerErrorMsg.includes('insufficient') ||
+                    lowerErrorMsg.includes('credit') ||
+                    lowerErrorMsg.includes('balance') ||
+                    lowerErrorMsg.includes('quota') ||
+                    errorType.includes('over_quota') ||
+                    errorType.includes('billing')
+                  ) {
+                    isQuotaRelated = true
+                  }
                 }
               }
             }
@@ -332,20 +355,32 @@ app.post('/v1/messages', async (req, res) => {
               // 已经在上面的错误消息检查中设置了shouldFailover
             }
             
+            // 如果确定需要failover，记录原始错误体
+            if (shouldFailover) {
+              lastFailoverError = { status: providerResponse.status, body: errorBody }
+            }
           } catch (parseError) {
             // 无法解析响应体，使用状态码判断
             if (providerResponse.status === 401 || providerResponse.status === 403 || providerResponse.status >= 500) {
               shouldFailover = true
+              try {
+                const text = await providerResponse.clone().text()
+                lastFailoverError = { status: providerResponse.status, text }
+              } catch {}
             }
           }
           
-          if (shouldFailover) {
-            throw new Error(errorMessage)
-          } else {
-            // 其他错误（如模型不存在、请求格式错误等）不需要failover，直接返回给客户端
-            break
+            if (shouldFailover) {
+              // 仅记录候选降级密钥，待后续任一密钥成功时再移动到末尾
+              if (isQuotaRelated && apiKey) {
+                deprioritizeCandidates.add(apiKey)
+              }
+              throw new Error(errorMessage)
+            } else {
+              // 其他错误（如模型不存在、请求格式错误等）不需要failover，直接返回给客户端
+              break
+            }
           }
-        }
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error))
         console.warn(`[${new Date().toISOString()}] ⚠️ API密钥失败，原因: ${lastError.message}`)
@@ -371,11 +406,30 @@ app.post('/v1/messages', async (req, res) => {
     // 如果所有重试都失败了
     if (!providerResponse) {
       console.error(`[${new Date().toISOString()}] 💥 所有API密钥都失败了`)
-      res.status(500).json({ 
-        error: '所有上游API密钥都不可用', 
-        details: lastError?.message 
-      })
+      // 若有记录的最后一次上游错误，按原状态码和内容返回（满足“若无可用密钥才返回原错误”）
+      if (lastFailoverError) {
+        const status = lastFailoverError.status || 500
+        if (lastFailoverError.body && typeof lastFailoverError.body === 'object') {
+          res.status(status).json(lastFailoverError.body)
+        } else {
+          res.status(status).json({ error: lastError?.message || lastFailoverError.text || 'Upstream error' })
+        }
+      } else {
+        res.status(500).json({ 
+          error: '所有上游API密钥都不可用', 
+          details: lastError?.message 
+        })
+      }
       return
+    }
+
+    // 如果本次请求最终成功，执行降级移动（仅对额度/余额相关失败的密钥）
+    if (providerResponse.ok && deprioritizeCandidates.size > 0) {
+      for (const key of deprioritizeCandidates) {
+        try {
+          configManager.deprioritizeApiKeyForCurrentUpstream(key)
+        } catch {}
+      }
     }
 
     // 记录响应信息

@@ -9,6 +9,7 @@
 - **多上游支持**: 支持 OpenAI (及兼容 API)、Gemini 和 Claude 等多种上游服务
 - **负载均衡**: 支持轮询、随机、故障转移策略
 - **多 API 密钥**: 每个上游可配置多个 API 密钥，自动轮换使用
+- **自动重试与密钥降级**: 检测到额度/余额不足等错误时自动切换下一个可用密钥；若后续请求成功，再将失败密钥移动到末尾（降级）；所有密钥均失败时按上游原始错误返回
 - **双重配置**: 支持命令行工具和 Web 界面管理上游配置
 - **环境变量**: 通过 `.env` 文件灵活配置服务器参数
 - **健康检查**: 内置健康检查端点和实时状态监控
@@ -289,6 +290,11 @@ bun run config use gemini-backup     # 切换到备用 Gemini
   "loadBalance": "failover"
 }
 ```
+
+#### 配置备份与恢复
+
+- 每次写入 `config.json` 之前，系统会自动在 `config.backups/` 目录创建带时间戳的备份，并只保留最近 10 个。
+- 如需恢复，可从 `config.backups/` 选择一个备份文件覆盖 `config.json` 后重载配置或重启服务。
 
 ## 🖥️ Web 管理面板
 
@@ -848,6 +854,17 @@ GET http://localhost:3000/health
 
 总是优先使用当前上游配置的第一个 API 密钥。这种策略适用于主备密钥场景。
 
+### 自动重试与密钥降级
+
+- 触发条件（示例）：
+  - 400 且 `error.type=permission_error`/消息含“Insufficient credits/credit/balance/quota/rate limit/积分不足”
+  - 401/403 认证授权错误，或 5xx 上游错误
+- 行为：
+  - 自动切换到当前渠道内的下一个可用密钥重试；失败密钥会被临时屏蔽（冷却约 5 分钟，频繁失败会延长）
+  - 若后续某个密钥成功，之前因为额度/余额问题失败的密钥会被移动到密钥列表末尾（持久降级）；若最终所有密钥均失败，不调整顺序
+  - 若所有密钥均失败，按“最后一次上游错误”的原始状态码与 JSON 返回
+  - 注意：仅在“当前选定上游”的密钥间重试，不会跨上游切换
+
 ## 🛡️ 安全特性
 
 - API 密钥安全存储和管理
@@ -992,7 +1009,24 @@ cat config.json | jq .
 # 或直接删除损坏的配置文件，程序会自动重新生成
 rm config.json
 bun run config show
+
+# 或从自动备份恢复
+cp config.backups/config-<timestamp>.json config.json
+curl -X POST http://localhost:3000/admin/config/reload
 ```
+
+#### 4. 额度/余额不足（400 permission_error: Insufficient credits）
+
+现象：上游返回 `400` 且消息含 `Insufficient credits`。
+
+行为：代理会自动切换到当前渠道的下一个可用密钥并重试；该失败密钥会被临时屏蔽并降级到列表末尾。若所有密钥均失败，按上游原始错误返回。
+
+建议：
+- 添加更多可用密钥或恢复余额
+  ```bash
+  bun run config key <upstream> add <new-api-key>
+  bun run config show
+  ```
 
 ### API 调用问题
 
