@@ -273,7 +273,7 @@
                   </div>
 
                   <!-- 添加新密钥 -->
-                  <div class="d-flex align-center ga-2">
+                  <div class="d-flex align-start ga-3">
                     <v-text-field
                       v-model="newApiKey"
                       label="添加新的API密钥"
@@ -286,12 +286,16 @@
                       :error="!!apiKeyError"
                       :error-messages="apiKeyError"
                       @input="apiKeyError = ''; duplicateKeyIndex = -1"
+                      class="flex-grow-1"
                     />
                     <v-btn
                       color="primary"
                       variant="elevated"
+                      size="large"
+                      height="40"
                       @click="addApiKey"
                       :disabled="!newApiKey.trim()"
+                      class="mt-1"
                     >
                       添加
                     </v-btn>
