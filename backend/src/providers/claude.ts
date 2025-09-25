@@ -46,6 +46,7 @@ export class impl implements provider.Provider {
 
     headers.set('anthropic-version', '2023-06-01')
     headers.set('Content-Type', 'application/json')
+    //这里应该设置host为上游的域名 AI!
 
     return new Request(finalUrl, {
       method: 'POST',
