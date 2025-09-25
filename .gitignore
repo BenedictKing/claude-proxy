@@ -213,4 +213,4 @@ docs/
 *.patch
 
 *.tsbuildinfo
-backend/.config/
+**/.config/
