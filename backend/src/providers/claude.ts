@@ -23,12 +23,6 @@ export class impl implements provider.Provider {
     // 直接从原始请求克隆headers，以最大程度保留原始请求头信息和顺序
     const headers = new Headers(request.headers)
 
-    // 确保 User-Agent 的兼容性
-    const userAgent = headers.get('user-agent')
-    if (!/^claude-cli/i.test(userAgent || '')) {
-      headers.set('User-Agent', 'claude-cli/1.0.58 (external, cli)')
-    }
-
     // 根据 API 密钥格式和上游配置，决定认证方式
     // Anthropic 官方 API (sk-ant-...) 使用 x-api-key
     // 许多第三方 Claude 兼容服务使用 Bearer Token

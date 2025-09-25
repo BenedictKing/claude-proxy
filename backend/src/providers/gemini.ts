@@ -21,6 +21,8 @@ export class impl implements provider.Provider {
     const headers = new Headers(request.headers)
     headers.set('x-goog-api-key', apiKey)
     headers.set('Content-Type', 'application/json')
+    const upstreamHost = new URL(baseUrl).hostname
+    headers.set('Host', upstreamHost)
 
     return new Request(finalUrl, {
       method: 'POST',

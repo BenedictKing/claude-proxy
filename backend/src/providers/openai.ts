@@ -15,9 +15,11 @@ export class impl implements provider.Provider {
 
     const finalUrl = utils.buildUrl(baseUrl, 'chat/completions')
 
-    const headers = new Headers()
+    const headers = new Headers(request.headers)
     headers.set('Authorization', `Bearer ${apiKey}`)
     headers.set('Content-Type', 'application/json')
+    const upstreamHost = new URL(baseUrl).hostname
+    headers.set('Host', upstreamHost)
 
     return new Request(finalUrl, {
       method: 'POST',
