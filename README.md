@@ -293,8 +293,8 @@ bun run config use gemini-backup     # 切换到备用 Gemini
 
 #### 配置备份与恢复
 
-- 每次写入 `config.json` 之前，系统会自动在 `backend/.config/config.backups/` 目录创建带时间戳的备份，并只保留最近 10 个。
-- 如需恢复，可从 `backend/.config/config.backups/` 选择一个备份文件覆盖 `backend/.config/config.json` 后重载配置或重启服务。
+- 每次写入 `config.json` 之前，系统会自动在 `backend/.config/backups/` 目录创建带时间戳的备份，并只保留最近 10 个。
+- 如需恢复，可从 `backend/.config/backups/` 选择一个备份文件覆盖 `backend/.config/config.json` 后重载配置或重启服务。
 
 ## 🖥️ Web 管理面板
 
@@ -1011,7 +1011,7 @@ rm backend/.config/config.json
 bun run config show
 
 # 或从自动备份恢复
-cp backend/.config/config.backups/config-<timestamp>.json backend/.config/config.json
+cp backend/.config/backups/config-<timestamp>.json backend/.config/config.json
 curl -X POST http://localhost:3000/admin/config/reload
 ```
 

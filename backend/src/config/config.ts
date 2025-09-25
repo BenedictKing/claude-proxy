@@ -42,7 +42,7 @@ export function redirectModel(model: string, upstream: UpstreamConfig): string {
 
 const CONFIG_DIR = path.join(process.cwd(), '.config')
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json')
-const BACKUP_DIR = path.join(CONFIG_DIR, 'config.backups')
+const BACKUP_DIR = path.join(CONFIG_DIR, 'backups')
 const MAX_BACKUPS = 10
 
 const DEFAULT_CONFIG: Config = {

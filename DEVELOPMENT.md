@@ -32,7 +32,7 @@ bun run type-check            # TypeScript 类型检查
 
 - `backend/.config/config.json` - 主配置文件
 
-备份策略：每次写入前会在 `backend/.config/config.backups/` 目录生成时间戳备份，最多保留 10 个（自动轮转）。
+备份策略：每次写入前会在 `backend/.config/backups/` 目录生成时间戳备份，最多保留 10 个（自动轮转）。
 
 **变化时**: 自动重载配置，保持服务器运行
 
