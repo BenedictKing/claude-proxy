@@ -31,7 +31,7 @@ class EnvConfigManager {
 
   private loadConfig(): EnvConfig {
     return {
-      port: parseInt(process.env.PORT || '4444'),
+      port: parseInt(process.env.PORT || '3000'),
       nodeEnv: process.env.NODE_ENV || 'development',
       proxyAccessKey: process.env.PROXY_ACCESS_KEY || 'your-proxy-access-key',
       loadBalanceStrategy: (process.env.LOAD_BALANCE_STRATEGY || 'failover') as 'round-robin' | 'random' | 'failover',
