@@ -1,0 +1,101 @@
+services:
+  # 后端API服务
+  claude-proxy-backend:
+    build:
+      context: .
+      # dockerfile: Dockerfile
+      # 中国网络使用:
+      dockerfile: Dockerfile_China
+      target: backend-runtime
+    container_name: claude-proxy-backend
+    volumes:
+      # 配置目录持久化
+      - ./.config:/app/.config
+      # 可选：日志持久化
+      - ./logs:/app/logs
+    environment:
+      # 基础配置
+      - NODE_ENV=production
+      # 代理访问密钥 - 用于验证客户端对代理服务器的访问权限
+      - PROXY_ACCESS_KEY=sk-access-key
+      # 日志级别 (error, warn, info, debug)
+      - LOG_LEVEL=info
+    # 健康检查配置
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'bun',
+          'run',
+          '-e',
+          "await fetch('http://localhost:3000/health').then(r => r.ok ? process.exit(0) : process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.5'
+
+    # 重启策略
+    restart: unless-stopped
+
+    # 网络配置
+    networks:
+      - claude-proxy-network
+
+  # 前端Web界面服务
+  claude-proxy-frontend:
+    build:
+      context: .
+      # dockerfile: Dockerfile
+      # 中国网络使用:
+      dockerfile: Dockerfile_China
+      target: frontend-runtime
+    container_name: claude-proxy-frontend
+    ports:
+      - '3002:5173'
+    environment:
+      # 前端配置
+      - NODE_ENV=production
+    # 健康检查配置
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:5173']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+
+    # 重启策略
+    restart: unless-stopped
+
+    # 依赖后端服务
+    depends_on:
+      claude-proxy-backend:
+        condition: service_healthy
+
+    # 网络配置
+    networks:
+      - claude-proxy-network
+
+networks:
+  claude-proxy-network:
+    driver: bridge
