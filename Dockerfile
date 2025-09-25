@@ -97,4 +97,4 @@ USER bun
 ENV PORT=3000
 
 # 启动命令 - 直接运行编译后的文件
-CMD ["node", "dist/server.js"]
+CMD ["bun", "run", "dist/server.js"]
