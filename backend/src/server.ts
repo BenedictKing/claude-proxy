@@ -18,9 +18,9 @@ const SENSITIVE_HEADER_KEYS = new Set(['authorization', 'x-api-key', 'x-goog-api
 function maskHeaderValue(key: string, value: string): string {
   const lowerKey = key.toLowerCase()
   if (lowerKey === 'authorization') {
-    return value.replace(/^(Bearer\s+)(.+)$/i, (_, prefix, token) => 
-      `${prefix}${maskApiKey(token)}`
-    ) || maskApiKey(value)
+    return (
+      value.replace(/^(Bearer\s+)(.+)$/i, (_, prefix, token) => `${prefix}${maskApiKey(token)}`) || maskApiKey(value)
+    )
   }
   return SENSITIVE_HEADER_KEYS.has(lowerKey) ? maskApiKey(value) : value
 }
@@ -31,7 +31,7 @@ app.use(express.json({ limit: '50mb' }))
 // CORS 配置 - 允许开发环境跨域访问
 app.use((req, res, next) => {
   const origin = req.headers.origin
-  
+
   // 开发环境允许所有localhost源，生产环境可以更严格
   if (process.env.NODE_ENV === 'development') {
     if (origin && origin.includes('localhost')) {
@@ -41,17 +41,17 @@ app.use((req, res, next) => {
     // 生产环境可以设置具体的允许域名
     res.setHeader('Access-Control-Allow-Origin', '*')
   }
-  
+
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key')
   res.setHeader('Access-Control-Allow-Credentials', 'true')
-  
+
   // 处理预检请求
   if (req.method === 'OPTIONS') {
     res.status(200).end()
     return
   }
-  
+
   next()
 })
 
@@ -137,7 +137,11 @@ app.post('/v1/messages', async (req, res) => {
     if (envConfigManager.getConfig().enableRequestLogs) {
       console.log(`[${new Date().toISOString()}] ${isDevelopment ? '📥' : ''} 收到请求: ${req.method} ${req.path}`)
       if (isDevelopment) {
-        console.log(`[${new Date().toISOString()}] 📋 请求体:`, JSON.stringify(req.body, null, 2))
+        const originalBodyStr = JSON.stringify(req.body, null, 2)
+        console.debug(
+          `[${new Date().toISOString()}] 📋 原始请求体:`,
+          originalBodyStr.length > 500 ? originalBodyStr.substring(0, 500) + '...' : originalBodyStr
+        )
         // 对请求头做敏感信息脱敏
         const sanitizedReqHeaders: { [key: string]: string } = {}
         Object.entries(req.headers).forEach(([k, v]) => {
@@ -147,7 +151,7 @@ app.post('/v1/messages', async (req, res) => {
             sanitizedReqHeaders[k] = v.map(val => maskHeaderValue(k, val)).join(', ')
           }
         })
-        console.log(`[${new Date().toISOString()}] 📥 请求头:`, JSON.stringify(sanitizedReqHeaders, null, 2))
+        console.debug(`[${new Date().toISOString()}] 📥 原始请求头:`, JSON.stringify(sanitizedReqHeaders, null, 2))
       }
     }
 
@@ -227,14 +231,14 @@ app.post('/v1/messages', async (req, res) => {
 
         // 构造提供商所需的 Request 对象
         // 使用 req.rawHeaders 来最大限度地保留原始头部顺序
-        const headers = new Headers();
+        const headers = new Headers()
         for (let i = 0; i < req.rawHeaders.length; i += 2) {
-          const key = req.rawHeaders[i];
-          const value = req.rawHeaders[i + 1];
-          const lowerKey = key.toLowerCase();
-          
+          const key = req.rawHeaders[i]
+          const value = req.rawHeaders[i + 1]
+          const lowerKey = key.toLowerCase()
+
           if (lowerKey !== 'x-api-key' && lowerKey !== 'authorization') {
-            headers.append(key, value);
+            headers.append(key, value)
           }
         }
         const incomingRequest = new Request('http://localhost/v1/messages', {
@@ -259,17 +263,19 @@ app.post('/v1/messages', async (req, res) => {
           providerRequest.headers.forEach((value, key) => {
             reqHeaders[key] = maskHeaderValue(key, value)
           })
-          console.log(`[${new Date().toISOString()}] 📋 请求头:`, JSON.stringify(reqHeaders, null, 2))
+          console.debug(`[${new Date().toISOString()}] 📋 实际请求头:`, JSON.stringify(reqHeaders, null, 2))
           try {
-            const body = await providerRequest.clone().text()
+            const body = JSON.stringify(await providerRequest.clone().json(), null, 2)
             if (body.length > 0) {
-              console.log(
-                `[${new Date().toISOString()}] 📦 请求体:`,
+              console.debug(
+                `[${new Date().toISOString()}] 📦 实际请求体:`,
                 body.length > 500 ? body.substring(0, 500) + '...' : body
               )
             }
           } catch (error) {
-            console.log(`[${new Date().toISOString()}] 📦 请求体: [无法读取 - ${error instanceof Error ? error.message : '未知错误'}]`)
+            console.log(
+              `[${new Date().toISOString()}] 📦 请求体: [无法读取 - ${error instanceof Error ? error.message : '未知错误'}]`
+            )
           }
         }
 
@@ -292,7 +298,7 @@ app.post('/v1/messages', async (req, res) => {
             }
             fetchOptions.dispatcher = new Agent({ connect: insecureConnect })
           }
-          providerResponse = await undiciFetch(providerRequest as any, fetchOptions) as any
+          providerResponse = (await undiciFetch(providerRequest as any, fetchOptions)) as any
         }
 
         // 检查响应是否成功或是否需要failover
@@ -304,12 +310,12 @@ app.post('/v1/messages', async (req, res) => {
           let shouldFailover = false
           let isQuotaRelated = false
           let errorMessage = `上游错误: ${providerResponse.status} ${providerResponse.statusText}`
-          
+
           // 尝试解析错误响应体来判断是否需要failover
           try {
             const cloneForParse = providerResponse.clone()
             const errorBody = await cloneForParse.json()
-            
+
             // 检查特定的错误类型：积分不足、密钥无效、余额不足等
             if (errorBody.error) {
               const errorMsg = errorBody.error.message || errorBody.error || ''
@@ -317,18 +323,20 @@ app.post('/v1/messages', async (req, res) => {
               if (typeof errorMsg === 'string') {
                 const lowerErrorMsg = errorMsg.toLowerCase()
                 // 这些错误应该触发failover到下一个密钥
-                if (lowerErrorMsg.includes('积分不足') || 
-                    lowerErrorMsg.includes('insufficient') ||
-                    lowerErrorMsg.includes('invalid') ||
-                    lowerErrorMsg.includes('unauthorized') ||
-                    lowerErrorMsg.includes('quota') ||
-                    lowerErrorMsg.includes('rate limit') ||
-                    lowerErrorMsg.includes('credit') ||
-                    lowerErrorMsg.includes('balance') ||
-                    errorType.includes('permission') ||
-                    errorType.includes('insufficient') ||
-                    errorType.includes('over_quota') ||
-                    errorType.includes('billing')) {
+                if (
+                  lowerErrorMsg.includes('积分不足') ||
+                  lowerErrorMsg.includes('insufficient') ||
+                  lowerErrorMsg.includes('invalid') ||
+                  lowerErrorMsg.includes('unauthorized') ||
+                  lowerErrorMsg.includes('quota') ||
+                  lowerErrorMsg.includes('rate limit') ||
+                  lowerErrorMsg.includes('credit') ||
+                  lowerErrorMsg.includes('balance') ||
+                  errorType.includes('permission') ||
+                  errorType.includes('insufficient') ||
+                  errorType.includes('over_quota') ||
+                  errorType.includes('billing')
+                ) {
                   shouldFailover = true
                   errorMessage = `API密钥错误: ${errorMsg}`
                   // 标记是否为额度/余额相关问题（供成功后降级使用）
@@ -346,17 +354,17 @@ app.post('/v1/messages', async (req, res) => {
                 }
               }
             }
-            
+
             // 401/403 状态码通常是认证/授权问题，应该failover
             if (providerResponse.status === 401 || providerResponse.status === 403) {
               shouldFailover = true
             }
-            
+
             // 400 Bad Request 中的特定错误也可能需要failover
             if (providerResponse.status === 400 && shouldFailover) {
               // 已经在上面的错误消息检查中设置了shouldFailover
             }
-            
+
             // 如果确定需要failover，记录原始错误体
             if (shouldFailover) {
               lastFailoverError = { status: providerResponse.status, body: errorBody }
@@ -371,27 +379,27 @@ app.post('/v1/messages', async (req, res) => {
               } catch {}
             }
           }
-          
-            if (shouldFailover) {
-              // 仅记录候选降级密钥，待后续任一密钥成功时再移动到末尾
-              if (isQuotaRelated && apiKey) {
-                deprioritizeCandidates.add(apiKey)
-              }
-              throw new Error(errorMessage)
-            } else {
-              // 其他错误（如模型不存在、请求格式错误等）不需要failover，直接返回给客户端
-              break
+
+          if (shouldFailover) {
+            // 仅记录候选降级密钥，待后续任一密钥成功时再移动到末尾
+            if (isQuotaRelated && apiKey) {
+              deprioritizeCandidates.add(apiKey)
             }
+            throw new Error(errorMessage)
+          } else {
+            // 其他错误（如模型不存在、请求格式错误等）不需要failover，直接返回给客户端
+            break
           }
+        }
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error))
         console.warn(`[${new Date().toISOString()}] ⚠️ API密钥失败，原因: ${lastError.message}`)
-        
+
         // 如果这是最后一次尝试，直接抛出错误
         if (attempt === maxRetries - 1) {
           break
         }
-        
+
         // 标记当前密钥为失败，继续尝试下一个
         if (apiKey) {
           failedKeys.add(apiKey)
@@ -417,9 +425,9 @@ app.post('/v1/messages', async (req, res) => {
           res.status(status).json({ error: lastError?.message || lastFailoverError.text || 'Upstream error' })
         }
       } else {
-        res.status(500).json({ 
-          error: '所有上游API密钥都不可用', 
-          details: lastError?.message 
+        res.status(500).json({
+          error: '所有上游API密钥都不可用',
+          details: lastError?.message
         })
       }
       return
