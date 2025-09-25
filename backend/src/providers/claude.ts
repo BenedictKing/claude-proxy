@@ -20,14 +20,11 @@ export class impl implements provider.Provider {
     // Claude API 的端点通常是 /v1/messages
     const finalUrl = utils.buildUrl(baseUrl, 'messages')
 
-    const headers = new Headers()
-    // 复制必要的请求头
-    request.headers.forEach((value, key) => {
-      const lowerKey = key.toLowerCase()
-      if (lowerKey !== 'authorization' && lowerKey !== 'x-api-key') {
-        headers.set(key, value)
-      }
-    })
+    // 直接从原始请求克隆headers，以最大程度保留原始请求头信息和顺序
+    const headers = new Headers(request.headers)
+    // 移除原始的认证头，准备替换为上游的密钥
+    headers.delete('authorization')
+    headers.delete('x-api-key')
 
     // 确保 User-Agent 的兼容性
     const userAgent = headers.get('user-agent')
