@@ -65,7 +65,7 @@
             proxy_set_header X-Forwarded-Proto $scheme;
         }
     }
-    EOF
+EOF
     
     # 暴露前端端口
     EXPOSE 5173
