@@ -24,7 +24,7 @@ export class impl implements provider.Provider {
     // 复制必要的请求头
     request.headers.forEach((value, key) => {
       const lowerKey = key.toLowerCase()
-      if (lowerKey !== 'authorization' && lowerKey !== 'x-api-key' && lowerKey !== 'host') {
+      if (lowerKey !== 'authorization' && lowerKey !== 'x-api-key') {
         headers.set(key, value)
       }
     })
