@@ -20,10 +20,11 @@ export class impl implements provider.Provider {
     // Claude API 的端点通常是 /v1/messages
     const finalUrl = utils.buildUrl(baseUrl, 'messages')
 
-    // 手动重建headers，以精确控制顺序并替换必要的头部
-    const newHeaders = new Headers()
+    // 使用数组保证header顺序，然后构建Headers对象
+    const headerEntries: [string, string][] = []
     const upstreamHost = new URL(baseUrl).hostname
     let authHeaderReplaced = false
+    let userAgentFound = false
 
     // 遍历原始请求头以保留顺序
     for (const [key, value] of request.headers) {
@@ -31,7 +32,7 @@ export class impl implements provider.Provider {
 
       if (lowerKey === 'host') {
         // 替换为上游 Host
-        newHeaders.set('Host', upstreamHost)
+        headerEntries.push(['Host', upstreamHost])
         continue
       }
 
@@ -39,9 +40,9 @@ export class impl implements provider.Provider {
         if (!authHeaderReplaced) {
           // 在原始认证头的位置插入新的认证头
           if (apiKey.startsWith('sk-ant-')) {
-            newHeaders.set('x-api-key', apiKey)
+            headerEntries.push(['x-api-key', apiKey])
           } else {
-            newHeaders.set('Authorization', `Bearer ${apiKey}`)
+            headerEntries.push(['Authorization', `Bearer ${apiKey}`])
           }
           authHeaderReplaced = true
         }
@@ -49,23 +50,36 @@ export class impl implements provider.Provider {
         continue
       }
 
-      newHeaders.append(key, value)
+      if (lowerKey === 'user-agent') {
+        userAgentFound = true
+        // 确保 User-Agent 的兼容性
+        if (!/^claude-cli/i.test(value)) {
+          headerEntries.push(['User-Agent', 'claude-cli/1.0.58 (external, cli)'])
+        } else {
+          headerEntries.push([key, value])
+        }
+        continue
+      }
+
+      headerEntries.push([key, value])
     }
 
-    // 确保 User-Agent 的兼容性 (如果在原始请求头中没有设置，则添加)
-    const userAgent = newHeaders.get('user-agent')
-    if (!userAgent || !/^claude-cli/i.test(userAgent)) {
-      newHeaders.set('User-Agent', 'claude-cli/1.0.58 (external, cli)')
-    }
-    
-    // 如果原始请求中没有认证头，我们需要确保它被添加
+    // 如果原始请求中没有认证头，添加到末尾
     if (!authHeaderReplaced) {
-        if (apiKey.startsWith('sk-ant-')) {
-            newHeaders.set('x-api-key', apiKey);
-        } else {
-            newHeaders.set('Authorization', `Bearer ${apiKey}`);
-        }
+      if (apiKey.startsWith('sk-ant-')) {
+        headerEntries.push(['x-api-key', apiKey])
+      } else {
+        headerEntries.push(['Authorization', `Bearer ${apiKey}`])
+      }
     }
+
+    // 如果没有User-Agent，添加到末尾
+    if (!userAgentFound) {
+      headerEntries.push(['User-Agent', 'claude-cli/1.0.58 (external, cli)'])
+    }
+
+    // 从有序数组构建Headers对象
+    const newHeaders = new Headers(headerEntries)
 
     return new Request(finalUrl, {
       method: 'POST',
