@@ -210,8 +210,7 @@ docs/
 *.lock
 *-lock.json
 *-lock.yaml
-config.json
 *.patch
 
 *.tsbuildinfo
-config.backups/
+backend/.config/
