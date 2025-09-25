@@ -22,9 +22,6 @@ export class impl implements provider.Provider {
 
     // 直接从原始请求克隆headers，以最大程度保留原始请求头信息和顺序
     const headers = new Headers(request.headers)
-    // 移除原始的认证头，准备替换为上游的密钥
-    headers.delete('authorization')
-    headers.delete('x-api-key')
 
     // 确保 User-Agent 的兼容性
     const userAgent = headers.get('user-agent')
@@ -37,12 +34,12 @@ export class impl implements provider.Provider {
     // 许多第三方 Claude 兼容服务使用 Bearer Token
     if (apiKey.startsWith('sk-ant-')) {
       headers.set('x-api-key', apiKey)
+      headers.delete('authorization')
     } else {
       headers.set('Authorization', `Bearer ${apiKey}`)
+      headers.delete('x-api-key')
     }
 
-    headers.set('anthropic-version', '2023-06-01')
-    headers.set('Content-Type', 'application/json')
     const upstreamHost = new URL(baseUrl).hostname
     headers.set('Host', upstreamHost)
 
