@@ -268,7 +268,7 @@ bun run config use gemini-backup     # 切换到备用 Gemini
 
 ### 配置文件格式
 
-配置存储在 `config.json` 中：
+配置存储在 `backend/.config/config.json` 中：
 
 ```json
 {
@@ -293,8 +293,8 @@ bun run config use gemini-backup     # 切换到备用 Gemini
 
 #### 配置备份与恢复
 
-- 每次写入 `config.json` 之前，系统会自动在 `config.backups/` 目录创建带时间戳的备份，并只保留最近 10 个。
-- 如需恢复，可从 `config.backups/` 选择一个备份文件覆盖 `config.json` 后重载配置或重启服务。
+- 每次写入 `config.json` 之前，系统会自动在 `backend/.config/config.backups/` 目录创建带时间戳的备份，并只保留最近 10 个。
+- 如需恢复，可从 `backend/.config/config.backups/` 选择一个备份文件覆盖 `backend/.config/config.json` 后重载配置或重启服务。
 
 ## 🖥️ Web 管理面板
 
@@ -508,7 +508,7 @@ pm2 startup
     # --restart always: 容器退出时总是自动重启
     # -v: 挂载配置文件和环境变量文件，方便修改
     docker run -d -p 3000:3000 \
-      -v $(pwd)/config.json:/app/config.json \
+      -v $(pwd)/backend/.config:/app/.config \
       -v $(pwd)/.env:/app/.env \
       --name claude-proxy-container \
       --restart always \
@@ -1004,14 +1004,14 @@ PORT=3001
 
 ```bash
 # 检查配置文件语法
-cat config.json | jq .
+cat backend/.config/config.json | jq .
 
 # 或直接删除损坏的配置文件，程序会自动重新生成
-rm config.json
+rm backend/.config/config.json
 bun run config show
 
 # 或从自动备份恢复
-cp config.backups/config-<timestamp>.json config.json
+cp backend/.config/config.backups/config-<timestamp>.json backend/.config/config.json
 curl -X POST http://localhost:3000/admin/config/reload
 ```
 

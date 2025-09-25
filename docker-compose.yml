@@ -10,7 +10,7 @@ services:
     container_name: claude-proxy-backend
     volumes:
       # 配置目录持久化
-      - ./.config:/app/.config
+      - ./backend/.config:/app/.config
       # 可选：日志持久化
       - ./logs:/app/logs
     environment:

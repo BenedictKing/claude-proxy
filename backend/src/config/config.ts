@@ -40,8 +40,9 @@ export function redirectModel(model: string, upstream: UpstreamConfig): string {
   return model
 }
 
-const CONFIG_FILE = path.join(process.cwd(), 'config.json')
-const BACKUP_DIR = path.join(process.cwd(), 'config.backups')
+const CONFIG_DIR = path.join(process.cwd(), '.config')
+const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json')
+const BACKUP_DIR = path.join(CONFIG_DIR, 'config.backups')
 const MAX_BACKUPS = 10
 
 const DEFAULT_CONFIG: Config = {
@@ -153,6 +154,10 @@ class ConfigManager {
 
   private saveConfig(config: Config): void {
     try {
+      // 确保配置目录存在
+      if (!fs.existsSync(CONFIG_DIR)) {
+        fs.mkdirSync(CONFIG_DIR, { recursive: true })
+      }
       // 在写入新配置前，为现有配置创建时间戳备份并进行保留策略（最多10个）
       this.backupCurrentConfig()
 

@@ -30,9 +30,9 @@ bun run type-check            # TypeScript 类型检查
 
 ### 配置文件（无需重启）
 
-- `config.json` - 主配置文件
+- `backend/.config/config.json` - 主配置文件
 
-备份策略：每次写入前会在 `config.backups/` 目录生成时间戳备份，最多保留 10 个（自动轮转）。
+备份策略：每次写入前会在 `backend/.config/config.backups/` 目录生成时间戳备份，最多保留 10 个（自动轮转）。
 
 **变化时**: 自动重载配置，保持服务器运行
 
@@ -136,7 +136,7 @@ kill -9 <PID>              # 强制终止进程
 
 ```bash
 # 检查配置文件语法
-cat config.json | python -m json.tool
+cat backend/.config/config.json | jq .
 
 # 手动重载配置
 curl -X POST http://localhost:3000/admin/config/reload
@@ -164,20 +164,19 @@ curl -X POST http://localhost:3000/admin/config/reload
 
 ```
 claude-api-proxy/
-├── src/
-│   ├── provider.ts       # 统一提供商接口
-│   ├── openai.ts         # OpenAI 格式转换器
-│   ├── gemini.ts         # Gemini 格式转换器
-│   ├── claude.ts         # Claude 格式转换器
-│   ├── openaiold.ts      # 旧版 OpenAI 格式转换器
-│   ├── config.ts         # 配置管理器
-│   ├── env.ts            # 环境变量管理
-│   ├── utils.ts          # 工具函数
-│   └── types.ts          # TypeScript 类型定义
-├── server.ts             # Express 服务器（本地/开发）
-├── dev-runner.ts         # 开发模式自动重启
-├── config-cli.ts         # 配置命令行工具
-├── config.json           # 运行时配置文件
+├── backend/
+│   ├── .config/
+│   │   └── config.json       # 运行时配置文件
+│   └── src/
+│       ├── providers/      # 各提供商适配器
+│       ├── config/         # 配置管理
+│       ├── api/            # Web API路由
+│       ├── utils/
+│       ├── server.ts       # Express 服务器
+│       ├── dev-runner.ts   # 开发模式自动重启
+│       └── config-cli.ts   # 配置命令行工具
+├── frontend/
+│   └── ...
 └── .env                  # 环境变量配置
 ```
 
@@ -491,7 +490,7 @@ CMD ["bun", "run", "start"]
 ```bash
 # 构建和运行
 docker build -t claude-api-proxy .
-docker run -p 3000:3000 -v $(pwd)/config.json:/app/config.json -v $(pwd)/.env:/app/.env --name claude-proxy-container claude-api-proxy
+docker run -p 3000:3000 -v $(pwd)/backend/.config:/app/.config -v $(pwd)/.env:/app/.env --name claude-proxy-container claude-api-proxy
 ```
 
 ## 🤝 贡献与发布
