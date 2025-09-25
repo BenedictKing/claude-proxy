@@ -91,7 +91,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD bun run -e 'await fetch("http://localhost:3000/health").then(r => r.ok ? process.exit(0) : process.exit(1))' || exit 1
 
 # 切换到非root用户
-USER bun
+# USER bun
 
 # 设置后端端口环境变量
 ENV PORT=3000
