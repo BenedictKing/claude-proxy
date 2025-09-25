@@ -226,15 +226,17 @@ app.post('/v1/messages', async (req, res) => {
         }
 
         // 构造提供商所需的 Request 对象
-        const headers = new Headers()
-        Object.entries(req.headers).forEach(([key, value]) => {
-          const lowerKey = key.toLowerCase()
-          if (typeof value === 'string' && lowerKey !== 'x-api-key' && lowerKey !== 'authorization') {
-            headers.set(key, value)
-          } else if (Array.isArray(value)) {
-            headers.set(key, value.join(', '))
+        // 使用 req.rawHeaders 来最大限度地保留原始头部顺序
+        const headers = new Headers();
+        for (let i = 0; i < req.rawHeaders.length; i += 2) {
+          const key = req.rawHeaders[i];
+          const value = req.rawHeaders[i + 1];
+          const lowerKey = key.toLowerCase();
+          
+          if (lowerKey !== 'x-api-key' && lowerKey !== 'authorization') {
+            headers.append(key, value);
           }
-        })
+        }
         const incomingRequest = new Request('http://localhost/v1/messages', {
           method: 'POST',
           headers: headers,
