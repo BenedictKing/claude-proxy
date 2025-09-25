@@ -5,6 +5,7 @@ import chokidar from 'chokidar'
 const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production'
 
 let serverProcess: any = null
+let isRestarting = false
 
 function startServer() {
   console.log('🚀 启动开发服务器...')
@@ -19,17 +20,29 @@ function startServer() {
   })
 }
 
-function stopServer() {
+async function stopServer() {
   if (serverProcess) {
     console.log('🛑 停止服务器...')
     serverProcess.kill()
+    await serverProcess.exited
     serverProcess = null
+    console.log('✅ 服务器已停止.')
   }
 }
 
-function restartServer() {
-  stopServer()
-  setTimeout(startServer, 1000)
+async function restartServer() {
+  if (isRestarting) {
+    console.log('🔄 已在重启中，请稍候...')
+    return
+  }
+  isRestarting = true
+
+  await stopServer()
+  // 短暂延迟以确保操作系统完全释放端口
+  await new Promise(resolve => setTimeout(resolve, 200))
+
+  startServer()
+  isRestarting = false
 }
 
 // 监听文件变化
@@ -46,15 +59,15 @@ watcher.on('change', (filePath) => {
 })
 
 // 优雅关闭
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('\n👋 收到退出信号...')
-  stopServer()
+  await stopServer()
   watcher.close()
   process.exit(0)
 })
 
-process.on('SIGTERM', () => {
-  stopServer()
+process.on('SIGTERM', async () => {
+  await stopServer()
   watcher.close()
   process.exit(0)
 })
