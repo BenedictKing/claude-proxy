@@ -241,10 +241,26 @@ app.post('/v1/messages', async (req, res) => {
             headers.append(key, value)
           }
         }
-        const incomingRequest = new Request('http://localhost/v1/messages', {
-          method: 'POST',
+        
+        // 获取原始请求体字符串，避免JSON重新序列化
+        let originalBodyString: string
+        try {
+          // 尝试获取原始请求体的JSON字符串表示
+          originalBodyString = JSON.stringify(req.body)
+        } catch (error) {
+          // 如果序列化失败，回退到空对象
+          originalBodyString = '{}'
+        }
+        
+        // 构建完整的URL，避免相对路径导致Request构造失败
+        const protocol = req.protocol || 'http'
+        const host = req.get('host') || 'localhost:3000'
+        const fullUrl = `${protocol}://${host}${req.url || '/v1/messages'}`
+        
+        const incomingRequest = new Request(fullUrl, {
+          method: req.method,
           headers: headers,
-          body: JSON.stringify(req.body)
+          body: originalBodyString
         })
 
         // 协议转换：Claude -> Provider

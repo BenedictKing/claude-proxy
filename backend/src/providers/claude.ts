@@ -10,81 +10,63 @@ export class impl implements provider.Provider {
     apiKey: string,
     upstream?: import('../config/config').UpstreamConfig
   ): Promise<Request> {
-    const claudeRequest = (await request.json()) as types.ClaudeRequest
+    // 对于Claude provider，尽可能保持透传，只修改必要的部分
 
-    // 应用模型重定向
-    if (upstream) {
+    // 1. 构建目标URL：baseUrl已包含完整路径，只需添加端点
+    const originalUrl = new URL(request.url)
+    
+    // 提取端点路径（移除 /v1 前缀）
+    const endpoint = originalUrl.pathname.replace(/^\/v1/, '')
+    
+    // 构建完整目标URL
+    const targetUrl = baseUrl + endpoint + originalUrl.search
+    
+    // 从baseUrl解析出正确的主机信息用于Host头
+    const baseUrlObj = new URL(baseUrl)
+
+    // 2. 克隆headers，最小化修改
+    const headers = new Headers(request.headers)
+    
+    // 设置正确的Host头
+    headers.set('Host', baseUrlObj.hostname)
+    
+    // 设置认证头
+    if (apiKey.startsWith('sk-ant-')) {
+      headers.set('x-api-key', apiKey)
+    } else {
+      headers.set('Authorization', `Bearer ${apiKey}`)
+    }
+    
+    // 移除代理级别的认证头（如果存在）
+    headers.delete('x-proxy-key')
+    
+    // 确保兼容的User-Agent
+    const userAgent = headers.get('user-agent')
+    if (!userAgent || !/^claude-cli/i.test(userAgent)) {
+      headers.set('User-Agent', 'claude-cli/1.0.58 (external, cli)')
+    }
+
+    // 3. 处理请求体：对于纯透传，保持原始body
+    let requestBody: ReadableStream<Uint8Array> | null = request.body
+    
+    // 只有在需要模型重定向时才解析和重构请求体
+    if (upstream && upstream.modelMapping && Object.keys(upstream.modelMapping).length > 0) {
+      const claudeRequest = (await request.json()) as types.ClaudeRequest
       claudeRequest.model = redirectModel(claudeRequest.model, upstream)
-    }
-
-    // Claude API 的端点通常是 /v1/messages
-    const finalUrl = utils.buildUrl(baseUrl, 'messages')
-
-    // 使用数组保证header顺序，然后构建Headers对象
-    const headerEntries: [string, string][] = []
-    const upstreamHost = new URL(baseUrl).hostname
-    let authHeaderReplaced = false
-    let userAgentFound = false
-
-    // 遍历原始请求头以保留顺序
-    for (const [key, value] of request.headers) {
-      const lowerKey = key.toLowerCase()
-
-      if (lowerKey === 'host') {
-        // 替换为上游 Host
-        headerEntries.push(['Host', upstreamHost])
-        continue
-      }
-
-      if (lowerKey === 'authorization' || lowerKey === 'x-api-key') {
-        if (!authHeaderReplaced) {
-          // 在原始认证头的位置插入新的认证头
-          if (apiKey.startsWith('sk-ant-')) {
-            headerEntries.push(['x-api-key', apiKey])
-          } else {
-            headerEntries.push(['Authorization', `Bearer ${apiKey}`])
-          }
-          authHeaderReplaced = true
+      const bodyString = JSON.stringify(claudeRequest)
+      // 将字符串转换为ReadableStream
+      requestBody = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(bodyString))
+          controller.close()
         }
-        // 跳过旧的认证头
-        continue
-      }
-
-      if (lowerKey === 'user-agent') {
-        userAgentFound = true
-        // 确保 User-Agent 的兼容性
-        if (!/^claude-cli/i.test(value)) {
-          headerEntries.push(['User-Agent', 'claude-cli/1.0.58 (external, cli)'])
-        } else {
-          headerEntries.push([key, value])
-        }
-        continue
-      }
-
-      headerEntries.push([key, value])
+      })
     }
 
-    // 如果原始请求中没有认证头，添加到末尾
-    if (!authHeaderReplaced) {
-      if (apiKey.startsWith('sk-ant-')) {
-        headerEntries.push(['x-api-key', apiKey])
-      } else {
-        headerEntries.push(['Authorization', `Bearer ${apiKey}`])
-      }
-    }
-
-    // 如果没有User-Agent，添加到末尾
-    if (!userAgentFound) {
-      headerEntries.push(['User-Agent', 'claude-cli/1.0.58 (external, cli)'])
-    }
-
-    // 从有序数组构建Headers对象
-    const newHeaders = new Headers(headerEntries)
-
-    return new Request(finalUrl, {
-      method: 'POST',
-      headers: newHeaders,
-      body: JSON.stringify(claudeRequest)
+    return new Request(targetUrl, {
+      method: request.method,
+      headers: headers,
+      body: requestBody
     })
   }
 
