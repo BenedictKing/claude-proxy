@@ -211,3 +211,8 @@ docs/
 
 *.tsbuildinfo
 **/.config/
+
+# 测试和脚本文件
+test-*.sh
+test-*.js
+test-*.ts

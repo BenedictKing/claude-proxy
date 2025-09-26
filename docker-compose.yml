@@ -1,13 +1,16 @@
 services:
-  # 后端API服务
-  claude-proxy-backend:
+  # Claude API 代理服务 (一体化架构: 后端 + 前端界面)
+  claude-proxy:
     build:
       context: .
       # dockerfile: Dockerfile
       # 中国网络使用:
       dockerfile: Dockerfile_China
-      target: backend-runtime
-    container_name: claude-proxy-backend
+      target: runtime
+    container_name: claude-proxy
+    ports:
+      # 统一端口：前端界面 + API + 管理接口
+      - '3003:3000'
     volumes:
       # 配置目录持久化
       - ./.config:/app/.config
@@ -16,10 +19,18 @@ services:
     environment:
       # 基础配置
       - NODE_ENV=production
+      # 是否启用Web管理界面 (true=一体化模式, false=纯API模式)
+      - ENABLE_WEB_UI=true
       # 代理访问密钥 - 用于验证客户端对代理服务器的访问权限
-      - PROXY_ACCESS_KEY=sk-access-key
+      - PROXY_ACCESS_KEY=your-super-strong-secret-key
       # 日志级别 (error, warn, info, debug)
       - LOG_LEVEL=info
+      # 负载均衡策略 (round-robin, random, failover)
+      - LOAD_BALANCE_STRATEGY=failover
+      # 是否启用请求日志
+      - ENABLE_REQUEST_LOGS=true
+      # 是否启用响应日志
+      - ENABLE_RESPONSE_LOGS=true
     # 健康检查配置
     healthcheck:
       test:
@@ -39,63 +50,15 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 768M
           cpus: '1.0'
         reservations:
-          memory: 256M
+          memory: 384M
           cpus: '0.5'
 
     # 重启策略
     restart: unless-stopped
-
-    # 网络配置
-    networks:
-      - claude-proxy-network
-
-  # 前端Web界面服务
-  claude-proxy-frontend:
-    build:
-      context: .
-      # dockerfile: Dockerfile
-      # 中国网络使用:
-      dockerfile: Dockerfile_China
-      target: frontend-runtime
-    container_name: claude-proxy-frontend
-    ports:
-      - '3002:5173'
-    environment:
-      # 前端配置
-      - NODE_ENV=production
-    # 健康检查配置
-    healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:5173']
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-
-    # 资源限制
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.5'
-        reservations:
-          memory: 128M
-          cpus: '0.25'
-
-    # 重启策略
-    restart: unless-stopped
-
-    # 依赖后端服务
-    depends_on:
-      claude-proxy-backend:
-        condition: service_healthy
-
-    # 网络配置
-    networks:
-      - claude-proxy-network
-
-networks:
-  claude-proxy-network:
-    driver: bridge
+# 网络配置（可选，使用默认bridge网络）
+# networks:
+#   default:
+#     driver: bridge

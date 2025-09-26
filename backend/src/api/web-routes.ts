@@ -2,8 +2,35 @@ import { Router } from 'express'
 import { Agent, fetch as undiciFetch } from 'undici'
 import { configManager } from '../config/config'
 import { maskApiKey } from '../utils/index'
+import { envConfigManager } from '../config/env'
 
 const router = Router()
+
+// Web管理界面访问控制中间件
+const adminAuthMiddleware = (req: any, res: any, next: any) => {
+  // 获取访问密钥
+  let providedApiKey = req.headers['x-api-key'] || req.headers['authorization']
+
+  // 移除 Bearer 前缀（如果有）
+  if (providedApiKey && typeof providedApiKey === 'string') {
+    providedApiKey = providedApiKey.replace(/^bearer\s+/i, '')
+  }
+
+  const expectedApiKey = envConfigManager.getConfig().proxyAccessKey
+
+  if (!providedApiKey || providedApiKey !== expectedApiKey) {
+    console.warn(`[${new Date().toISOString()}] 🔒 Web管理界面访问密钥验证失败 - IP: ${req.ip}`)
+    return res.status(401).json({ 
+      error: 'Unauthorized', 
+      message: '管理界面访问需要有效的API密钥'
+    })
+  }
+
+  next()
+}
+
+// 应用访问控制中间件到所有管理API
+router.use('/api', adminAuthMiddleware)
 
 // 获取所有渠道
 router.get('/api/channels', (req, res) => {

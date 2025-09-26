@@ -55,15 +55,134 @@ app.use((req, res, next) => {
   next()
 })
 
+// Web管理界面访问控制中间件
+const webAuthMiddleware = (req: any, res: any, next: any) => {
+  // 对于健康检查、开发信息等公开端点，直接放行
+  if (req.path === envConfigManager.getConfig().healthCheckPath || 
+      req.path === '/admin/config/reload' ||
+      (isDevelopment && req.path === '/admin/dev/info')) {
+    return next()
+  }
+
+  // 对于前端静态资源文件（CSS、JS、图片等），直接放行
+  if (req.path.startsWith('/assets/') || 
+      req.path.endsWith('.css') || 
+      req.path.endsWith('.js') || 
+      req.path.endsWith('.ico') || 
+      req.path.endsWith('.png') || 
+      req.path.endsWith('.jpg') || 
+      req.path.endsWith('.gif') || 
+      req.path.endsWith('.svg') ||
+      req.path.endsWith('.woff') ||
+      req.path.endsWith('.woff2') ||
+      req.path.endsWith('.ttf') ||
+      req.path.endsWith('.eot')) {
+    return next()
+  }
+
+  // 对于API代理端点，已在后续处理
+  if (req.path.startsWith('/v1/')) {
+    return next()
+  }
+
+  // 如果禁用了Web UI，对所有其他路径返回404
+  if (!envConfigManager.getConfig().enableWebUI) {
+    return res.status(404).json({ 
+      error: 'Web界面已禁用',
+      message: '此服务器运行在纯API模式下，请通过API端点访问服务' 
+    })
+  }
+
+  // 对于Web管理界面，检查访问密钥
+  let providedApiKey = req.headers['x-api-key'] || req.headers['authorization'] || req.query.key
+
+  // 移除 Bearer 前缀（如果有）
+  if (providedApiKey && typeof providedApiKey === 'string') {
+    providedApiKey = providedApiKey.replace(/^bearer\s+/i, '')
+  }
+
+  const expectedApiKey = envConfigManager.getConfig().proxyAccessKey
+
+  if (!providedApiKey || providedApiKey !== expectedApiKey) {
+    console.warn(`[${new Date().toISOString()}] 🔒 Web界面访问被拒绝 - IP: ${req.ip}, Path: ${req.path}`)
+    
+    // 返回简单的认证页面
+    return res.status(401).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Claude Proxy - 访问验证</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5; margin: 0; padding: 40px; }
+          .container { max-width: 400px; margin: 100px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+          h1 { color: #333; margin-bottom: 20px; }
+          input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 20px; box-sizing: border-box; }
+          button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+          button:hover { background: #0056b3; }
+          .error { color: #dc3545; margin-bottom: 20px; font-size: 14px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>🔐 Claude Proxy 管理界面</h1>
+          <div class="error">请输入访问密钥以继续</div>
+          <form onsubmit="handleAuth(event)">
+            <input type="password" id="apiKey" placeholder="访问密钥 (PROXY_ACCESS_KEY)" required>
+            <button type="submit">访问管理界面</button>
+          </form>
+        </div>
+        <script>
+          function handleAuth(e) {
+            e.preventDefault();
+            const key = document.getElementById('apiKey').value;
+            const url = new URL(window.location);
+            url.searchParams.set('key', key);
+            window.location.href = url.toString();
+          }
+        </script>
+      </body>
+      </html>
+    `)
+  }
+
+  next()
+}
+
+// 应用Web界面访问控制
+app.use(webAuthMiddleware)
+
 // Web管理界面API路由
 app.use(webRoutes)
 
-// 静态文件服务（前端构建产物）
-app.use(express.static(path.join(__dirname, '../../frontend/dist')))
-// SPA 路由支持
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../../frontend/dist/index.html'))
-})
+// 静态文件服务（前端构建产物）- 仅在启用Web UI时
+if (envConfigManager.getConfig().enableWebUI) {
+  // 使用 process.cwd() 获取运行时工作目录，而不是编译时的 __dirname
+  // 这样避免了Bun编译时将 __dirname 硬编码为构建时路径的问题
+  const frontendDistPath = path.join(process.cwd(), 'frontend/dist')
+    
+  app.use(express.static(frontendDistPath))
+  // SPA 路由支持
+  app.get('/', (req, res) => {
+    res.sendFile(path.join(frontendDistPath, 'index.html'))
+  })
+} else {
+  // 纯API模式：根路径返回API信息
+  app.get('/', (req, res) => {
+    res.json({
+      name: 'Claude API Proxy',
+      mode: 'API Only',
+      version: '1.0.0',
+      endpoints: {
+        health: envConfigManager.getConfig().healthCheckPath,
+        proxy: '/v1/messages',
+        config: '/admin/config/reload'
+      },
+      message: 'Web界面已禁用，此服务器运行在纯API模式下'
+    })
+  })
+}
 
 // 开发模式检测
 const isDevelopment = process.env.NODE_ENV === 'development'

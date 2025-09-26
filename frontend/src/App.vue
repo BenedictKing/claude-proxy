@@ -1,5 +1,57 @@
 <template>
   <v-app>
+    <!-- 认证界面 -->
+    <v-dialog v-model="showAuthDialog" persistent max-width="500">
+      <v-card class="pa-4">
+        <v-card-title class="text-h5 text-center mb-4">
+          🔐 Claude Proxy 管理界面
+        </v-card-title>
+        
+        <v-card-text>
+          <v-alert
+            v-if="authError"
+            type="error"
+            variant="tonal"
+            class="mb-4"
+          >
+            {{ authError }}
+          </v-alert>
+          
+          <v-form @submit.prevent="handleAuthSubmit">
+            <v-text-field
+              v-model="authKeyInput"
+              label="访问密钥 (PROXY_ACCESS_KEY)"
+              type="password"
+              variant="outlined"
+              prepend-inner-icon="mdi-key"
+              :rules="[v => !!v || '请输入访问密钥']"
+              required
+              autofocus
+              @keyup.enter="handleAuthSubmit"
+            />
+            
+            <v-btn
+              type="submit"
+              color="primary"
+              block
+              size="large"
+              class="mt-4"
+              :loading="authLoading"
+            >
+              访问管理界面
+            </v-btn>
+          </v-form>
+          
+          <v-divider class="my-4" />
+          
+          <div class="text-body-2 text-center text-medium-emphasis">
+            <p>💡 <strong>提示：</strong></p>
+            <p>• 访问密钥在服务器的 <code>PROXY_ACCESS_KEY</code> 环境变量中设置</p>
+            <p>• 密钥将安全保存在本地，下次访问无需重新输入</p>
+          </div>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
     <!-- 应用栏 -->
     <v-app-bar
       elevation="2"
@@ -34,6 +86,17 @@
         @click="toggleTheme"
       >
         <v-icon>{{ currentTheme === 'dark' ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
+      </v-btn>
+      
+      <!-- 注销按钮 -->
+      <v-btn
+        icon
+        variant="text"
+        @click="handleLogout"
+        v-if="isAuthenticated"
+        title="注销"
+      >
+        <v-icon>mdi-logout</v-icon>
       </v-btn>
     </v-app-bar>
 
@@ -457,7 +520,7 @@ const refreshChannels = async () => {
     channelsData.value = await api.getChannels()
     updateChannelsPinnedStatus()
   } catch (error) {
-    handleError(error, '获取渠道列表失败')
+    handleAuthError(error)
   }
 }
 
@@ -474,7 +537,7 @@ const saveChannel = async (channel: Omit<Channel, 'index' | 'latency' | 'status'
     editingChannel.value = null
     await refreshChannels()
   } catch (error) {
-    handleError(error, editingChannel.value ? '更新渠道失败' : '添加渠道失败')
+    handleAuthError(error)
   }
 }
 
@@ -491,7 +554,7 @@ const deleteChannel = async (channelId: number) => {
     showToast('渠道删除成功', 'success')
     await refreshChannels()
   } catch (error) {
-    handleError(error, '删除渠道失败')
+    handleAuthError(error)
   }
 }
 
@@ -613,6 +676,89 @@ const setTheme = (themeName: 'light' | 'dark' | 'auto') => {
   localStorage.setItem('theme', themeName)
 }
 
+// 认证状态管理
+const isAuthenticated = ref(false)
+const authError = ref('')
+const authKeyInput = ref('')
+const authLoading = ref(false)
+
+// 控制认证对话框显示
+const showAuthDialog = computed({
+  get: () => !isAuthenticated.value,
+  set: () => {} // 防止外部修改，认证状态只能通过内部逻辑控制
+})
+
+// 初始化认证
+const initializeAuth = () => {
+  const key = api.initializeAuth()
+  isAuthenticated.value = !!key
+  if (!key) {
+    authError.value = '请输入访问密钥以继续'
+  }
+  return !!key
+}
+
+// 手动设置密钥（用于重新认证）
+const setAuthKey = (key: string) => {
+  api.setApiKey(key)
+  localStorage.setItem('proxyAccessKey', key)
+  isAuthenticated.value = true
+  authError.value = ''
+  // 重新加载数据
+  refreshChannels()
+}
+
+// 处理认证提交
+const handleAuthSubmit = async () => {
+  if (!authKeyInput.value.trim()) {
+    authError.value = '请输入访问密钥'
+    return
+  }
+  
+  authLoading.value = true
+  authError.value = ''
+  
+  try {
+    // 设置密钥
+    setAuthKey(authKeyInput.value.trim())
+    
+    // 测试API调用以验证密钥
+    await api.getChannels()
+    
+    // 如果成功，加载数据
+    loadPinnedChannels()
+    await refreshChannels()
+    
+    authKeyInput.value = ''
+  } catch (error: any) {
+    // 认证失败
+    isAuthenticated.value = false
+    authError.value = error.message || '访问密钥验证失败'
+    api.clearAuth()
+  } finally {
+    authLoading.value = false
+  }
+}
+
+// 处理注销
+const handleLogout = () => {
+  api.clearAuth()
+  isAuthenticated.value = false
+  authError.value = '请输入访问密钥以继续'
+  channelsData.value = { channels: [], current: 0, loadBalance: 'failover' }
+  showToast('已安全注销', 'info')
+}
+
+// 处理认证失败
+const handleAuthError = (error: any) => {
+  if (error.message && error.message.includes('认证失败')) {
+    isAuthenticated.value = false
+    authError.value = '访问密钥无效或已过期，请重新输入'
+  } else {
+    handleError(error, '操作失败')
+  }
+}
+
 // 初始化
 onMounted(async () => {
   // 加载保存的主题
@@ -624,11 +770,16 @@ onMounted(async () => {
   const handlePref = () => { if (currentTheme.value === 'auto') setTheme('auto') }
   mediaQuery.addEventListener('change', handlePref)
   
-  // 加载pin状态
-  loadPinnedChannels()
+  // 初始化认证
+  const authenticated = initializeAuth()
   
-  // 加载渠道数据
-  await refreshChannels()
+  if (authenticated) {
+    // 加载pin状态
+    loadPinnedChannels()
+    
+    // 加载渠道数据
+    await refreshChannels()
+  }
 })
 </script>
 

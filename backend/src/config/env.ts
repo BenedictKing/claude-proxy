@@ -6,6 +6,7 @@ dotenv.config()
 export interface EnvConfig {
   port: number
   nodeEnv: string
+  enableWebUI: boolean
   proxyAccessKey: string
   loadBalanceStrategy: 'round-robin' | 'random' | 'failover'
   logLevel: 'error' | 'warn' | 'info' | 'debug'
@@ -33,6 +34,7 @@ class EnvConfigManager {
     return {
       port: parseInt(process.env.PORT || '3000'),
       nodeEnv: process.env.NODE_ENV || 'development',
+      enableWebUI: process.env.ENABLE_WEB_UI !== 'false',
       proxyAccessKey: process.env.PROXY_ACCESS_KEY || 'your-proxy-access-key',
       loadBalanceStrategy: (process.env.LOAD_BALANCE_STRATEGY || 'failover') as 'round-robin' | 'random' | 'failover',
       logLevel: (process.env.LOG_LEVEL || 'info') as 'error' | 'warn' | 'info' | 'debug',

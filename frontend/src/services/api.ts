@@ -60,18 +60,83 @@ export interface PingResult {
 }
 
 class ApiService {
+  private apiKey: string | null = null
+
+  // 设置API密钥
+  setApiKey(key: string | null) {
+    this.apiKey = key
+  }
+
+  // 获取当前API密钥
+  getApiKey(): string | null {
+    return this.apiKey
+  }
+
+  // 从URL查询参数获取密钥
+  getKeyFromUrl(): string | null {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('key')
+  }
+
+  // 初始化密钥（从URL或localStorage）
+  initializeAuth() {
+    // 优先从URL获取密钥
+    const urlKey = this.getKeyFromUrl()
+    if (urlKey) {
+      this.setApiKey(urlKey)
+      // 保存到localStorage以便下次使用
+      localStorage.setItem('proxyAccessKey', urlKey)
+      
+      // 清理URL中的key参数以提高安全性
+      const url = new URL(window.location.href)
+      url.searchParams.delete('key')
+      window.history.replaceState({}, '', url.toString())
+      
+      return urlKey
+    }
+    
+    // 从localStorage获取保存的密钥
+    const savedKey = localStorage.getItem('proxyAccessKey')
+    if (savedKey) {
+      this.setApiKey(savedKey)
+      return savedKey
+    }
+    
+    return null
+  }
+
+  // 清除认证信息
+  clearAuth() {
+    this.apiKey = null
+    localStorage.removeItem('proxyAccessKey')
+  }
+
   private async request(url: string, options: RequestInit = {}): Promise<any> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...options.headers as Record<string, string>
+    }
+
+    // 添加API密钥到请求头
+    if (this.apiKey) {
+      headers['x-api-key'] = this.apiKey
+    }
+
     const response = await fetch(`${API_BASE}${url}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-      },
-      ...options
+      ...options,
+      headers
     })
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Unknown error' }))
-      throw new Error(error.error || 'Request failed')
+      
+      // 如果是401错误，清除本地认证信息并提示用户重新登录
+      if (response.status === 401) {
+        this.clearAuth()
+        throw new Error('认证失败，请重新输入访问密钥')
+      }
+      
+      throw new Error(error.error || error.message || 'Request failed')
     }
 
     return response.json()
