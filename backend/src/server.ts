@@ -58,25 +58,29 @@ app.use((req, res, next) => {
 // Web管理界面访问控制中间件
 const webAuthMiddleware = (req: any, res: any, next: any) => {
   // 对于健康检查、开发信息等公开端点，直接放行
-  if (req.path === envConfigManager.getConfig().healthCheckPath || 
-      req.path === '/admin/config/reload' ||
-      (isDevelopment && req.path === '/admin/dev/info')) {
+  if (
+    req.path === envConfigManager.getConfig().healthCheckPath ||
+    req.path === '/admin/config/reload' ||
+    (isDevelopment && req.path === '/admin/dev/info')
+  ) {
     return next()
   }
 
   // 对于前端静态资源文件（CSS、JS、图片等），直接放行
-  if (req.path.startsWith('/assets/') || 
-      req.path.endsWith('.css') || 
-      req.path.endsWith('.js') || 
-      req.path.endsWith('.ico') || 
-      req.path.endsWith('.png') || 
-      req.path.endsWith('.jpg') || 
-      req.path.endsWith('.gif') || 
-      req.path.endsWith('.svg') ||
-      req.path.endsWith('.woff') ||
-      req.path.endsWith('.woff2') ||
-      req.path.endsWith('.ttf') ||
-      req.path.endsWith('.eot')) {
+  if (
+    req.path.startsWith('/assets/') ||
+    req.path.endsWith('.css') ||
+    req.path.endsWith('.js') ||
+    req.path.endsWith('.ico') ||
+    req.path.endsWith('.png') ||
+    req.path.endsWith('.jpg') ||
+    req.path.endsWith('.gif') ||
+    req.path.endsWith('.svg') ||
+    req.path.endsWith('.woff') ||
+    req.path.endsWith('.woff2') ||
+    req.path.endsWith('.ttf') ||
+    req.path.endsWith('.eot')
+  ) {
     return next()
   }
 
@@ -87,9 +91,9 @@ const webAuthMiddleware = (req: any, res: any, next: any) => {
 
   // 如果禁用了Web UI，对所有其他路径返回404
   if (!envConfigManager.getConfig().enableWebUI) {
-    return res.status(404).json({ 
+    return res.status(404).json({
       error: 'Web界面已禁用',
-      message: '此服务器运行在纯API模式下，请通过API端点访问服务' 
+      message: '此服务器运行在纯API模式下，请通过API端点访问服务'
     })
   }
 
@@ -105,7 +109,7 @@ const webAuthMiddleware = (req: any, res: any, next: any) => {
 
   if (!providedApiKey || providedApiKey !== expectedApiKey) {
     console.warn(`[${new Date().toISOString()}] 🔒 Web界面访问被拒绝 - IP: ${req.ip}, Path: ${req.path}`)
-    
+
     // 返回简单的认证页面
     return res.status(401).send(`
       <!DOCTYPE html>
@@ -161,7 +165,7 @@ if (envConfigManager.getConfig().enableWebUI) {
   // 使用 process.cwd() 获取运行时工作目录，而不是编译时的 __dirname
   // 这样避免了Bun编译时将 __dirname 硬编码为构建时路径的问题
   const frontendDistPath = path.join(process.cwd(), 'frontend/dist')
-    
+
   app.use(express.static(frontendDistPath))
   // SPA 路由支持
   app.get('/', (req, res) => {
@@ -259,7 +263,7 @@ app.post('/v1/messages', async (req, res) => {
         const originalBodyStr = JSON.stringify(req.body, null, 2)
         console.debug(
           `[${new Date().toISOString()}] 📋 原始请求体:`,
-          originalBodyStr.length > 500 ? originalBodyStr.substring(0, 500) + '...' : originalBodyStr
+          originalBodyStr.length > 1500 ? originalBodyStr.substring(0, 1500) + '...' : originalBodyStr
         )
         // 对请求头做敏感信息脱敏
         const sanitizedReqHeaders: { [key: string]: string } = {}
@@ -360,7 +364,7 @@ app.post('/v1/messages', async (req, res) => {
             headers.append(key, value)
           }
         }
-        
+
         // 获取原始请求体字符串，避免JSON重新序列化
         let originalBodyString: string
         try {
@@ -370,12 +374,12 @@ app.post('/v1/messages', async (req, res) => {
           // 如果序列化失败，回退到空对象
           originalBodyString = '{}'
         }
-        
+
         // 构建完整的URL，避免相对路径导致Request构造失败
         const protocol = req.protocol || 'http'
         const host = req.get('host') || 'localhost:3000'
         const fullUrl = `${protocol}://${host}${req.url || '/v1/messages'}`
-        
+
         const incomingRequest = new Request(fullUrl, {
           method: req.method,
           headers: headers,
@@ -404,7 +408,7 @@ app.post('/v1/messages', async (req, res) => {
             if (body.length > 0) {
               console.debug(
                 `[${new Date().toISOString()}] 📦 实际请求体:`,
-                body.length > 500 ? body.substring(0, 500) + '...' : body
+                body.length > 1500 ? body.substring(0, 1500) + '...' : body
               )
             }
           } catch (error) {
