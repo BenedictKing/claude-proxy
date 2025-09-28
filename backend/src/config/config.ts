@@ -113,7 +113,11 @@ class ConfigManager {
       this.watcher = fs.watch(CONFIG_FILE, eventType => {
         if (eventType === 'change') {
           console.log(`[${new Date().toISOString()}] 🔧 检测到配置文件变化，重载配置...`)
-          this.reloadConfig()
+          try {
+            this.reloadConfig()
+          } catch (error) {
+            console.warn(`[${new Date().toISOString()}] 配置重载失败（已忽略以保持服务运行）:`, error)
+          }
         }
       })
       console.log(`[${new Date().toISOString()}] 🔧 配置文件监听已启动 (配置变更不会重启服务器)`)
@@ -132,9 +136,17 @@ class ConfigManager {
 
   reloadConfig(): void {
     this.config = this.loadConfig()
-    const currentUpstream = this.getCurrentUpstream()
     console.log(`[${new Date().toISOString()}] 配置已重载`)
-    console.log(`⚙️  当前配置: ${currentUpstream.name || currentUpstream.serviceType} - ${currentUpstream.baseUrl}`)
+    try {
+      if (!this.config.upstream || this.config.upstream.length === 0) {
+        console.warn(`⚠️  当前未配置任何上游渠道`)
+        return
+      }
+      const currentUpstream = this.getCurrentUpstream()
+      console.log(`⚙️  当前配置: ${currentUpstream.name || currentUpstream.serviceType} - ${currentUpstream.baseUrl}`)
+    } catch (e) {
+      console.warn(`⚠️  当前上游配置不可用: ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
 
   private loadConfig(): Config {
@@ -215,7 +227,14 @@ class ConfigManager {
   }
 
   getCurrentUpstream(): UpstreamConfig {
-    return this.config.upstream[this.config.currentUpstream]
+    if (!this.config.upstream || this.config.upstream.length === 0) {
+      throw new Error('未配置任何上游渠道')
+    }
+    const upstream = this.config.upstream[this.config.currentUpstream]
+    if (!upstream) {
+      throw new Error(`当前渠道索引 ${this.config.currentUpstream} 无效`)
+    }
+    return upstream
   }
 
   addUpstream(upstream: UpstreamConfig): void {

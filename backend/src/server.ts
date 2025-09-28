@@ -9,6 +9,35 @@ import * as claude from './providers/claude'
 import { configManager, UpstreamConfig } from './config/config'
 import { envConfigManager } from './config/env'
 import { maskApiKey } from './utils/index'
+
+// 智能JSON截断函数 - 只截断长文本内容，保持结构完整
+function truncateJsonIntelligently(obj: any, maxTextLength: number = 200): any {
+  if (obj === null || obj === undefined) {
+    return obj
+  }
+
+  if (typeof obj === 'string') {
+    return obj.length > maxTextLength ? obj.substring(0, maxTextLength) + '...' : obj
+  }
+
+  if (typeof obj === 'number' || typeof obj === 'boolean') {
+    return obj
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => truncateJsonIntelligently(item, maxTextLength))
+  }
+
+  if (typeof obj === 'object') {
+    const truncated: any = {}
+    for (const [key, value] of Object.entries(obj)) {
+      truncated[key] = truncateJsonIntelligently(value, maxTextLength)
+    }
+    return truncated
+  }
+
+  return obj
+}
 import webRoutes from './api/web-routes'
 import chokidar from 'chokidar'
 import { Agent, fetch as undiciFetch } from 'undici'
@@ -58,25 +87,29 @@ app.use((req, res, next) => {
 // Web管理界面访问控制中间件
 const webAuthMiddleware = (req: any, res: any, next: any) => {
   // 对于健康检查、开发信息等公开端点，直接放行
-  if (req.path === envConfigManager.getConfig().healthCheckPath || 
-      req.path === '/admin/config/reload' ||
-      (isDevelopment && req.path === '/admin/dev/info')) {
+  if (
+    req.path === envConfigManager.getConfig().healthCheckPath ||
+    req.path === '/admin/config/reload' ||
+    (isDevelopment && req.path === '/admin/dev/info')
+  ) {
     return next()
   }
 
   // 对于前端静态资源文件（CSS、JS、图片等），直接放行
-  if (req.path.startsWith('/assets/') || 
-      req.path.endsWith('.css') || 
-      req.path.endsWith('.js') || 
-      req.path.endsWith('.ico') || 
-      req.path.endsWith('.png') || 
-      req.path.endsWith('.jpg') || 
-      req.path.endsWith('.gif') || 
-      req.path.endsWith('.svg') ||
-      req.path.endsWith('.woff') ||
-      req.path.endsWith('.woff2') ||
-      req.path.endsWith('.ttf') ||
-      req.path.endsWith('.eot')) {
+  if (
+    req.path.startsWith('/assets/') ||
+    req.path.endsWith('.css') ||
+    req.path.endsWith('.js') ||
+    req.path.endsWith('.ico') ||
+    req.path.endsWith('.png') ||
+    req.path.endsWith('.jpg') ||
+    req.path.endsWith('.gif') ||
+    req.path.endsWith('.svg') ||
+    req.path.endsWith('.woff') ||
+    req.path.endsWith('.woff2') ||
+    req.path.endsWith('.ttf') ||
+    req.path.endsWith('.eot')
+  ) {
     return next()
   }
 
@@ -87,9 +120,9 @@ const webAuthMiddleware = (req: any, res: any, next: any) => {
 
   // 如果禁用了Web UI，对所有其他路径返回404
   if (!envConfigManager.getConfig().enableWebUI) {
-    return res.status(404).json({ 
+    return res.status(404).json({
       error: 'Web界面已禁用',
-      message: '此服务器运行在纯API模式下，请通过API端点访问服务' 
+      message: '此服务器运行在纯API模式下，请通过API端点访问服务'
     })
   }
 
@@ -105,7 +138,7 @@ const webAuthMiddleware = (req: any, res: any, next: any) => {
 
   if (!providedApiKey || providedApiKey !== expectedApiKey) {
     console.warn(`[${new Date().toISOString()}] 🔒 Web界面访问被拒绝 - IP: ${req.ip}, Path: ${req.path}`)
-    
+
     // 返回简单的认证页面
     return res.status(401).send(`
       <!DOCTYPE html>
@@ -161,7 +194,7 @@ if (envConfigManager.getConfig().enableWebUI) {
   // 使用 process.cwd() 获取运行时工作目录，而不是编译时的 __dirname
   // 这样避免了Bun编译时将 __dirname 硬编码为构建时路径的问题
   const frontendDistPath = path.join(process.cwd(), 'frontend/dist')
-    
+
   app.use(express.static(frontendDistPath))
   // SPA 路由支持
   app.get('/', (req, res) => {
@@ -256,11 +289,8 @@ app.post('/v1/messages', async (req, res) => {
     if (envConfigManager.getConfig().enableRequestLogs) {
       console.log(`[${new Date().toISOString()}] ${isDevelopment ? '📥' : ''} 收到请求: ${req.method} ${req.path}`)
       if (isDevelopment) {
-        const originalBodyStr = JSON.stringify(req.body, null, 2)
-        console.debug(
-          `[${new Date().toISOString()}] 📋 原始请求体:`,
-          originalBodyStr.length > 500 ? originalBodyStr.substring(0, 500) + '...' : originalBodyStr
-        )
+        const truncatedBody = truncateJsonIntelligently(req.body, 200)
+        console.debug(`[${new Date().toISOString()}] 📋 原始请求体:`, JSON.stringify(truncatedBody, null, 2))
         // 对请求头做敏感信息脱敏
         const sanitizedReqHeaders: { [key: string]: string } = {}
         Object.entries(req.headers).forEach(([k, v]) => {
@@ -296,12 +326,19 @@ app.post('/v1/messages', async (req, res) => {
     let upstream: UpstreamConfig
     try {
       upstream = configManager.getCurrentUpstream()
-      if (!upstream.apiKeys.length) {
-        throw new Error(`当前渠道 "${upstream.name || upstream.serviceType}" 没有配置API密钥`)
-      }
     } catch (error) {
-      console.error('获取当前渠道配置失败:', error)
-      res.status(500).json({ error: '当前渠道配置错误或没有可用的API密钥' })
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error('获取当前渠道配置失败:', msg)
+      if (msg.includes('未配置任何上游渠道')) {
+        res.status(503).json({ error: '未配置任何渠道，请先在管理界面添加渠道', code: 'NO_UPSTREAM' })
+      } else {
+        res.status(500).json({ error: '当前渠道配置错误', details: msg })
+      }
+      return
+    }
+
+    if (!upstream.apiKeys || upstream.apiKeys.length === 0) {
+      res.status(503).json({ error: `当前渠道 "${upstream.name || upstream.serviceType}" 未配置API密钥`, code: 'NO_API_KEYS' })
       return
     }
 
@@ -360,7 +397,7 @@ app.post('/v1/messages', async (req, res) => {
             headers.append(key, value)
           }
         }
-        
+
         // 获取原始请求体字符串，避免JSON重新序列化
         let originalBodyString: string
         try {
@@ -370,12 +407,12 @@ app.post('/v1/messages', async (req, res) => {
           // 如果序列化失败，回退到空对象
           originalBodyString = '{}'
         }
-        
+
         // 构建完整的URL，避免相对路径导致Request构造失败
         const protocol = req.protocol || 'http'
         const host = req.get('host') || 'localhost:3000'
         const fullUrl = `${protocol}://${host}${req.url || '/v1/messages'}`
-        
+
         const incomingRequest = new Request(fullUrl, {
           method: req.method,
           headers: headers,
@@ -400,13 +437,9 @@ app.post('/v1/messages', async (req, res) => {
           })
           console.debug(`[${new Date().toISOString()}] 📋 实际请求头:`, JSON.stringify(reqHeaders, null, 2))
           try {
-            const body = JSON.stringify(await providerRequest.clone().json(), null, 2)
-            if (body.length > 0) {
-              console.debug(
-                `[${new Date().toISOString()}] 📦 实际请求体:`,
-                body.length > 500 ? body.substring(0, 500) + '...' : body
-              )
-            }
+            const requestBodyJson = await providerRequest.clone().json()
+            const truncatedRequestBody = truncateJsonIntelligently(requestBodyJson, 200)
+            console.debug(`[${new Date().toISOString()}] 📦 实际请求体:`, JSON.stringify(truncatedRequestBody, null, 2))
           } catch (error) {
             console.log(
               `[${new Date().toISOString()}] 📦 请求体: [无法读取 - ${error instanceof Error ? error.message : '未知错误'}]`
@@ -723,12 +756,20 @@ app.post('/v1/messages', async (req, res) => {
           // 对于非流式响应，克隆并记录
           try {
             const responseClone = providerResponse.clone()
-            const body = await responseClone.text()
-            if (body.length > 0) {
-              console.log(
-                `[${new Date().toISOString()}] 📦 响应体:`,
-                body.length > 1000 ? body.substring(0, 1000) + '...' : body
-              )
+            const responseText = await responseClone.text()
+            if (responseText.length > 0) {
+              try {
+                // 尝试解析为JSON并智能截断
+                const responseJson = JSON.parse(responseText)
+                const truncatedResponse = truncateJsonIntelligently(responseJson, 200)
+                console.log(`[${new Date().toISOString()}] 📦 响应体:`, JSON.stringify(truncatedResponse, null, 2))
+              } catch (jsonError) {
+                // 如果不是JSON，按字符串截断
+                console.log(
+                  `[${new Date().toISOString()}] 📦 响应体:`,
+                  responseText.length > 2000 ? responseText.substring(0, 2000) + '...' : responseText
+                )
+              }
             }
           } catch (error) {
             console.log(`[${new Date().toISOString()}] 📦 响应体: [无法读取 - ${(error as Error).message}]`)
@@ -851,9 +892,12 @@ app.listen(envConfig.port, () => {
 
   if (isDevelopment) {
     console.log(`🔧 开发信息: GET /admin/dev/info`)
-    console.log(
-      `⚙️  当前配置: ${configManager.getCurrentUpstream().name || configManager.getCurrentUpstream().serviceType} - ${configManager.getCurrentUpstream().baseUrl}`
-    )
+    try {
+      const cu = configManager.getCurrentUpstream()
+      console.log(`⚙️  当前配置: ${cu.name || cu.serviceType} - ${cu.baseUrl}`)
+    } catch {
+      console.log(`⚙️  当前配置: 未配置任何上游渠道`)
+    }
     console.log(`🔧 配置管理: bun run config --help`)
     console.log(`📊 环境: ${envConfig.nodeEnv}`)
     console.log(`🔍 开发模式 - 详细日志已启用`)
