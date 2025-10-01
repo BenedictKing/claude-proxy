@@ -38,6 +38,40 @@ function truncateJsonIntelligently(obj: any, maxTextLength: number = 200): any {
 
   return obj
 }
+
+// 精简 tools 数组为名称列表的函数
+function simplifyToolsArray(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => simplifyToolsArray(item))
+  }
+
+  if (typeof obj === 'object') {
+    const simplified: any = {}
+    for (const [key, value] of Object.entries(obj)) {
+      // 如果是 tools 字段且是数组，则提取工具名称
+      if (key === 'tools' && Array.isArray(value)) {
+        simplified[key] = value.map((tool: any) => {
+          if (tool?.function?.name) {
+            return tool.function.name
+          }
+          if (tool?.name) {
+            return tool.name
+          }
+          return tool
+        })
+      } else {
+        simplified[key] = simplifyToolsArray(value)
+      }
+    }
+    return simplified
+  }
+
+  return obj
+}
 import webRoutes from './api/web-routes'
 import chokidar from 'chokidar'
 import { Agent, fetch as undiciFetch } from 'undici'
@@ -289,7 +323,9 @@ app.post('/v1/messages', async (req, res) => {
     if (envConfigManager.getConfig().enableRequestLogs) {
       console.log(`[${new Date().toISOString()}] ${isDevelopment ? '📥' : ''} 收到请求: ${req.method} ${req.path}`)
       if (isDevelopment) {
-        const truncatedBody = truncateJsonIntelligently(req.body, 200)
+        // 先精简 tools 数组，再截断长文本
+        const simplifiedBody = simplifyToolsArray(req.body)
+        const truncatedBody = truncateJsonIntelligently(simplifiedBody, 200)
         console.debug(`[${new Date().toISOString()}] 📋 原始请求体:`, JSON.stringify(truncatedBody, null, 2))
         // 对请求头做敏感信息脱敏
         const sanitizedReqHeaders: { [key: string]: string } = {}
@@ -438,7 +474,9 @@ app.post('/v1/messages', async (req, res) => {
           console.debug(`[${new Date().toISOString()}] 📋 实际请求头:`, JSON.stringify(reqHeaders, null, 2))
           try {
             const requestBodyJson = await providerRequest.clone().json()
-            const truncatedRequestBody = truncateJsonIntelligently(requestBodyJson, 200)
+            // 先精简 tools 数组，再截断长文本
+            const simplifiedRequestBody = simplifyToolsArray(requestBodyJson)
+            const truncatedRequestBody = truncateJsonIntelligently(simplifiedRequestBody, 200)
             console.debug(`[${new Date().toISOString()}] 📦 实际请求体:`, JSON.stringify(truncatedRequestBody, null, 2))
           } catch (error) {
             console.log(
