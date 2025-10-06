@@ -6,6 +6,7 @@ WORKDIR /src
 # 复制项目根目录配置文件
 COPY package.json ./
 COPY tsconfig.json ./
+COPY scripts ./scripts
 
 # 复制backend必要文件
 COPY backend/src ./backend/src

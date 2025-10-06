@@ -963,7 +963,7 @@ function setupDevelopmentWatchers() {
   })
 
   // 环境变量文件监听
-  const envWatcher = chokidar.watch(['../.env', '../.env.example'], {
+  const envWatcher = chokidar.watch(['.env', '.env.example'], {
     persistent: true,
     ignoreInitial: true
   })

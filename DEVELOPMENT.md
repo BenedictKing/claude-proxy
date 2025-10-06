@@ -38,8 +38,8 @@ bun run type-check            # TypeScript 类型检查
 
 ### 环境变量文件（需要重启）
 
-- `.env` - 环境变量文件
-- `.env.example` - 环境变量示例
+- `backend/.env` - 环境变量文件
+- `backend/.env.example` - 环境变量示例
 
 **变化时**: 需要重启服务器以加载新的环境变量
 
@@ -174,10 +174,11 @@ claude-api-proxy/
 │       ├── utils/
 │       ├── server.ts       # Express 服务器
 │       ├── dev-runner.ts   # 开发模式自动重启
-│       └── config-cli.ts   # 配置命令行工具
+│       ├── config-cli.ts   # 配置命令行工具
+│       └── .env            # 环境变量配置
 ├── frontend/
 │   └── ...
-└── .env                  # 环境变量配置
+└── scripts/              # 构建脚本
 ```
 
 ### 设计模式
@@ -444,8 +445,8 @@ telnet localhost 3000
 bun install
 
 # 2. 配置环境变量
-cp .env.example .env
-vim .env
+cp backend/.env.example backend/.env
+vim backend/.env
 
 # 3. 启动开发服务器
 bun run dev
@@ -490,7 +491,7 @@ CMD ["bun", "run", "start"]
 ```bash
 # 构建和运行
 docker build -t claude-api-proxy .
-docker run -p 3000:3000 -v $(pwd)/backend/.config:/app/.config -v $(pwd)/.env:/app/.env --name claude-proxy-container claude-api-proxy
+docker run -p 3000:3000 -v $(pwd)/backend/.config:/app/.config -v $(pwd)/backend/.env:/app/.env --name claude-proxy-container claude-api-proxy
 ```
 
 ## 🤝 贡献与发布
