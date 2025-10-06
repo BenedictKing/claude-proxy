@@ -11,7 +11,7 @@ import { envConfigManager } from './config/env'
 import { maskApiKey } from './utils/index'
 
 // 智能JSON截断函数 - 只截断长文本内容，保持结构完整
-function truncateJsonIntelligently(obj: any, maxTextLength: number = 200): any {
+function truncateJsonIntelligently(obj: any, maxTextLength: number = 500): any {
   if (obj === null || obj === undefined) {
     return obj
   }
@@ -325,7 +325,7 @@ app.post('/v1/messages', async (req, res) => {
       if (isDevelopment) {
         // 先精简 tools 数组，再截断长文本
         const simplifiedBody = simplifyToolsArray(req.body)
-        const truncatedBody = truncateJsonIntelligently(simplifiedBody, 200)
+        const truncatedBody = truncateJsonIntelligently(simplifiedBody)
         console.debug(`[${new Date().toISOString()}] 📋 原始请求体:`, JSON.stringify(truncatedBody, null, 2))
         // 对请求头做敏感信息脱敏
         const sanitizedReqHeaders: { [key: string]: string } = {}
@@ -374,7 +374,9 @@ app.post('/v1/messages', async (req, res) => {
     }
 
     if (!upstream.apiKeys || upstream.apiKeys.length === 0) {
-      res.status(503).json({ error: `当前渠道 "${upstream.name || upstream.serviceType}" 未配置API密钥`, code: 'NO_API_KEYS' })
+      res
+        .status(503)
+        .json({ error: `当前渠道 "${upstream.name || upstream.serviceType}" 未配置API密钥`, code: 'NO_API_KEYS' })
       return
     }
 
@@ -476,7 +478,7 @@ app.post('/v1/messages', async (req, res) => {
             const requestBodyJson = await providerRequest.clone().json()
             // 先精简 tools 数组，再截断长文本
             const simplifiedRequestBody = simplifyToolsArray(requestBodyJson)
-            const truncatedRequestBody = truncateJsonIntelligently(simplifiedRequestBody, 200)
+            const truncatedRequestBody = truncateJsonIntelligently(simplifiedRequestBody)
             console.debug(`[${new Date().toISOString()}] 📦 实际请求体:`, JSON.stringify(truncatedRequestBody, null, 2))
           } catch (error) {
             console.log(
@@ -799,7 +801,7 @@ app.post('/v1/messages', async (req, res) => {
               try {
                 // 尝试解析为JSON并智能截断
                 const responseJson = JSON.parse(responseText)
-                const truncatedResponse = truncateJsonIntelligently(responseJson, 200)
+                const truncatedResponse = truncateJsonIntelligently(responseJson)
                 console.log(`[${new Date().toISOString()}] 📦 响应体:`, JSON.stringify(truncatedResponse, null, 2))
               } catch (jsonError) {
                 // 如果不是JSON，按字符串截断
