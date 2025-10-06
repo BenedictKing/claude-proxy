@@ -225,15 +225,85 @@ app.use(webRoutes)
 
 // 静态文件服务（前端构建产物）- 仅在启用Web UI时
 if (envConfigManager.getConfig().enableWebUI) {
-  // 使用 process.cwd() 获取运行时工作目录，而不是编译时的 __dirname
-  // 这样避免了Bun编译时将 __dirname 硬编码为构建时路径的问题
-  const frontendDistPath = path.join(process.cwd(), 'frontend/dist')
+  // 智能路径检测：支持多种部署场景
+  // 1. 开发模式：frontend/dist (相对于项目根目录)
+  // 2. 生产模式(Monorepo)：frontend/dist (相对于项目根目录)
+  // 3. Docker模式：backend/frontend/dist (前端资源被复制到后端目录)
+  const possiblePaths = [
+    path.join(process.cwd(), 'frontend', 'dist'),           // Monorepo结构
+    path.join(process.cwd(), 'backend', 'frontend', 'dist'), // Docker/手动复制
+    path.join(__dirname, '..', 'frontend', 'dist'),         // 相对于后端目录
+    path.join(__dirname, '..', '..', 'frontend', 'dist')     // 相对于dist目录
+  ]
 
-  app.use(express.static(frontendDistPath))
-  // SPA 路由支持
-  app.get('/', (req, res) => {
-    res.sendFile(path.join(frontendDistPath, 'index.html'))
-  })
+  // 尝试找到第一个存在的路径
+  let frontendDistPath: string | null = null
+  const fs = await import('fs')
+  for (const p of possiblePaths) {
+    try {
+      if (fs.existsSync(path.join(p, 'index.html'))) {
+        frontendDistPath = p
+        console.log(`[${new Date().toISOString()}] ✅ 找到前端资源: ${frontendDistPath}`)
+        break
+      }
+    } catch (error) {
+      // 忽略错误，继续尝试下一个路径
+    }
+  }
+
+  if (!frontendDistPath) {
+    console.error(`[${new Date().toISOString()}] ❌ 错误: 找不到前端构建文件`)
+    console.error(`[${new Date().toISOString()}] 已尝试以下路径:`)
+    possiblePaths.forEach(p => console.error(`   - ${p}`))
+    console.error(`[${new Date().toISOString()}] 💡 解决方案:`)
+    console.error(`   1. 运行 "bun run build" 构建前端`)
+    console.error(`   2. 或手动复制: cp -r frontend/dist backend/frontend/dist`)
+    console.error(`   3. 或临时禁用Web UI: 设置 ENABLE_WEB_UI=false`)
+
+    // 如果找不到前端文件，返回错误页面而不是崩溃
+    app.get('/', (req, res) => {
+      res.status(503).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Claude Proxy - 配置错误</title>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: system-ui; padding: 40px; background: #f5f5f5; }
+            .error { max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; }
+            h1 { color: #dc3545; }
+            code { background: #f8f9fa; padding: 2px 6px; border-radius: 3px; }
+            pre { background: #f8f9fa; padding: 16px; border-radius: 4px; overflow-x: auto; }
+          </style>
+        </head>
+        <body>
+          <div class="error">
+            <h1>❌ 前端资源未找到</h1>
+            <p>无法找到前端构建文件。请执行以下步骤之一：</p>
+            <h3>方案1: 重新构建(推荐)</h3>
+            <pre>bun run build</pre>
+            <h3>方案2: 手动复制前端资源</h3>
+            <pre># Windows
+xcopy /E /I frontend\\dist backend\\frontend\\dist
+
+# Linux/Mac
+mkdir -p backend/frontend
+cp -r frontend/dist backend/frontend/dist</pre>
+            <h3>方案3: 禁用Web界面</h3>
+            <p>在 <code>.env</code> 文件中设置: <code>ENABLE_WEB_UI=false</code></p>
+            <p>然后只使用API端点: <code>/v1/messages</code></p>
+          </div>
+        </body>
+        </html>
+      `)
+    })
+  } else {
+    app.use(express.static(frontendDistPath))
+    // SPA 路由支持
+    app.get('/', (req, res) => {
+      res.sendFile(path.join(frontendDistPath, 'index.html'))
+    })
+  }
 } else {
   // 纯API模式：根路径返回API信息
   app.get('/', (req, res) => {

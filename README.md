@@ -103,16 +103,22 @@ bun run dev
 ### 生产模式
 
 ```bash
-# 构建项目
+# 构建项目（会同时构建前后端）
 bun run build
 
-# 启动服务器
+# 启动服务器（必须在项目根目录执行）
 bun run start
 ```
 
+**重要提示**：
+- ✅ 构建命令会自动验证前后端构建产物
+- ✅ 启动命令必须在项目根目录（claude-proxy/）执行
+- ✅ 前端资源会自动从 `frontend/dist` 加载
+- ⚠️  如果遇到 "前端资源未找到" 错误，请重新运行 `bun run build`
+
 访问地址：
 - **Web管理界面**: http://localhost:3000
-- **API代理端点**: http://localhost:3000/v1/messages  
+- **API代理端点**: http://localhost:3000/v1/messages
 - **健康检查**: http://localhost:3000/health
 
 ## 🐳 Docker 部署 (推荐)
@@ -473,7 +479,7 @@ ENABLE_RESPONSE_LOGS=true  # 记录响应日志
    ```bash
    # 检查密钥设置
    echo $PROXY_ACCESS_KEY
-   
+
    # 验证密钥格式
    curl -H "x-api-key: $PROXY_ACCESS_KEY" http://localhost:3000/health
    ```
@@ -482,18 +488,51 @@ ENABLE_RESPONSE_LOGS=true  # 记录响应日志
    ```bash
    # 检查日志
    docker-compose logs claude-proxy
-   
+
    # 检查端口占用
    lsof -i :3000
    ```
 
-3. **前端界面无法访问**
+3. **前端界面无法访问 - "前端资源未找到"**
+
+   **原因**: 前端构建产物不存在或路径不正确
+
+   **解决方案**:
+
+   ```bash
+   # 方案1: 重新构建（推荐）
+   bun run build
+   bun run start
+
+   # 方案2: 验证构建产物是否存在
+   # Windows
+   dir frontend\dist\index.html
+
+   # Linux/Mac
+   ls -la frontend/dist/index.html
+
+   # 方案3: 检查工作目录
+   # 确保在项目根目录（claude-proxy/）执行启动命令
+   pwd  # 应该显示 .../claude-proxy
+   bun run start
+
+   # 方案4: 临时禁用Web UI
+   # 编辑 backend/.env 文件
+   ENABLE_WEB_UI=false
+   # 然后只使用API端点: /v1/messages
+   ```
+
+4. **Docker环境前端404**
    ```bash
    # 检查 ENABLE_WEB_UI 设置
    docker-compose exec claude-proxy printenv ENABLE_WEB_UI
-   
-   # 检查文件路径
+
+   # 检查文件路径（Docker内部会自动复制到正确位置）
    docker-compose exec claude-proxy ls -la /app/frontend/dist/
+
+   # 重新构建镜像
+   docker-compose build --no-cache
+   docker-compose up -d
    ```
 
 ### 重置配置
