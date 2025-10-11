@@ -537,8 +537,8 @@ app.post('/v1/messages', async (req, res) => {
 
         // 记录实际发出的请求
         if (isDevelopment || envConfigManager.getConfig().enableRequestLogs) {
-          console.log(`[${new Date().toISOString()}] 🌐 实际请求URL: ${providerRequest.url}`)
-          console.log(`[${new Date().toISOString()}] 📤 请求方法: ${providerRequest.method}`)
+          console.debug(`[${new Date().toISOString()}] 🌐 实际请求URL: ${providerRequest.url}`)
+          console.debug(`[${new Date().toISOString()}] 📤 请求方法: ${providerRequest.method}`)
           const reqHeaders: { [key: string]: string } = {}
           providerRequest.headers.forEach((value, key) => {
             reqHeaders[key] = maskHeaderValue(key, value)
@@ -551,7 +551,7 @@ app.post('/v1/messages', async (req, res) => {
             const truncatedRequestBody = truncateJsonIntelligently(simplifiedRequestBody)
             console.debug(`[${new Date().toISOString()}] 📦 实际请求体:`, JSON.stringify(truncatedRequestBody, null, 2))
           } catch (error) {
-            console.log(
+            console.error(
               `[${new Date().toISOString()}] 📦 请求体: [无法读取 - ${error instanceof Error ? error.message : '未知错误'}]`
             )
           }
@@ -729,7 +729,7 @@ app.post('/v1/messages', async (req, res) => {
       providerResponse.headers.forEach((value, key) => {
         responseHeaders[key] = value
       })
-      console.log(`[${new Date().toISOString()}] 📋 响应头:`, JSON.stringify(responseHeaders, null, 2))
+      console.debug(`[${new Date().toISOString()}] 📋 响应头:`, JSON.stringify(responseHeaders, null, 2))
 
       // 在 debug 级别下记录响应体
       if (envConfigManager.shouldLog('debug')) {
@@ -840,12 +840,12 @@ app.post('/v1/messages', async (req, res) => {
                   }
 
                   if (synthesizedContent.trim() && !parseFailed) {
-                    console.log(
+                    console.debug(
                       `[${new Date().toISOString()}] 🛰️  上游流式响应合成内容:\n---\n${synthesizedContent.trim()}\n---`
                     )
                   } else {
                     // 如果合成失败或内容为空，则打印原始响应体
-                    console.log(
+                    console.debug(
                       `[${new Date().toISOString()}] 🛰️  上游流式响应体 (完整):\n---\n${fullBody.trim()}\n---`
                     )
                   }
@@ -872,17 +872,17 @@ app.post('/v1/messages', async (req, res) => {
                 // 尝试解析为JSON并智能截断
                 const responseJson = JSON.parse(responseText)
                 const truncatedResponse = truncateJsonIntelligently(responseJson)
-                console.log(`[${new Date().toISOString()}] 📦 响应体:`, JSON.stringify(truncatedResponse, null, 2))
+                console.debug(`[${new Date().toISOString()}] 📦 响应体:`, JSON.stringify(truncatedResponse, null, 2))
               } catch (jsonError) {
                 // 如果不是JSON，按字符串截断
-                console.log(
+                console.debug(
                   `[${new Date().toISOString()}] 📦 响应体:`,
                   responseText.length > 2000 ? responseText.substring(0, 2000) + '...' : responseText
                 )
               }
             }
           } catch (error) {
-            console.log(`[${new Date().toISOString()}] 📦 响应体: [无法读取 - ${(error as Error).message}]`)
+            console.error(`[${new Date().toISOString()}] 📦 响应体: [无法读取 - ${(error as Error).message}]`)
           }
         }
       }
