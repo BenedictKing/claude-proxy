@@ -1,11 +1,16 @@
 package handlers
 
 import (
+	"fmt" // 新增
+	"net/http" // 新增
 	"strconv"
 	"strings"
+	"sync" // 新增
+	"time" // 新增
 
 	"github.com/gin-gonic/gin"
 	"github.com/yourusername/claude-proxy/internal/config"
+	"github.com/yourusername/claude-proxy/internal/httpclient" // 新增
 )
 
 // GetUpstreams 获取上游列表 (兼容前端 channels 字段名)
@@ -26,6 +31,8 @@ func GetUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				"website":            up.Website,
 				"insecureSkipVerify": up.InsecureSkipVerify,
 				"modelMapping":       up.ModelMapping,
+				"latency":            nil,
+				"status":             "unknown",
 			}
 		}
 
@@ -68,7 +75,7 @@ func UpdateUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			return
 		}
 
-		var updates config.UpstreamConfig
+		var updates config.UpstreamUpdate
 		if err := c.ShouldBindJSON(&updates); err != nil {
 			c.JSON(400, gin.H{"error": "Invalid request body"})
 			return
@@ -215,42 +222,6 @@ func SetCurrentUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
 	}
 }
 
-// GetConfig 获取配置
-func GetConfig(cfgManager *config.ConfigManager) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		config := cfgManager.GetConfig()
-		c.JSON(200, config)
-	}
-}
-
-// UpdateConfig 更新配置
-func UpdateConfig(cfgManager *config.ConfigManager) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var updates struct {
-			LoadBalance string `json:"loadBalance"`
-		}
-		if err := c.ShouldBindJSON(&updates); err != nil {
-			c.JSON(400, gin.H{"error": "Invalid request body"})
-			return
-		}
-
-		if updates.LoadBalance != "" {
-			if err := cfgManager.SetLoadBalance(updates.LoadBalance); err != nil {
-				if strings.Contains(err.Error(), "无效的负载均衡策略") {
-					c.JSON(400, gin.H{"error": err.Error()})
-				} else {
-					c.JSON(500, gin.H{"error": "Failed to save config"})
-				}
-				return
-			}
-		}
-
-		c.JSON(200, gin.H{
-			"message": "配置已更新",
-			"config":  cfgManager.GetConfig(),
-		})
-	}
-}
 
 // UpdateLoadBalance 更新负载均衡策略
 func UpdateLoadBalance(cfgManager *config.ConfigManager) gin.HandlerFunc {
@@ -285,22 +256,60 @@ func PingChannel(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		idStr := c.Param("id")
 		id, err := strconv.Atoi(idStr)
 		if err != nil {
-			c.JSON(400, gin.H{"error": "Invalid channel ID"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid channel ID"})
 			return
 		}
 
 		config := cfgManager.GetConfig()
 		if id < 0 || id >= len(config.Upstream) {
-			c.JSON(404, gin.H{"error": "Channel not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "Channel not found"})
 			return
 		}
 
-		// 简单返回成功，实际可以实现真实的ping逻辑
-		c.JSON(200, gin.H{
-			"success": true,
-			"latency": 0,
-			"status":  "healthy",
-		})
+		channel := config.Upstream[id]
+		startTime := time.Now()
+
+		testURL := strings.TrimSuffix(channel.BaseURL, "/")
+		switch channel.ServiceType {
+		case "openai", "openaiold", "gemini":
+			testURL += "/models"
+		}
+
+		client := httpclient.GetManager().GetStandardClient(5*time.Second, channel.InsecureSkipVerify)
+		req, err := http.NewRequest("HEAD", testURL, nil)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "status": "error", "error": "Failed to create request"})
+			return
+		}
+
+		resp, err := client.Do(req)
+		latency := time.Since(startTime).Milliseconds()
+
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"latency": latency,
+				"status":  "error",
+				"error":   err.Error(),
+			})
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"latency": latency,
+				"status":  "healthy",
+			})
+		} else {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"latency": latency,
+				"status":  "unhealthy",
+				"error":   fmt.Sprintf("Status code: %d", resp.StatusCode),
+			})
+		}
 	}
 }
 
@@ -308,17 +317,55 @@ func PingChannel(cfgManager *config.ConfigManager) gin.HandlerFunc {
 func PingAllChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		config := cfgManager.GetConfig()
-		results := make([]gin.H, len(config.Upstream))
+		results := make(chan gin.H)
+		var wg sync.WaitGroup
 
-		for i := range config.Upstream {
-			results[i] = gin.H{
-				"id":      i,
-				"name":    config.Upstream[i].Name,
-				"latency": 0,
-				"status":  "healthy",
-			}
+		for i, channel := range config.Upstream {
+			wg.Add(1)
+			go func(id int, ch config.UpstreamConfig) {
+				defer wg.Done()
+
+				startTime := time.Now()
+				testURL := strings.TrimSuffix(ch.BaseURL, "/")
+				switch ch.ServiceType {
+				case "openai", "openaiold", "gemini":
+					testURL += "/models"
+				}
+
+				client := httpclient.GetManager().GetStandardClient(5*time.Second, ch.InsecureSkipVerify)
+				req, err := http.NewRequest("HEAD", testURL, nil)
+				if err != nil {
+					results <- gin.H{"id": id, "name": ch.Name, "latency": 0, "status": "error", "error": "req_creation_failed"}
+					return
+				}
+
+				resp, err := client.Do(req)
+				latency := time.Since(startTime).Milliseconds()
+
+				if err != nil {
+					results <- gin.H{"id": id, "name": ch.Name, "latency": latency, "status": "error", "error": err.Error()}
+					return
+				}
+				defer resp.Body.Close()
+
+				if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+					results <- gin.H{"id": id, "name": ch.Name, "latency": latency, "status": "healthy"}
+				} else {
+					results <- gin.H{"id": id, "name": ch.Name, "latency": latency, "status": "unhealthy"}
+				}
+			}(i, channel)
 		}
 
-		c.JSON(200, results)
+		go func() {
+			wg.Wait()
+			close(results)
+		}()
+
+		var finalResults []gin.H
+		for res := range results {
+			finalResults = append(finalResults, res)
+		}
+
+		c.JSON(http.StatusOK, finalResults)
 	}
 }

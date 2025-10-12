@@ -26,6 +26,18 @@ type UpstreamConfig struct {
 	ModelMapping       map[string]string `json:"modelMapping,omitempty"`
 }
 
+// UpstreamUpdate 用于部分更新 UpstreamConfig
+type UpstreamUpdate struct {
+	Name               *string           `json:"name"`
+	ServiceType        *string           `json:"serviceType"`
+	BaseURL            *string           `json:"baseUrl"`
+	APIKeys            []string          `json:"apiKeys"`
+	Description        *string           `json:"description"`
+	Website            *string           `json:"website"`
+	InsecureSkipVerify *bool             `json:"insecureSkipVerify"`
+	ModelMapping       map[string]string `json:"modelMapping"`
+}
+
 // Config 配置结构
 type Config struct {
 	Upstream        []UpstreamConfig `json:"upstream"`
@@ -391,7 +403,7 @@ func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig) error {
 }
 
 // UpdateUpstream 更新上游
-func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamConfig) error {
+func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -399,30 +411,32 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamConfig) error
 		return fmt.Errorf("无效的上游索引: %d", index)
 	}
 
-	// 更新字段
-	if updates.Name != "" {
-		cm.config.Upstream[index].Name = updates.Name
+	upstream := &cm.config.Upstream[index]
+
+	if updates.Name != nil {
+		upstream.Name = *updates.Name
 	}
-	if updates.BaseURL != "" {
-		cm.config.Upstream[index].BaseURL = updates.BaseURL
+	if updates.BaseURL != nil {
+		upstream.BaseURL = *updates.BaseURL
 	}
-	if updates.ServiceType != "" {
-		cm.config.Upstream[index].ServiceType = updates.ServiceType
+	if updates.ServiceType != nil {
+		upstream.ServiceType = *updates.ServiceType
 	}
-	if updates.Description != "" {
-		cm.config.Upstream[index].Description = updates.Description
+	if updates.Description != nil {
+		upstream.Description = *updates.Description
 	}
-	if updates.Website != "" {
-		cm.config.Upstream[index].Website = updates.Website
+	if updates.Website != nil {
+		upstream.Website = *updates.Website
 	}
-	// APIKeys 总是更新，即使为空数组也要更新（允许清空所有密钥）
 	if updates.APIKeys != nil {
-		cm.config.Upstream[index].APIKeys = updates.APIKeys
+		upstream.APIKeys = updates.APIKeys
 	}
 	if updates.ModelMapping != nil {
-		cm.config.Upstream[index].ModelMapping = updates.ModelMapping
+		upstream.ModelMapping = updates.ModelMapping
 	}
-	cm.config.Upstream[index].InsecureSkipVerify = updates.InsecureSkipVerify
+	if updates.InsecureSkipVerify != nil {
+		upstream.InsecureSkipVerify = *updates.InsecureSkipVerify
+	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return err

@@ -68,9 +68,6 @@ func main() {
 		apiGroup.DELETE("/channels/:id/keys/:apiKey", handlers.DeleteApiKey(cfgManager))
 		apiGroup.POST("/channels/:id/current", handlers.SetCurrentUpstream(cfgManager))
 
-		// 配置管理
-		apiGroup.GET("/config", handlers.GetConfig(cfgManager))
-		apiGroup.PUT("/config", handlers.UpdateConfig(cfgManager))
 
 		// 负载均衡
 		apiGroup.PUT("/loadbalance", handlers.UpdateLoadBalance(cfgManager))
