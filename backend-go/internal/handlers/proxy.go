@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"bytes"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/yourusername/claude-proxy/internal/config"
+	"github.com/yourusername/claude-proxy/internal/httpclient"
 	"github.com/yourusername/claude-proxy/internal/middleware"
 	"github.com/yourusername/claude-proxy/internal/providers"
 	"github.com/yourusername/claude-proxy/internal/types"
@@ -29,15 +29,30 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gi
 
 		startTime := time.Now()
 
-		// 解析请求体
+		// 预读请求体（避免多次读取 c.Request.Body）
+		bodyBytes, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Failed to read request body"})
+			return
+		}
+		// 恢复请求体，以便后续其他中间件可能需要读取
+		c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+		// 解析请求
 		var claudeReq types.ClaudeRequest
-		if err := c.ShouldBindJSON(&claudeReq); err != nil {
+		if err := json.Unmarshal(bodyBytes, &claudeReq); err != nil {
 			c.JSON(400, gin.H{"error": "Invalid request body"})
 			return
 		}
 
 		if envCfg.EnableRequestLogs {
 			log.Printf("📥 收到请求: %s %s", c.Request.Method, c.Request.URL.Path)
+			// 可选：记录请求体（截断以避免日志过长）
+			if len(bodyBytes) > 500 {
+				log.Printf("📄 请求体: %s...", string(bodyBytes[:500]))
+			} else {
+				log.Printf("📄 请求体: %s", string(bodyBytes))
+			}
 		}
 
 		// 获取当前上游配置
@@ -91,7 +106,7 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gi
 			}
 
 			// 发送请求
-			resp, err := sendRequest(providerReq, upstream, envCfg)
+			resp, err := sendRequest(providerReq, upstream, envCfg, claudeReq.Stream)
 			if err != nil {
 				lastError = err
 				failedKeys[apiKey] = true
@@ -139,22 +154,41 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gi
 }
 
 // sendRequest 发送HTTP请求
-func sendRequest(providerReq *types.ProviderRequest, upstream *config.UpstreamConfig, envCfg *config.EnvConfig) (*http.Response, error) {
-	client := &http.Client{
-		Timeout: time.Duration(envCfg.RequestTimeout) * time.Millisecond,
+func sendRequest(providerReq *types.ProviderRequest, upstream *config.UpstreamConfig, envCfg *config.EnvConfig, isStream bool) (*http.Response, error) {
+	// 使用全局客户端管理器
+	clientManager := httpclient.GetManager()
+
+	var client *http.Client
+	if isStream {
+		// 流式请求：使用无超时的客户端
+		client = clientManager.GetStreamClient(upstream.InsecureSkipVerify)
+	} else {
+		// 普通请求：使用有超时的客户端
+		timeout := time.Duration(envCfg.RequestTimeout) * time.Millisecond
+		client = clientManager.GetStandardClient(timeout, upstream.InsecureSkipVerify)
 	}
 
-	// 如果需要跳过 TLS 验证
-	if upstream.InsecureSkipVerify {
+	if upstream.InsecureSkipVerify && envCfg.EnableRequestLogs {
 		log.Printf("⚠️ 正在跳过对 %s 的TLS证书验证", providerReq.URL)
-		client.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
 	}
 
-	bodyBytes, err := json.Marshal(providerReq.Body)
-	if err != nil {
-		return nil, err
+	// 处理请求体：支持两种类型
+	var bodyBytes []byte
+	var err error
+
+	switch v := providerReq.Body.(type) {
+	case []byte:
+		// 已经是字节数组，直接使用
+		bodyBytes = v
+	case string:
+		// 字符串类型，转换为字节数组
+		bodyBytes = []byte(v)
+	default:
+		// 其他类型，需要JSON序列化
+		bodyBytes, err = json.Marshal(providerReq.Body)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	req, err := http.NewRequest(providerReq.Method, providerReq.URL, bytes.NewReader(bodyBytes))
@@ -286,10 +320,21 @@ func shouldRetryWithNextKey(statusCode int, bodyBytes []byte) bool {
 	return false
 }
 
-// maskAPIKey 掩码API密钥
+// maskAPIKey 掩码API密钥（与 TS 版本保持一致）
 func maskAPIKey(key string) string {
-	if len(key) <= 8 {
-		return "****"
+	if key == "" {
+		return ""
 	}
-	return key[:4] + "****" + key[len(key)-4:]
+
+	length := len(key)
+	if length <= 10 {
+		// 短密钥：保留前3位和后2位
+		if length <= 5 {
+			return "***"
+		}
+		return key[:3] + "***" + key[length-2:]
+	}
+
+	// 长密钥：保留前8位和后5位
+	return key[:8] + "***" + key[length-5:]
 }

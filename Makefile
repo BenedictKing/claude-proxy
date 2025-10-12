@@ -69,18 +69,31 @@ build-frontend-internal:
 	@echo "$(COLOR_GREEN)✅ 前端构建完成$(COLOR_RESET)"
 
 .PHONY: dev
-dev: ensure-frontend-built ## Run in development mode (with race detection)
-	@echo "$(COLOR_YELLOW)🔧 Starting development mode...$(COLOR_RESET)"
-	cd $(BACKEND_DIR) && go run -race -ldflags "$(LDFLAGS)" .
+dev: ensure-frontend-built ## Run in development mode (with air hot reload)
+	@echo "$(COLOR_YELLOW)🔧 Starting development mode with air...$(COLOR_RESET)"
+	@if ! command -v air &> /dev/null; then \
+		echo "$(COLOR_YELLOW)⚠️  Air not installed, installing...$(COLOR_RESET)"; \
+		go install github.com/air-verse/air@latest; \
+		echo "$(COLOR_GREEN)✅ Air installed!$(COLOR_RESET)"; \
+		echo "$(COLOR_YELLOW)💡 Adding ~/go/bin to PATH...$(COLOR_RESET)"; \
+		export PATH="$$PATH:$$HOME/go/bin"; \
+	fi
+	@echo "$(COLOR_YELLOW)🔄 Hot reload enabled - changes will auto-restart server$(COLOR_RESET)"
+	export PATH="$$PATH:$$HOME/go/bin" && cd $(BACKEND_DIR) && air
 
 .PHONY: dev-backend
-dev-backend: ## Run backend only (skips frontend build check)
-	@echo "$(COLOR_YELLOW)🔧 Starting backend in dev mode...$(COLOR_RESET)"
+dev-backend: ## Run backend only with air (skips frontend build check)
+	@echo "$(COLOR_YELLOW)🔧 Starting backend in dev mode with air...$(COLOR_RESET)"
 	@if [ ! -d "$(BACKEND_DIR)/frontend/dist" ]; then \
 		echo "$(COLOR_YELLOW)⚠️  前端未构建，请先运行: make build-frontend$(COLOR_RESET)"; \
 		exit 1; \
 	fi
-	cd $(BACKEND_DIR) && go run -ldflags "$(LDFLAGS)" .
+	@if ! command -v air &> /dev/null; then \
+		echo "$(COLOR_YELLOW)⚠️  Air not installed, installing...$(COLOR_RESET)"; \
+		go install github.com/air-verse/air@latest; \
+		echo "$(COLOR_GREEN)✅ Air installed!$(COLOR_RESET)"; \
+	fi
+	export PATH="$$PATH:$$HOME/go/bin" && cd $(BACKEND_DIR) && air
 
 .PHONY: dev-frontend
 dev-frontend: ## Run frontend development server

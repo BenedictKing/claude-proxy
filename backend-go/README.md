@@ -272,18 +272,59 @@ Go 版本相比 TypeScript 版本的性能优势：
 
 ## 开发
 
+### 🔥 热重载开发模式（新增）
+
+Go 版本现在支持代码热重载，修改代码后自动重新编译和重启！
+
+#### 安装热重载工具
+
+```bash
+# 方式一：使用 make（推荐）
+make install-air
+
+# 方式二：使用 npm/bun
+npm run dev:go:install
+
+# 方式三：直接安装
+go install github.com/air-verse/air@latest
+```
+
+#### 启动热重载开发模式
+
+```bash
+# 方式一：使用 make（推荐）
+make dev              # 自动检测并安装 Air，启动热重载
+
+# 方式二：使用 npm/bun
+npm run dev:go        # 或 bun run dev:go
+
+# 方式三：直接使用 air
+cd backend-go && air
+```
+
+**热重载特性：**
+- ✅ **自动重启** - 修改 `.go` 文件后自动重新编译和重启
+- ✅ **配置监听** - 修改 `.yaml`, `.toml`, `.env` 文件也会触发重启
+- ✅ **错误恢复** - 编译错误时保持运行，修复后自动恢复
+- ✅ **彩色日志** - 不同类型日志使用不同颜色，便于调试
+- ✅ **性能优化** - 1秒延迟编译，避免频繁重启
+
 ### 推荐开发流程（智能缓存）
 
 ```bash
 # 使用 Makefile - 自动管理前端构建缓存
+make dev              # 🔥 热重载开发模式（推荐）
 make run              # 首次构建前端，后续仅在源文件变更时重新编译
-make dev              # 开发模式（带竞态检测）
-make dev-backend      # 仅启动后端（跳过前端构建）
-make dev-frontend     # 仅启动前端开发服务器
+make build            # 构建生产版本
+make clean            # 清除所有构建缓存和临时文件
 
 # 手动控制
-make build-frontend   # 强制重新构建前端
-make clean            # 清除所有构建缓存
+make build-local      # 构建本地版本
+make test             # 运行测试
+make test-cover       # 生成测试覆盖率报告
+make fmt              # 格式化代码
+make lint             # 代码检查
+make deps             # 更新依赖
 ```
 
 **智能缓存机制：**
@@ -291,6 +332,24 @@ make clean            # 清除所有构建缓存
 - ✅ 未变更时跳过编译，**秒级启动**服务器
 - ✅ 首次运行或源文件修改后自动重新编译
 - ✅ 使用标记文件 `.build-marker` 追踪构建状态
+
+### Air 配置说明
+
+`.air.toml` 文件定义了热重载行为：
+
+```toml
+# 监听的文件类型
+include_ext = ["go", "tpl", "tmpl", "html", "yaml", "yml", "toml", "env"]
+
+# 忽略的目录
+exclude_dir = ["assets", "tmp", "vendor", "frontend", "dist"]
+
+# 编译延迟（毫秒）
+delay = 1000
+
+# 编译错误时是否停止
+stop_on_error = true
+```
 
 ### 传统开发方式
 
@@ -307,6 +366,13 @@ go fmt ./...
 # 静态检查
 go vet ./...
 ```
+
+### 开发技巧
+
+1. **使用热重载**：`make dev` 启动后，专注于代码编写，无需手动重启
+2. **查看日志**：热重载模式下日志有颜色区分，更易阅读
+3. **错误处理**：编译错误会显示在控制台，修复后自动重新编译
+4. **配置更新**：修改 `.env` 或配置文件也会触发重启
 
 ## 版本管理
 

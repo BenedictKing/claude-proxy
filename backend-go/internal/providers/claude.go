@@ -23,7 +23,16 @@ func (p *ClaudeProvider) ConvertToProviderRequest(claudeReq *types.ClaudeRequest
 		return nil, err
 	}
 
-	url := strings.TrimSuffix(upstream.BaseURL, "/") + "/v1/messages"
+	// 智能构建URL：避免 /v1 重复
+	baseURL := strings.TrimSuffix(upstream.BaseURL, "/")
+	var url string
+	if strings.HasSuffix(baseURL, "/v1") {
+		// BaseURL 已包含 /v1，只添加 /messages
+		url = baseURL + "/messages"
+	} else {
+		// BaseURL 不包含 /v1，添加完整路径
+		url = baseURL + "/v1/messages"
+	}
 
 	return &types.ProviderRequest{
 		URL:    url,

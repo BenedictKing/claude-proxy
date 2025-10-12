@@ -258,15 +258,31 @@
                         </v-list-item-title>
 
                         <template v-slot:append>
-                          <v-btn
-                            size="small"
-                            color="error"
-                            icon
-                            variant="text"
-                            @click="removeApiKey(index)"
-                          >
-                            <v-icon size="small" color="error">mdi-close</v-icon>
-                          </v-btn>
+                          <div class="d-flex align-center ga-1">
+                            <v-tooltip :text="copiedKeyIndex === index ? '已复制!' : '复制密钥'" location="top" :open-delay="150">
+                              <template #activator="{ props: tooltipProps }">
+                                <v-btn
+                                  v-bind="tooltipProps"
+                                  size="small"
+                                  :color="copiedKeyIndex === index ? 'success' : 'primary'"
+                                  icon
+                                  variant="text"
+                                  @click="copyApiKey(key, index)"
+                                >
+                                  <v-icon size="small">{{ copiedKeyIndex === index ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
+                                </v-btn>
+                              </template>
+                            </v-tooltip>
+                            <v-btn
+                              size="small"
+                              color="error"
+                              icon
+                              variant="text"
+                              @click="removeApiKey(index)"
+                            >
+                              <v-icon size="small" color="error">mdi-close</v-icon>
+                            </v-btn>
+                          </div>
                         </template>
                       </v-list-item>
                     </v-list>
@@ -388,6 +404,9 @@ const newApiKey = ref('')
 // 密钥重复检测状态
 const apiKeyError = ref('')
 const duplicateKeyIndex = ref(-1)
+
+// 复制功能相关状态
+const copiedKeyIndex = ref<number | null>(null)
 
 // 新模型映射输入
 const newMapping = reactive({
@@ -545,7 +564,7 @@ const findDuplicateKeyIndex = (newKey: string): number => {
 
 const removeApiKey = (index: number) => {
   form.apiKeys.splice(index, 1)
-  
+
   // 如果删除的是当前高亮的重复密钥，清除高亮状态
   if (duplicateKeyIndex.value === index) {
     duplicateKeyIndex.value = -1
@@ -553,6 +572,43 @@ const removeApiKey = (index: number) => {
   } else if (duplicateKeyIndex.value > index) {
     // 如果删除的密钥在高亮密钥之前，调整高亮索引
     duplicateKeyIndex.value--
+  }
+}
+
+// 复制API密钥到剪贴板
+const copyApiKey = async (key: string, index: number) => {
+  try {
+    await navigator.clipboard.writeText(key)
+    copiedKeyIndex.value = index
+
+    // 2秒后重置复制状态
+    setTimeout(() => {
+      copiedKeyIndex.value = null
+    }, 2000)
+  } catch (err) {
+    console.error('复制密钥失败:', err)
+    // 降级方案：使用传统的复制方法
+    const textArea = document.createElement('textarea')
+    textArea.value = key
+    textArea.style.position = 'fixed'
+    textArea.style.left = '-999999px'
+    textArea.style.top = '-999999px'
+    document.body.appendChild(textArea)
+    textArea.focus()
+    textArea.select()
+
+    try {
+      document.execCommand('copy')
+      copiedKeyIndex.value = index
+
+      setTimeout(() => {
+        copiedKeyIndex.value = null
+      }, 2000)
+    } catch (err) {
+      console.error('降级复制方案也失败:', err)
+    } finally {
+      textArea.remove()
+    }
   }
 }
 

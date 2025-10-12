@@ -355,6 +355,189 @@ func (cm *ConfigManager) cleanupExpiredFailures() {
 	}
 }
 
+// SetCurrentUpstream 设置当前上游
+func (cm *ConfigManager) SetCurrentUpstream(index int) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if index < 0 || index >= len(cm.config.Upstream) {
+		return fmt.Errorf("无效的上游索引: %d", index)
+	}
+
+	cm.config.CurrentUpstream = index
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("已切换到上游: [%d] %s", index, cm.config.Upstream[index].Name)
+	return nil
+}
+
+// AddUpstream 添加上游
+func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	cm.config.Upstream = append(cm.config.Upstream, upstream)
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("已添加上游: %s", upstream.Name)
+	return nil
+}
+
+// UpdateUpstream 更新上游
+func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamConfig) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if index < 0 || index >= len(cm.config.Upstream) {
+		return fmt.Errorf("无效的上游索引: %d", index)
+	}
+
+	// 更新字段
+	if updates.Name != "" {
+		cm.config.Upstream[index].Name = updates.Name
+	}
+	if updates.BaseURL != "" {
+		cm.config.Upstream[index].BaseURL = updates.BaseURL
+	}
+	if updates.ServiceType != "" {
+		cm.config.Upstream[index].ServiceType = updates.ServiceType
+	}
+	if updates.Description != "" {
+		cm.config.Upstream[index].Description = updates.Description
+	}
+	if updates.Website != "" {
+		cm.config.Upstream[index].Website = updates.Website
+	}
+	// APIKeys 总是更新，即使为空数组也要更新（允许清空所有密钥）
+	if updates.APIKeys != nil {
+		cm.config.Upstream[index].APIKeys = updates.APIKeys
+	}
+	if updates.ModelMapping != nil {
+		cm.config.Upstream[index].ModelMapping = updates.ModelMapping
+	}
+	cm.config.Upstream[index].InsecureSkipVerify = updates.InsecureSkipVerify
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("已更新上游: [%d] %s", index, cm.config.Upstream[index].Name)
+	return nil
+}
+
+// RemoveUpstream 删除上游
+func (cm *ConfigManager) RemoveUpstream(index int) (*UpstreamConfig, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if index < 0 || index >= len(cm.config.Upstream) {
+		return nil, fmt.Errorf("无效的上游索引: %d", index)
+	}
+
+	removed := cm.config.Upstream[index]
+	cm.config.Upstream = append(cm.config.Upstream[:index], cm.config.Upstream[index+1:]...)
+
+	// 调整当前上游索引
+	if cm.config.CurrentUpstream >= len(cm.config.Upstream) {
+		if len(cm.config.Upstream) > 0 {
+			cm.config.CurrentUpstream = len(cm.config.Upstream) - 1
+		} else {
+			cm.config.CurrentUpstream = 0
+		}
+	}
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return nil, err
+	}
+
+	log.Printf("已删除上游: %s", removed.Name)
+	return &removed, nil
+}
+
+// AddAPIKey 添加API密钥
+func (cm *ConfigManager) AddAPIKey(index int, apiKey string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if index < 0 || index >= len(cm.config.Upstream) {
+		return fmt.Errorf("无效的上游索引: %d", index)
+	}
+
+	// 检查密钥是否已存在
+	for _, key := range cm.config.Upstream[index].APIKeys {
+		if key == apiKey {
+			return fmt.Errorf("API密钥已存在")
+		}
+	}
+
+	cm.config.Upstream[index].APIKeys = append(cm.config.Upstream[index].APIKeys, apiKey)
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("已添加API密钥到上游 [%d] %s", index, cm.config.Upstream[index].Name)
+	return nil
+}
+
+// RemoveAPIKey 删除API密钥
+func (cm *ConfigManager) RemoveAPIKey(index int, apiKey string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if index < 0 || index >= len(cm.config.Upstream) {
+		return fmt.Errorf("无效的上游索引: %d", index)
+	}
+
+	// 查找并删除密钥
+	keys := cm.config.Upstream[index].APIKeys
+	found := false
+	for i, key := range keys {
+		if key == apiKey {
+			cm.config.Upstream[index].APIKeys = append(keys[:i], keys[i+1:]...)
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("API密钥不存在")
+	}
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("已从上游 [%d] %s 删除API密钥", index, cm.config.Upstream[index].Name)
+	return nil
+}
+
+// SetLoadBalance 设置负载均衡策略
+func (cm *ConfigManager) SetLoadBalance(strategy string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	// 验证策略
+	if strategy != "round-robin" && strategy != "random" && strategy != "failover" {
+		return fmt.Errorf("无效的负载均衡策略: %s", strategy)
+	}
+
+	cm.config.LoadBalance = strategy
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("已设置负载均衡策略: %s", strategy)
+	return nil
+}
+
 // DeprioritizeAPIKey 降低API密钥优先级
 func (cm *ConfigManager) DeprioritizeAPIKey(apiKey string) error {
 	cm.mu.Lock()
@@ -397,12 +580,23 @@ func RedirectModel(model string, upstream *UpstreamConfig) string {
 	return model
 }
 
-// maskAPIKey 掩码API密钥
+// maskAPIKey 掩码API密钥（与 TS 版本保持一致）
 func maskAPIKey(key string) string {
-	if len(key) <= 8 {
-		return "****"
+	if key == "" {
+		return ""
 	}
-	return key[:4] + "****" + key[len(key)-4:]
+
+	length := len(key)
+	if length <= 10 {
+		// 短密钥：保留前3位和后2位
+		if length <= 5 {
+			return "***"
+		}
+		return key[:3] + "***" + key[length-2:]
+	}
+
+	// 长密钥：保留前8位和后5位
+	return key[:8] + "***" + key[length-5:]
 }
 
 // Close 关闭配置管理器

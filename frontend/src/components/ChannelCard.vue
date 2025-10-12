@@ -167,22 +167,39 @@
             </div>
             
             <div v-if="channel.apiKeys.length" class="d-flex flex-column ga-2" style="max-height: 150px; overflow-y: auto;">
-              <div 
-                v-for="(key, index) in channel.apiKeys" 
+              <div
+                v-for="(key, index) in channel.apiKeys"
                 :key="index"
                 class="d-flex align-center justify-space-between pa-2 bg-surface rounded"
               >
                 <code class="text-caption flex-1-1 text-truncate mr-2">{{ maskApiKey(key) }}</code>
-                <v-btn
-                  size="x-small"
-                  color="error"
-                  icon
-                  variant="text"
-                  rounded="md"
-                  @click="$emit('removeKey', channel.index, getOriginalKey(key))"
-                >
-                  <v-icon size="small">mdi-close</v-icon>
-                </v-btn>
+                <div class="d-flex align-center ga-1">
+                  <v-tooltip :text="copiedKeyIndex === index ? '已复制!' : '复制密钥'" location="top" :open-delay="150">
+                    <template #activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        size="x-small"
+                        :color="copiedKeyIndex === index ? 'success' : 'primary'"
+                        icon
+                        variant="text"
+                        rounded="md"
+                        @click="copyApiKey(key, index)"
+                      >
+                        <v-icon size="small">{{ copiedKeyIndex === index ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
+                      </v-btn>
+                    </template>
+                  </v-tooltip>
+                  <v-btn
+                    size="x-small"
+                    color="error"
+                    icon
+                    variant="text"
+                    rounded="md"
+                    @click="$emit('removeKey', channel.index, getOriginalKey(key))"
+                  >
+                    <v-icon size="small">mdi-close</v-icon>
+                  </v-btn>
+                </div>
               </div>
             </div>
             
@@ -249,7 +266,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { Channel } from '../services/api'
 
 interface Props {
@@ -258,6 +275,9 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+// 复制功能相关状态
+const copiedKeyIndex = ref<number | null>(null)
 
 defineEmits<{
   edit: [channel: Channel]
@@ -336,6 +356,43 @@ const maskApiKey = (key: string): string => {
 // 获取原始密钥（用于删除操作），现在直接传递原始密钥
 const getOriginalKey = (originalKey: string) => {
   return originalKey
+}
+
+// 复制API密钥到剪贴板
+const copyApiKey = async (key: string, index: number) => {
+  try {
+    await navigator.clipboard.writeText(key)
+    copiedKeyIndex.value = index
+
+    // 2秒后重置复制状态
+    setTimeout(() => {
+      copiedKeyIndex.value = null
+    }, 2000)
+  } catch (err) {
+    console.error('复制密钥失败:', err)
+    // 降级方案：使用传统的复制方法
+    const textArea = document.createElement('textarea')
+    textArea.value = key
+    textArea.style.position = 'fixed'
+    textArea.style.left = '-999999px'
+    textArea.style.top = '-999999px'
+    document.body.appendChild(textArea)
+    textArea.focus()
+    textArea.select()
+
+    try {
+      document.execCommand('copy')
+      copiedKeyIndex.value = index
+
+      setTimeout(() => {
+        copiedKeyIndex.value = null
+      }, 2000)
+    } catch (err) {
+      console.error('降级复制方案也失败:', err)
+    } finally {
+      textArea.remove()
+    }
+  }
 }
 
 // 获取服务类型图标

@@ -1,5 +1,19 @@
 <template>
   <v-app>
+    <!-- 自动认证加载提示 - 只在真正进行自动认证时显示 -->
+    <v-overlay
+      :model-value="isAutoAuthenticating && !isInitialized"
+      persistent
+      class="align-center justify-center"
+      scrim="black"
+    >
+      <v-card class="pa-6 text-center" max-width="400" rounded="lg">
+        <v-progress-circular indeterminate :size="64" :width="6" color="primary" class="mb-4" />
+        <div class="text-h6 mb-2">正在验证访问权限</div>
+        <div class="text-body-2 text-medium-emphasis">使用保存的访问密钥进行身份验证...</div>
+      </v-card>
+    </v-overlay>
+
     <!-- 认证界面 -->
     <v-dialog v-model="showAuthDialog" persistent max-width="500">
       <v-card class="pa-4">
@@ -47,7 +61,7 @@
           <div class="text-body-2 text-center text-medium-emphasis">
             <p>💡 <strong>提示：</strong></p>
             <p>• 访问密钥在服务器的 <code>PROXY_ACCESS_KEY</code> 环境变量中设置</p>
-            <p>• 密钥将安全保存在本地，下次访问无需重新输入</p>
+            <p>• 密钥将安全保存在本地，下次访问将自动验证登录</p>
           </div>
         </v-card-text>
       </v-card>
@@ -681,21 +695,61 @@ const isAuthenticated = ref(false)
 const authError = ref('')
 const authKeyInput = ref('')
 const authLoading = ref(false)
+const isAutoAuthenticating = ref(true) // 初始化为true，防止登录框闪现
+const isInitialized = ref(false) // 添加初始化完成标志
 
 // 控制认证对话框显示
 const showAuthDialog = computed({
-  get: () => !isAuthenticated.value,
+  get: () => {
+    // 只有在初始化完成后，且未认证，且不在自动认证中时，才显示对话框
+    return isInitialized.value && !isAuthenticated.value && !isAutoAuthenticating.value
+  },
   set: () => {} // 防止外部修改，认证状态只能通过内部逻辑控制
 })
 
-// 初始化认证
+// 初始化认证 - 只负责从存储获取密钥
 const initializeAuth = () => {
   const key = api.initializeAuth()
-  isAuthenticated.value = !!key
-  if (!key) {
+  return key
+}
+
+// 自动验证保存的密钥
+const autoAuthenticate = async () => {
+  const savedKey = initializeAuth()
+  if (!savedKey) {
+    // 没有保存的密钥，显示登录对话框
     authError.value = '请输入访问密钥以继续'
+    isAutoAuthenticating.value = false
+    isInitialized.value = true
+    return false
   }
-  return !!key
+
+  // 有保存的密钥，尝试自动认证
+  try {
+    // 尝试调用API验证密钥是否有效
+    await api.getChannels()
+
+    // 密钥有效，设置认证状态
+    isAuthenticated.value = true
+    authError.value = ''
+
+    return true
+  } catch (error: any) {
+    // 密钥无效或过期
+    console.warn('自动认证失败:', error.message)
+
+    // 清除无效的密钥
+    api.clearAuth()
+
+    // 显示登录对话框，提示用户重新输入
+    isAuthenticated.value = false
+    authError.value = '保存的访问密钥已失效，请重新输入'
+
+    return false
+  } finally {
+    isAutoAuthenticating.value = false
+    isInitialized.value = true
+  }
 }
 
 // 手动设置密钥（用于重新认证）
@@ -764,19 +818,32 @@ onMounted(async () => {
   // 加载保存的主题
   const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'auto' || 'auto'
   setTheme(savedTheme)
-  
+
   // 监听系统主题变化
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
   const handlePref = () => { if (currentTheme.value === 'auto') setTheme('auto') }
   mediaQuery.addEventListener('change', handlePref)
-  
-  // 初始化认证
-  const authenticated = initializeAuth()
-  
+
+  // 检查是否有保存的密钥
+  const savedKey = localStorage.getItem('proxyAccessKey')
+
+  if (savedKey) {
+    // 有保存的密钥，开始自动认证
+    isAutoAuthenticating.value = true
+    isInitialized.value = false
+  } else {
+    // 没有保存的密钥，直接显示登录对话框
+    isAutoAuthenticating.value = false
+    isInitialized.value = true
+  }
+
+  // 尝试自动认证
+  const authenticated = await autoAuthenticate()
+
   if (authenticated) {
     // 加载pin状态
     loadPinnedChannels()
-    
+
     // 加载渠道数据
     await refreshChannels()
   }

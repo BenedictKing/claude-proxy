@@ -43,16 +43,26 @@ func WebAuthMiddleware(envCfg *config.EnvConfig, cfgManager *config.ConfigManage
 			return
 		}
 
-		// 检查访问密钥
+		// 对于根路径和页面请求，直接服务前端应用，让前端处理认证
+		// 前端会自动处理认证流程
+		if path == "/" || path == "/index.html" || !strings.Contains(path, ".") {
+			// 直接让请求通过，由静态文件服务器处理
+			c.Next()
+			return
+		}
+
+		// 检查访问密钥（仅对API请求）
 		providedKey := getAPIKey(c)
 		expectedKey := envCfg.ProxyAccessKey
 
 		if providedKey == "" || providedKey != expectedKey {
-			log.Printf("🔒 Web界面访问被拒绝 - IP: %s, Path: %s", c.ClientIP(), path)
+			log.Printf("🔒 访问被拒绝 - IP: %s, Path: %s", c.ClientIP(), path)
 
-			// 返回认证页面
-			c.Header("Content-Type", "text/html; charset=utf-8")
-			c.String(401, getAuthPage())
+			// 对于API请求返回401
+			c.JSON(401, gin.H{
+				"error": "Unauthorized",
+				"message": "Invalid or missing access key",
+			})
 			c.Abort()
 			return
 		}
@@ -97,45 +107,6 @@ func getAPIKey(c *gin.Context) string {
 	return ""
 }
 
-// getAuthPage 获取认证页面 HTML
-func getAuthPage() string {
-	return `<!DOCTYPE html>
-<html>
-<head>
-  <title>Claude Proxy - 访问验证</title>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5; margin: 0; padding: 40px; }
-    .container { max-width: 400px; margin: 100px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-    h1 { color: #333; margin-bottom: 20px; }
-    input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 20px; box-sizing: border-box; }
-    button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-    button:hover { background: #0056b3; }
-    .error { color: #dc3545; margin-bottom: 20px; font-size: 14px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>🔐 Claude Proxy 管理界面</h1>
-    <div class="error">请输入访问密钥以继续</div>
-    <form onsubmit="handleAuth(event)">
-      <input type="password" id="apiKey" placeholder="访问密钥 (PROXY_ACCESS_KEY)" required>
-      <button type="submit">访问管理界面</button>
-    </form>
-  </div>
-  <script>
-    function handleAuth(e) {
-      e.preventDefault();
-      const key = document.getElementById('apiKey').value;
-      const url = new URL(window.location);
-      url.searchParams.set('key', key);
-      window.location.href = url.toString();
-    }
-  </script>
-</body>
-</html>`
-}
 
 // ProxyAuthMiddleware 代理访问控制中间件
 func ProxyAuthMiddleware(envCfg *config.EnvConfig) gin.HandlerFunc {
