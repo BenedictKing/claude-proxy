@@ -18,6 +18,65 @@ import (
 	"github.com/yourusername/claude-proxy/internal/types"
 )
 
+// simplifyTools 递归地简化一个值，主要是处理'tools'字段
+func simplifyTools(data interface{}) interface{} {
+	switch v := data.(type) {
+	case map[string]interface{}:
+		newMap := make(map[string]interface{}, len(v))
+		for key, val := range v {
+			if key == "tools" {
+				if tools, ok := val.([]interface{}); ok {
+					var simplifiedTools []interface{}
+					for _, tool := range tools {
+						var simplifiedTool interface{} = tool // 默认是原始 tool 对象
+						if toolMap, ok := tool.(map[string]interface{}); ok {
+							// 检查 Claude 格式: tool.name
+							if name, ok := toolMap["name"].(string); ok {
+								simplifiedTool = name
+							} else if function, ok := toolMap["function"].(map[string]interface{}); ok {
+								// 检查 OpenAI 格式: tool.function.name
+								if name, ok := function["name"].(string); ok {
+									simplifiedTool = name
+								}
+							}
+						}
+						simplifiedTools = append(simplifiedTools, simplifiedTool)
+					}
+					newMap[key] = simplifiedTools
+					continue
+				}
+			}
+			newMap[key] = simplifyTools(val)
+		}
+		return newMap
+	case []interface{}:
+		newSlice := make([]interface{}, len(v))
+		for i, item := range v {
+			newSlice[i] = simplifyTools(item)
+		}
+		return newSlice
+	default:
+		return v
+	}
+}
+
+// simplifyToolsInJSON 接收 JSON 字节数组，简化其中的 'tools' 字段以供日志记录
+func simplifyToolsInJSON(jsonData []byte) []byte {
+	var data interface{}
+	if err := json.Unmarshal(jsonData, &data); err != nil {
+		return jsonData // 如果不是有效的JSON，返回原始数据
+	}
+
+	simplifiedData := simplifyTools(data)
+
+	simplifiedBytes, err := json.Marshal(simplifiedData)
+	if err != nil {
+		return jsonData // 如果重新序列化失败，返回原始数据
+	}
+
+	return simplifiedBytes
+}
+
 // ProxyHandler 代理处理器
 func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gin.HandlerFunc {
 	return gin.HandlerFunc(func(c *gin.Context) {
@@ -49,11 +108,14 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gi
 			log.Printf("📥 收到请求: %s %s", c.Request.Method, c.Request.URL.Path)
 			// 在开发模式下，打印更详细的、格式化的原始请求体
 			if envCfg.IsDevelopment() {
+				// 像TS版一样，简化日志中的tools数组
+				simplifiedLogBody := simplifyToolsInJSON(bodyBytes)
+
 				var prettyBody bytes.Buffer
-				if err := json.Indent(&prettyBody, bodyBytes, "", "  "); err == nil {
+				if err := json.Indent(&prettyBody, simplifiedLogBody, "", "  "); err == nil {
 					log.Printf("📄 原始请求体:\n%s", prettyBody.String())
 				} else {
-					// 如果不是有效的JSON，则按原样截断打印
+					// 如果简化或美化失败，则按原样截断打印原始字节
 					if len(bodyBytes) > 500 {
 						log.Printf("📄 原始请求体: %s...", string(bodyBytes[:500]))
 					} else {
@@ -213,9 +275,12 @@ func sendRequest(providerReq *types.ProviderRequest, upstream *config.UpstreamCo
 		log.Printf("🌐 实际请求URL: %s", providerReq.URL)
 		log.Printf("📤 请求方法: %s", providerReq.Method)
 		if envCfg.IsDevelopment() {
+			// 像TS版一样，简化日志中的tools数组
+			simplifiedLogBody := simplifyToolsInJSON(bodyBytes)
+
 			// 在开发模式下，打印实际发出的请求体
 			var prettyBody bytes.Buffer
-			if err := json.Indent(&prettyBody, bodyBytes, "", "  "); err == nil {
+			if err := json.Indent(&prettyBody, simplifiedLogBody, "", "  "); err == nil {
 				log.Printf("📦 实际请求体:\n%s", prettyBody.String())
 			} else {
 				// 如果不是有效的JSON，则按原样截断打印
