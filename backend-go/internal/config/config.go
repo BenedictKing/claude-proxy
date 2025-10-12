@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+	"strings"
 
 	"github.com/fsnotify/fsnotify"
 )
