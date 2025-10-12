@@ -47,11 +47,19 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gi
 
 		if envCfg.EnableRequestLogs {
 			log.Printf("📥 收到请求: %s %s", c.Request.Method, c.Request.URL.Path)
-			// 可选：记录请求体（截断以避免日志过长）
-			if len(bodyBytes) > 500 {
-				log.Printf("📄 请求体: %s...", string(bodyBytes[:500]))
-			} else {
-				log.Printf("📄 请求体: %s", string(bodyBytes))
+			// 在开发模式下，打印更详细的、格式化的原始请求体
+			if envCfg.IsDevelopment() {
+				var prettyBody bytes.Buffer
+				if err := json.Indent(&prettyBody, bodyBytes, "", "  "); err == nil {
+					log.Printf("📄 原始请求体:\n%s", prettyBody.String())
+				} else {
+					// 如果不是有效的JSON，则按原样截断打印
+					if len(bodyBytes) > 500 {
+						log.Printf("📄 原始请求体: %s...", string(bodyBytes[:500]))
+					} else {
+						log.Printf("📄 原始请求体: %s", string(bodyBytes))
+					}
+				}
 			}
 		}
 
@@ -204,6 +212,20 @@ func sendRequest(providerReq *types.ProviderRequest, upstream *config.UpstreamCo
 	if envCfg.EnableRequestLogs {
 		log.Printf("🌐 实际请求URL: %s", providerReq.URL)
 		log.Printf("📤 请求方法: %s", providerReq.Method)
+		if envCfg.IsDevelopment() {
+			// 在开发模式下，打印实际发出的请求体
+			var prettyBody bytes.Buffer
+			if err := json.Indent(&prettyBody, bodyBytes, "", "  "); err == nil {
+				log.Printf("📦 实际请求体:\n%s", prettyBody.String())
+			} else {
+				// 如果不是有效的JSON，则按原样截断打印
+				if len(bodyBytes) > 500 {
+					log.Printf("📦 实际请求体: %s...", string(bodyBytes[:500]))
+				} else {
+					log.Printf("📦 实际请求体: %s", string(bodyBytes))
+				}
+			}
+		}
 	}
 
 	return client.Do(req)
