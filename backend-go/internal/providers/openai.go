@@ -15,11 +15,37 @@ import (
 // OpenAIProvider OpenAI 提供商
 type OpenAIProvider struct{}
 
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+	"github.com/yourusername/claude-proxy/internal/config"
+	"github.com/yourusername/claude-proxy/internal/types"
+)
+
 // ConvertToProviderRequest 转换为 OpenAI 请求
-func (p *OpenAIProvider) ConvertToProviderRequest(claudeReq *types.ClaudeRequest, upstream *config.UpstreamConfig, apiKey string) (*types.ProviderRequest, error) {
+func (p *OpenAIProvider) ConvertToProviderRequest(c *gin.Context, upstream *config.UpstreamConfig, apiKey string) (*http.Request, []byte, error) {
+	// 读取和解析原始请求体
+	originalBodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("读取请求体失败: %w", err)
+	}
+	// 恢复请求体，以便gin context可以被其他地方再次读取（尽管这里我们已经完全处理了）
+	c.Request.Body = io.NopCloser(bytes.NewReader(originalBodyBytes))
+
+	var claudeReq types.ClaudeRequest
+	if err := json.Unmarshal(originalBodyBytes, &claudeReq); err != nil {
+		return nil, originalBodyBytes, fmt.Errorf("解析Claude请求体失败: %w", err)
+	}
+
+	// --- 复用旧的转换逻辑 ---
 	openaiReq := &types.OpenAIRequest{
 		Model:       config.RedirectModel(claudeReq.Model, upstream),
-		Messages:    p.convertMessages(claudeReq),
+		Messages:    p.convertMessages(&claudeReq),
 		Stream:      claudeReq.Stream,
 		Temperature: claudeReq.Temperature,
 	}
@@ -35,23 +61,30 @@ func (p *OpenAIProvider) ConvertToProviderRequest(claudeReq *types.ClaudeRequest
 		openaiReq.Tools = p.convertTools(claudeReq.Tools)
 		openaiReq.ToolChoice = "auto"
 	}
+	// --- 转换逻辑结束 ---
 
-	body, err := json.Marshal(openaiReq)
+	reqBodyBytes, err := json.Marshal(openaiReq)
 	if err != nil {
-		return nil, err
+		return nil, originalBodyBytes, fmt.Errorf("序列化OpenAI请求体失败: %w", err)
 	}
 
 	url := strings.TrimSuffix(upstream.BaseURL, "/") + "/chat/completions"
 
-	return &types.ProviderRequest{
-		URL:    url,
-		Method: "POST",
-		Headers: map[string]string{
-			"Authorization": "Bearer " + apiKey,
-			"Content-Type":  "application/json",
-		},
-		Body: body,
-	}, nil
+	req, err := http.NewRequest("POST", url, bytes.NewReader(reqBodyBytes))
+	if err != nil {
+		return nil, originalBodyBytes, fmt.Errorf("创建OpenAI请求失败: %w", err)
+	}
+
+	// 复制原始Header，并覆盖认证和内容类型
+	req.Header = c.Request.Header.Clone()
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Host = req.URL.Host // 设置正确的Host头部
+	req.Header.Del("x-proxy-key")
+	req.Header.Del("X-Forwarded-Host")
+	req.Header.Del("X-Forwarded-Proto")
+
+	return req, originalBodyBytes, nil
 }
 
 // convertMessages 转换消息

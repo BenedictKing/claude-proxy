@@ -14,36 +14,66 @@ import (
 // GeminiProvider Gemini 提供商
 type GeminiProvider struct{}
 
-// ConvertToProviderRequest 转换为 Gemini 请求
-func (p *GeminiProvider) ConvertToProviderRequest(claudeReq *types.ClaudeRequest, upstream *config.UpstreamConfig, apiKey string) (*types.ProviderRequest, error) {
-	geminiReq := p.convertToGeminiRequest(claudeReq, upstream)
+import (
+	"bufio"
+	"bytes" // 引入 bytes 包
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
 
-	body, err := json.Marshal(geminiReq)
+	"github.com/gin-gonic/gin" // 引入 gin 包
+	"github.com/yourusername/claude-proxy/internal/config"
+	"github.com/yourusername/claude-proxy/internal/types"
+)
+
+// ConvertToProviderRequest 转换为 Gemini 请求
+func (p *GeminiProvider) ConvertToProviderRequest(c *gin.Context, upstream *config.UpstreamConfig, apiKey string) (*http.Request, []byte, error) {
+	// 读取和解析原始请求体
+	originalBodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		return nil, err
+		return nil, nil, fmt.Errorf("读取请求体失败: %w", err)
+	}
+	// 恢复请求体，以便gin context可以被其他地方再次读取（尽管这里我们已经完全处理了）
+	c.Request.Body = io.NopCloser(bytes.NewReader(originalBodyBytes))
+
+	var claudeReq types.ClaudeRequest
+	if err := json.Unmarshal(originalBodyBytes, &claudeReq); err != nil {
+		return nil, originalBodyBytes, fmt.Errorf("解析Claude请求体失败: %w", err)
 	}
 
-	// 构建 URL
+	// --- 复用旧的转换逻辑 ---
+	geminiReq := p.convertToGeminiRequest(&claudeReq, upstream)
+	// --- 转换逻辑结束 ---
+
+	reqBodyBytes, err := json.Marshal(geminiReq)
+	if err != nil {
+		return nil, originalBodyBytes, fmt.Errorf("序列化Gemini请求体失败: %w", err)
+	}
+
 	model := config.RedirectModel(claudeReq.Model, upstream)
 	action := "generateContent"
 	if claudeReq.Stream {
-		action = "streamGenerateContent"
+		action = "streamGenerateContent?alt=sse"
 	}
 
-	url := fmt.Sprintf("%s/models/%s:%s?key=%s",
-		strings.TrimSuffix(upstream.BaseURL, "/"),
-		model,
-		action,
-		apiKey)
+	url := fmt.Sprintf("%s/models/%s:%s", strings.TrimSuffix(upstream.BaseURL, "/"), model, action)
 
-	return &types.ProviderRequest{
-		URL:    url,
-		Method: "POST",
-		Headers: map[string]string{
-			"Content-Type": "application/json",
-		},
-		Body: body,
-	}, nil
+	req, err := http.NewRequest("POST", url, bytes.NewReader(reqBodyBytes))
+	if err != nil {
+		return nil, originalBodyBytes, fmt.Errorf("创建Gemini请求失败: %w", err)
+	}
+
+	// 复制原始Header，并覆盖认证和内容类型
+	req.Header = c.Request.Header.Clone()
+	req.Header.Set("x-goog-api-key", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Host = req.URL.Host // 设置正确的Host头部
+	req.Header.Del("x-proxy-key")
+	req.Header.Del("X-Forwarded-Host")
+	req.Header.Del("X-Forwarded-Proto")
+
+	return req, originalBodyBytes, nil
 }
 
 // convertToGeminiRequest 转换为 Gemini 请求体

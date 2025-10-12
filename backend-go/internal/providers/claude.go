@@ -13,37 +13,84 @@ import (
 // ClaudeProvider Claude 提供商（直接透传）
 type ClaudeProvider struct{}
 
-// ConvertToProviderRequest 转换为 Claude 请求（直接透传）
-func (p *ClaudeProvider) ConvertToProviderRequest(claudeReq *types.ClaudeRequest, upstream *config.UpstreamConfig, apiKey string) (*types.ProviderRequest, error) {
-	// 应用模型重定向
-	claudeReq.Model = config.RedirectModel(claudeReq.Model, upstream)
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
 
-	body, err := json.Marshal(claudeReq)
-	if err != nil {
-		return nil, err
-	}
+	"github.com/gin-gonic/gin"
+	"github.com/yourusername/claude-proxy/internal/config"
+	"github.com/yourusername/claude-proxy/internal/types"
+)
 
-	// 智能构建URL：避免 /v1 重复
-	baseURL := strings.TrimSuffix(upstream.BaseURL, "/")
-	var url string
-	if strings.HasSuffix(baseURL, "/v1") {
-		// BaseURL 已包含 /v1，只添加 /messages
-		url = baseURL + "/messages"
+// ConvertToProviderRequest 转换为 Claude 请求（实现真正的透传）
+func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *config.UpstreamConfig, apiKey string) (*http.Request, []byte, error) {
+	var bodyBytes []byte
+	var err error
+
+	// 仅在需要模型重定向时才解析和重构请求体
+	if upstream.ModelMapping != nil && len(upstream.ModelMapping) > 0 {
+		bodyBytes, err = io.ReadAll(c.Request.Body)
+		if err != nil {
+			return nil, nil, err
+		}
+		c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes)) // 恢复body
+
+		var claudeReq types.ClaudeRequest
+		if err := json.Unmarshal(bodyBytes, &claudeReq); err != nil {
+			return nil, bodyBytes, err
+		}
+		claudeReq.Model = config.RedirectModel(claudeReq.Model, upstream)
+
+		bodyBytes, err = json.Marshal(claudeReq)
+		if err != nil {
+			return nil, nil, err
+		}
 	} else {
-		// BaseURL 不包含 /v1，添加完整路径
-		url = baseURL + "/v1/messages"
+		// 如果不需要模型重定向，则直接从原始请求中读取body用于日志和请求转发
+		bodyBytes, err = io.ReadAll(c.Request.Body)
+		if err != nil {
+			return nil, nil, err
+		}
+		c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes)) // 恢复body
 	}
 
-	return &types.ProviderRequest{
-		URL:    url,
-		Method: "POST",
-		Headers: map[string]string{
-			"x-api-key":         apiKey,
-			"anthropic-version": "2023-06-01",
-			"Content-Type":      "application/json",
-		},
-		Body: body,
-	}, nil
+	// 构建目标URL
+	endpoint := strings.TrimPrefix(c.Request.URL.Path, "/v1")
+	targetURL := strings.TrimSuffix(upstream.BaseURL, "/") + endpoint + c.Request.URL.RawQuery
+
+	// 创建请求
+	var req *http.Request
+	if len(bodyBytes) > 0 {
+		req, err = http.NewRequest(c.Request.Method, targetURL, bytes.NewReader(bodyBytes))
+	} else {
+		// 如果 bodyBytes 为空（例如 GET 请求或原始请求体为空），则直接使用 nil Body
+		req, err = http.NewRequest(c.Request.Method, targetURL, nil)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// 复制并修改Header
+	req.Header = c.Request.Header.Clone()
+	req.Host = req.URL.Host // 设置正确的Host头部
+
+	// 正确设置认证头
+	if strings.HasPrefix(apiKey, "sk-ant-") {
+		req.Header.Set("x-api-key", apiKey)
+		req.Header.Del("Authorization")
+	} else {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+		req.Header.Del("x-api-key")
+	}
+	req.Header.Del("x-proxy-key") // 移除代理访问密钥
+	// 移除可能存在的代理在请求链路中添加的 Host 头，确保使用正确的目标 Host
+	req.Header.Del("X-Forwarded-Host")
+	req.Header.Del("X-Forwarded-Proto")
+
+	return req, bodyBytes, nil
 }
 
 // ConvertToClaudeResponse 转换为 Claude 响应（直接透传）

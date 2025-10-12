@@ -88,42 +88,10 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gi
 
 		startTime := time.Now()
 
-		// 预读请求体（避免多次读取 c.Request.Body）
-		bodyBytes, err := io.ReadAll(c.Request.Body)
-		if err != nil {
-			c.JSON(400, gin.H{"error": "Failed to read request body"})
-			return
-		}
-		// 恢复请求体，以便后续其他中间件可能需要读取
-		c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-
-		// 解析请求
+		// claudeReq 变量现在仅用于判断是否流式请求及日志记录，不直接传递给 provider
 		var claudeReq types.ClaudeRequest
-		if err := json.Unmarshal(bodyBytes, &claudeReq); err != nil {
-			c.JSON(400, gin.H{"error": "Invalid request body"})
-			return
-		}
-
-		if envCfg.EnableRequestLogs {
-			log.Printf("📥 收到请求: %s %s", c.Request.Method, c.Request.URL.Path)
-			// 在开发模式下，打印更详细的、格式化的原始请求体
-			if envCfg.IsDevelopment() {
-				// 像TS版一样，简化日志中的tools数组
-				simplifiedLogBody := simplifyToolsInJSON(bodyBytes)
-
-				var prettyBody bytes.Buffer
-				if err := json.Indent(&prettyBody, simplifiedLogBody, "", "  "); err == nil {
-					log.Printf("📄 原始请求体:\n%s", prettyBody.String())
-				} else {
-					// 如果简化或美化失败，则按原样截断打印原始字节
-					if len(bodyBytes) > 500 {
-						log.Printf("📄 原始请求体: %s...", string(bodyBytes[:500]))
-					} else {
-						log.Printf("📄 原始请求体: %s", string(bodyBytes))
-					}
-				}
-			}
-		}
+		// 尝试解析，失败也无妨，因为 provider 会处理原始 body
+		_ = c.ShouldBindJSON(&claudeReq)
 
 		// 获取当前上游配置
 		upstream, err := cfgManager.GetCurrentUpstream()
@@ -152,8 +120,9 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gi
 
 		// 实现 failover 重试逻辑
 		maxRetries := len(upstream.APIKeys)
-		failedKeys := make(map[string]bool)
+		failedKeys := make(map[string]bool) // 记录本次请求中已经失败过的 key
 		var lastError error
+		var lastOriginalBodyBytes []byte // 用于记录最后一次尝试的原始请求体，以便日志记录
 
 		for attempt := 0; attempt < maxRetries; attempt++ {
 			apiKey, err := cfgManager.GetNextAPIKey(upstream, failedKeys)
@@ -168,14 +137,46 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gi
 			}
 
 			// 转换请求
-			providerReq, err := provider.ConvertToProviderRequest(&claudeReq, upstream, apiKey)
+			providerReq, originalBodyBytes, err := provider.ConvertToProviderRequest(c, upstream, apiKey)
 			if err != nil {
 				lastError = err
 				failedKeys[apiKey] = true
+				if originalBodyBytes != nil { // 记录下用于日志的原始 body
+					lastOriginalBodyBytes = originalBodyBytes
+				}
 				continue
 			}
+			lastOriginalBodyBytes = originalBodyBytes // 记录下用于日志的原始 body
+
+			// --- 请求日志记录 ---
+			if envCfg.EnableRequestLogs {
+				log.Printf("📥 收到请求: %s %s", c.Request.Method, c.Request.URL.Path)
+				if envCfg.IsDevelopment() {
+					logBody := lastOriginalBodyBytes
+					// 对于流式透传，如果 bodyBytes 为空，需要从原始请求体中读取
+					if len(logBody) == 0 && c.Request.Body != nil {
+						bodyFromContext, _ := io.ReadAll(c.Request.Body)
+						c.Request.Body = io.NopCloser(bytes.NewReader(bodyFromContext)) // 恢复
+						logBody = bodyFromContext
+					}
+
+					simplifiedLogBody := simplifyToolsInJSON(logBody)
+					var prettyBody bytes.Buffer
+					if err := json.Indent(&prettyBody, simplifiedLogBody, "", "  "); err == nil {
+						log.Printf("📄 原始请求体:\n%s", prettyBody.String())
+					} else {
+						if len(logBody) > 500 {
+							log.Printf("📄 原始请求体: %s...", string(logBody[:500]))
+						} else {
+							log.Printf("📄 原始请求体: %s", string(logBody))
+						}
+					}
+				}
+			}
+			// --- 请求日志记录结束 ---
 
 			// 发送请求
+			// claudeReq.Stream 用于判断是否是流式请求
 			resp, err := sendRequest(providerReq, upstream, envCfg, claudeReq.Stream)
 			if err != nil {
 				lastError = err
