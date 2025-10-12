@@ -577,6 +577,13 @@ func RedirectModel(model string, upstream *UpstreamConfig) string {
 		return mapped
 	}
 
+	// 模糊匹配 (与TS版本行为保持一致)
+	for sourceModel, targetModel := range upstream.ModelMapping {
+		if strings.Contains(model, sourceModel) || strings.Contains(sourceModel, model) {
+			return targetModel
+		}
+	}
+
 	return model
 }
 
