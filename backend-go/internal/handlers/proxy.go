@@ -306,6 +306,24 @@ func handleNormalResponse(c *gin.Context, resp *http.Response, provider provider
 		return
 	}
 
+	if envCfg.EnableResponseLogs {
+		responseTime := time.Since(startTime).Milliseconds()
+		log.Printf("⏱️ 响应完成: %dms, 状态: %d", responseTime, resp.StatusCode)
+		if envCfg.IsDevelopment() {
+			var prettyBody bytes.Buffer
+			if err := json.Indent(&prettyBody, bodyBytes, "", "  "); err == nil {
+				log.Printf("📦 响应体:\n%s", prettyBody.String())
+			} else {
+				// 如果不是有效的JSON，则按原样截断打印
+				if len(bodyBytes) > 500 {
+					log.Printf("📦 响应体: %s...", string(bodyBytes[:500]))
+				} else {
+					log.Printf("📦 响应体: %s", string(bodyBytes))
+				}
+			}
+		}
+	}
+
 	providerResp := &types.ProviderResponse{
 		StatusCode: resp.StatusCode,
 		Headers:    resp.Header,
@@ -317,11 +335,6 @@ func handleNormalResponse(c *gin.Context, resp *http.Response, provider provider
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to convert response"})
 		return
-	}
-
-	if envCfg.EnableResponseLogs {
-		responseTime := time.Since(startTime).Milliseconds()
-		log.Printf("⏱️ 响应完成: %dms, 状态: %d", responseTime, resp.StatusCode)
 	}
 
 	c.JSON(200, claudeResp)
@@ -342,22 +355,35 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 
+	var logBuffer bytes.Buffer
+
 	// 流式传输
 	c.Stream(func(w io.Writer) bool {
+		var writer io.Writer = w
+		if envCfg.IsDevelopment() {
+			writer = io.MultiWriter(w, &logBuffer)
+		}
+
 		select {
 		case event, ok := <-eventChan:
 			if !ok {
 				if envCfg.EnableResponseLogs {
 					responseTime := time.Since(startTime).Milliseconds()
 					log.Printf("⏱️ 流式响应完成: %dms", responseTime)
+					if envCfg.IsDevelopment() && logBuffer.Len() > 0 {
+						log.Printf("🛰️  上游流式响应体 (完整):\n---\n%s---", logBuffer.String())
+					}
 				}
 				return false
 			}
 			// 直接写入，因为provider已格式化为SSE事件
-			_, err := w.Write([]byte(event))
+			_, err := writer.Write([]byte(event))
 			if err != nil {
 				// 客户端可能已断开连接
 				log.Printf("⚠️ 写入流时出错: %v", err)
+				if envCfg.EnableResponseLogs && envCfg.IsDevelopment() && logBuffer.Len() > 0 {
+					log.Printf("🛰️  上游流式响应体 (中断):\n---\n%s---", logBuffer.String())
+				}
 				return false
 			}
 			return true
@@ -369,6 +395,9 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 			}
 			if err != nil {
 				log.Printf("💥 流式传输错误: %v", err)
+			}
+			if envCfg.EnableResponseLogs && envCfg.IsDevelopment() && logBuffer.Len() > 0 {
+				log.Printf("🛰️  上游流式响应体 (错误):\n---\n%s---", logBuffer.String())
 			}
 			return false
 		}
