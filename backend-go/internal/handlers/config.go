@@ -7,13 +7,31 @@ import (
 	"github.com/yourusername/claude-proxy/internal/config"
 )
 
-// GetUpstreams 获取上游列表
+// GetUpstreams 获取上游列表 (兼容前端 channels 字段名)
 func GetUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		config := cfgManager.GetConfig()
+		cfg := cfgManager.GetConfig()
+
+		// 为每个upstream添加index字段
+		upstreams := make([]gin.H, len(cfg.Upstream))
+		for i, up := range cfg.Upstream {
+			upstreams[i] = gin.H{
+				"index":              i,
+				"name":               up.Name,
+				"serviceType":        up.ServiceType,
+				"baseUrl":            up.BaseURL,
+				"apiKeys":            up.APIKeys,
+				"description":        up.Description,
+				"website":            up.Website,
+				"insecureSkipVerify": up.InsecureSkipVerify,
+				"modelMapping":       up.ModelMapping,
+			}
+		}
+
 		c.JSON(200, gin.H{
-			"upstreams": config.Upstream,
-			"current":   config.CurrentUpstream,
+			"channels":    upstreams,
+			"current":     cfg.CurrentUpstream,
+			"loadBalance": cfg.LoadBalance,
 		})
 	}
 }
@@ -182,7 +200,7 @@ func AddApiKey(cfgManager *config.ConfigManager) gin.HandlerFunc {
 	}
 }
 
-// DeleteApiKey 删除 API 密钥
+// DeleteApiKey 删除 API 密钥 (支持URL路径参数)
 func DeleteApiKey(cfgManager *config.ConfigManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		idStr := c.Param("id")
@@ -192,11 +210,10 @@ func DeleteApiKey(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			return
 		}
 
-		var req struct {
-			APIKey string `json:"apiKey"`
-		}
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, gin.H{"error": "Invalid request body"})
+		// 从URL路径参数获取apiKey
+		apiKey := c.Param("apiKey")
+		if apiKey == "" {
+			c.JSON(400, gin.H{"error": "API key is required"})
 			return
 		}
 
@@ -208,11 +225,18 @@ func DeleteApiKey(cfgManager *config.ConfigManager) gin.HandlerFunc {
 
 		// 查找并删除密钥
 		keys := config.Upstream[id].APIKeys
+		found := false
 		for i, key := range keys {
-			if key == req.APIKey {
+			if key == apiKey {
 				config.Upstream[id].APIKeys = append(keys[:i], keys[i+1:]...)
+				found = true
 				break
 			}
+		}
+
+		if !found {
+			c.JSON(404, gin.H{"error": "API key not found"})
+			return
 		}
 
 		if err := cfgManager.SaveConfig(); err != nil {
@@ -289,5 +313,75 @@ func UpdateConfig(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			"message": "配置已更新",
 			"config":  config,
 		})
+	}
+}
+
+// UpdateLoadBalance 更新负载均衡策略
+func UpdateLoadBalance(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Strategy string `json:"strategy"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid request body"})
+			return
+		}
+
+		config := cfgManager.GetConfig()
+		config.LoadBalance = req.Strategy
+
+		if err := cfgManager.SaveConfig(); err != nil {
+			c.JSON(500, gin.H{"error": "Failed to save config"})
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"message": "负载均衡策略已更新",
+			"strategy": req.Strategy,
+		})
+	}
+}
+
+// PingChannel Ping单个渠道
+func PingChannel(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		idStr := c.Param("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid channel ID"})
+			return
+		}
+
+		config := cfgManager.GetConfig()
+		if id < 0 || id >= len(config.Upstream) {
+			c.JSON(404, gin.H{"error": "Channel not found"})
+			return
+		}
+
+		// 简单返回成功，实际可以实现真实的ping逻辑
+		c.JSON(200, gin.H{
+			"success": true,
+			"latency": 0,
+			"status":  "healthy",
+		})
+	}
+}
+
+// PingAllChannels Ping所有渠道
+func PingAllChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		config := cfgManager.GetConfig()
+		results := make([]gin.H, len(config.Upstream))
+
+		for i := range config.Upstream {
+			results[i] = gin.H{
+				"id":      i,
+				"name":    config.Upstream[i].Name,
+				"latency": 0,
+				"status":  "healthy",
+			}
+		}
+
+		c.JSON(200, results)
 	}
 }

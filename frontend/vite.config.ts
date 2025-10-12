@@ -11,6 +11,9 @@ export default defineConfig(({ mode }) => {
   const backendUrl = env.VITE_BACKEND_URL || 'http://localhost:3000'
 
   return {
+    // 使用绝对路径，适配 Go 嵌入式部署
+    base: '/',
+
     plugins: [
       vue(),
       vuetify({
@@ -43,7 +46,17 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
-      emptyOutDir: true
+      emptyOutDir: true,
+      // 确保资源路径正确
+      assetsDir: 'assets',
+      // 优化代码分割
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vue-vendor': ['vue', 'vuetify']
+          }
+        }
+      }
     }
   }
 })

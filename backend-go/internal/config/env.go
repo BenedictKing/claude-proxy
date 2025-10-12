@@ -8,7 +8,7 @@ import (
 // EnvConfig 环境变量配置
 type EnvConfig struct {
 	Port                 int
-	NodeEnv              string
+	Env                  string
 	EnableWebUI          bool
 	ProxyAccessKey       string
 	LoadBalanceStrategy  string
@@ -28,9 +28,15 @@ type EnvConfig struct {
 
 // NewEnvConfig 创建环境配置
 func NewEnvConfig() *EnvConfig {
+	// 支持 ENV 和 NODE_ENV（向后兼容）
+	env := getEnv("ENV", "")
+	if env == "" {
+		env = getEnv("NODE_ENV", "development")
+	}
+
 	return &EnvConfig{
 		Port:                 getEnvAsInt("PORT", 3000),
-		NodeEnv:              getEnv("NODE_ENV", "development"),
+		Env:                  env,
 		EnableWebUI:          getEnv("ENABLE_WEB_UI", "true") != "false",
 		ProxyAccessKey:       getEnv("PROXY_ACCESS_KEY", "your-proxy-access-key"),
 		LoadBalanceStrategy:  getEnv("LOAD_BALANCE_STRATEGY", "failover"),
@@ -51,12 +57,12 @@ func NewEnvConfig() *EnvConfig {
 
 // IsDevelopment 是否为开发环境
 func (c *EnvConfig) IsDevelopment() bool {
-	return c.NodeEnv == "development"
+	return c.Env == "development"
 }
 
 // IsProduction 是否为生产环境
 func (c *EnvConfig) IsProduction() bool {
-	return c.NodeEnv == "production"
+	return c.Env == "production"
 }
 
 // ShouldLog 是否应该记录日志

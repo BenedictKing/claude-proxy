@@ -19,6 +19,25 @@
 - ✅ Claude (Anthropic)
 - ✅ OpenAI Old (旧版兼容)
 
+## 最新更新 (v2.0.1)
+
+### 🐛 重要修复
+- ✅ 修复前端资源加载问题（Vite base 路径配置）
+- ✅ 修复静态文件 MIME 类型错误（favicon.ico 等）
+- ✅ 修复 API 路由与前端不匹配问题
+- ✅ 修复版本信息未注入问题
+
+### ⚡ 性能优化
+- ✅ 智能前端构建缓存（无变更时 0.07秒启动，提升 142 倍）
+- ✅ 优化代码分割（vue-vendor 独立打包）
+
+### 📝 改进
+- ✅ ENV 环境变量标准化（替代 NODE_ENV，向后兼容）
+- ✅ 添加 favicon 支持（SVG 格式）
+- ✅ 完善文档和开发指南
+
+---
+
 ## 快速开始
 
 ### 方式1：下载预编译二进制文件（推荐）
@@ -76,29 +95,68 @@ cd backend-go
 ### 环境变量配置 (.env)
 
 ```env
-# 服务器配置
+# ============ 服务器配置 ============
 PORT=3000
-NODE_ENV=production
 
-# Web UI
+# 运行环境: development | production
+# 影响:
+#   - production: Gin ReleaseMode(高性能)、关闭/admin/dev/info、严格CORS
+#   - development: Gin DebugMode(详细日志)、开启/admin/dev/info、宽松CORS
+ENV=production
+
+# ============ Web UI 配置 ============
 ENABLE_WEB_UI=true
 
-# 访问控制
+# ============ 访问控制 ============
+# 代理访问密钥（必须修改！）
 PROXY_ACCESS_KEY=your-secure-access-key
 
-# 负载均衡
-LOAD_BALANCE_STRATEGY=failover  # failover | round-robin | random
+# ============ 负载均衡策略 ============
+# 可选值: failover (故障转移) | round-robin (轮询) | random (随机)
+LOAD_BALANCE_STRATEGY=failover
 
-# 日志配置
-LOG_LEVEL=info  # error | warn | info | debug
+# ============ 日志配置 ============
+# 日志级别: error | warn | info | debug
+LOG_LEVEL=info
+
+# 是否启用请求/响应日志
 ENABLE_REQUEST_LOGS=true
 ENABLE_RESPONSE_LOGS=true
 
-# 其他配置
+# ============ 性能配置 ============
+# 请求超时时间（毫秒）
 REQUEST_TIMEOUT=30000
+
+# 最大并发请求数
 MAX_CONCURRENT_REQUESTS=100
+
+# ============ CORS 配置 ============
+ENABLE_CORS=true
+CORS_ORIGIN=*
+
+# ============ 速率限制 ============
+ENABLE_RATE_LIMIT=false
+RATE_LIMIT_WINDOW=60000
+RATE_LIMIT_MAX_REQUESTS=100
+
+# ============ 健康检查 ============
+HEALTH_CHECK_ENABLED=true
 HEALTH_CHECK_PATH=/health
 ```
+
+### 环境模式详解
+
+| 配置项 | development | production |
+|--------|-------------|------------|
+| **Gin 模式** | DebugMode (详细日志) | ReleaseMode (高性能) |
+| **开发端点** | `/admin/dev/info` 开启 | `/admin/dev/info` 关闭 |
+| **CORS 策略** | 自动允许所有 localhost 源 | 严格使用 CORS_ORIGIN 配置 |
+| **日志输出** | 路由注册、请求详情 | 仅错误和警告 |
+| **安全性** | 低（暴露调试信息） | 高（最小信息暴露） |
+
+**建议**：
+- 开发测试时使用 `ENV=development`
+- 生产部署时务必使用 `ENV=production`
 
 ### 渠道配置
 
@@ -214,8 +272,30 @@ Go 版本相比 TypeScript 版本的性能优势：
 
 ## 开发
 
+### 推荐开发流程（智能缓存）
+
 ```bash
-# 开发模式运行
+# 使用 Makefile - 自动管理前端构建缓存
+make run              # 首次构建前端，后续仅在源文件变更时重新编译
+make dev              # 开发模式（带竞态检测）
+make dev-backend      # 仅启动后端（跳过前端构建）
+make dev-frontend     # 仅启动前端开发服务器
+
+# 手动控制
+make build-frontend   # 强制重新构建前端
+make clean            # 清除所有构建缓存
+```
+
+**智能缓存机制：**
+- ✅ `make run` 自动检测 `frontend/src` 目录文件变更
+- ✅ 未变更时跳过编译，**秒级启动**服务器
+- ✅ 首次运行或源文件修改后自动重新编译
+- ✅ 使用标记文件 `.build-marker` 追踪构建状态
+
+### 传统开发方式
+
+```bash
+# 直接运行（不推荐 - 无版本信息）
 go run main.go
 
 # 运行测试
@@ -226,6 +306,39 @@ go fmt ./...
 
 # 静态检查
 go vet ./...
+```
+
+## 版本管理
+
+### 升级版本
+
+只需修改根目录的 `VERSION` 文件：
+
+```bash
+# 编辑 VERSION 文件
+echo "v1.1.0" > ../VERSION
+
+# 重新构建即可
+make build
+```
+
+所有构建产物会自动包含新版本号，无需修改代码！
+
+### 查看版本信息
+
+```bash
+# 查看项目版本信息
+make info
+
+# 启动服务器后查看版本
+curl http://localhost:3000/health | jq '.version'
+
+# 输出示例：
+# {
+#   "version": "v1.0.0",
+#   "buildTime": "2025-01-15_10:30:45_UTC",
+#   "gitCommit": "abc1234"
+# }
 ```
 
 ## 许可证

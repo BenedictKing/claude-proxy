@@ -16,7 +16,8 @@ func HealthCheck(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gin
 			"status":    "healthy",
 			"timestamp": time.Now().Format(time.RFC3339),
 			"uptime":    time.Since(startTime).Seconds(),
-			"mode":      envCfg.NodeEnv,
+			"mode":      envCfg.Env,
+			"version":   getVersion(),
 			"config": gin.H{
 				"upstreamCount":   len(config.Upstream),
 				"currentUpstream": config.CurrentUpstream,
@@ -26,6 +27,36 @@ func HealthCheck(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gin
 
 		c.JSON(200, healthData)
 	}
+}
+
+// getVersion 获取版本信息
+func getVersion() gin.H {
+	// 这些变量在编译时通过 -ldflags 注入
+	// 从根目录 VERSION 文件读取
+	return gin.H{
+		"version":   getVersionString(),
+		"buildTime": getBuildTime(),
+		"gitCommit": getGitCommit(),
+	}
+}
+
+// 以下函数用于从 main 包获取版本信息
+// 由于无法直接导入 main 包，使用默认值
+var (
+	versionString = "v0.0.0-dev"
+	buildTime     = "unknown"
+	gitCommit     = "unknown"
+)
+
+func getVersionString() string { return versionString }
+func getBuildTime() string     { return buildTime }
+func getGitCommit() string     { return gitCommit }
+
+// SetVersionInfo 设置版本信息（从 main 调用）
+func SetVersionInfo(version, build, commit string) {
+	versionString = version
+	buildTime = build
+	gitCommit = commit
 }
 
 // ReloadConfig 配置重载处理器

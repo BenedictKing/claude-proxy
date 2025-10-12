@@ -1,6 +1,8 @@
 package providers
 
 import (
+	"io"
+
 	"github.com/yourusername/claude-proxy/internal/config"
 	"github.com/yourusername/claude-proxy/internal/types"
 )
@@ -14,7 +16,7 @@ type Provider interface {
 	ConvertToClaudeResponse(providerResp *types.ProviderResponse) (*types.ClaudeResponse, error)
 
 	// HandleStreamResponse 处理流式响应
-	HandleStreamResponse(providerResp *types.ProviderResponse) (<-chan string, error)
+	HandleStreamResponse(body io.ReadCloser) (<-chan string, <-chan error, error)
 }
 
 // GetProvider 根据服务类型获取提供商

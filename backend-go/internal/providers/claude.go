@@ -3,7 +3,6 @@ package providers
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"io"
 	"strings"
 

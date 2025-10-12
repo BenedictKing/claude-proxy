@@ -4,7 +4,6 @@ import (
 	"embed"
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -22,6 +21,9 @@ func main() {
 		log.Println("没有找到 .env 文件，使用环境变量或默认值")
 	}
 
+	// 设置版本信息到 handlers 包
+	handlers.SetVersionInfo(Version, BuildTime, GitCommit)
+
 	// 初始化配置管理器
 	envCfg := config.NewEnvConfig()
 	cfgManager, err := config.NewConfigManager(".config/config.json")
@@ -30,7 +32,7 @@ func main() {
 	}
 
 	// 设置 Gin 模式
-	if envCfg.NodeEnv == "production" {
+	if envCfg.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
@@ -50,22 +52,32 @@ func main() {
 	r.POST("/admin/config/reload", handlers.ReloadConfig(cfgManager))
 
 	// 开发信息端点
-	if envCfg.NodeEnv == "development" {
+	if envCfg.IsDevelopment() {
 		r.GET("/admin/dev/info", handlers.DevInfo(envCfg, cfgManager))
 	}
 
 	// Web 管理界面 API 路由
 	apiGroup := r.Group("/api")
 	{
-		apiGroup.GET("/upstreams", handlers.GetUpstreams(cfgManager))
-		apiGroup.POST("/upstreams", handlers.AddUpstream(cfgManager))
-		apiGroup.PUT("/upstreams/:id", handlers.UpdateUpstream(cfgManager))
-		apiGroup.DELETE("/upstreams/:id", handlers.DeleteUpstream(cfgManager))
-		apiGroup.POST("/upstreams/:id/keys", handlers.AddApiKey(cfgManager))
-		apiGroup.DELETE("/upstreams/:id/keys", handlers.DeleteApiKey(cfgManager))
-		apiGroup.POST("/upstreams/:id/use", handlers.SetCurrentUpstream(cfgManager))
+		// 渠道管理 (兼容前端 /api/channels 路由)
+		apiGroup.GET("/channels", handlers.GetUpstreams(cfgManager))
+		apiGroup.POST("/channels", handlers.AddUpstream(cfgManager))
+		apiGroup.PUT("/channels/:id", handlers.UpdateUpstream(cfgManager))
+		apiGroup.DELETE("/channels/:id", handlers.DeleteUpstream(cfgManager))
+		apiGroup.POST("/channels/:id/keys", handlers.AddApiKey(cfgManager))
+		apiGroup.DELETE("/channels/:id/keys/:apiKey", handlers.DeleteApiKey(cfgManager))
+		apiGroup.POST("/channels/:id/current", handlers.SetCurrentUpstream(cfgManager))
+
+		// 配置管理
 		apiGroup.GET("/config", handlers.GetConfig(cfgManager))
 		apiGroup.PUT("/config", handlers.UpdateConfig(cfgManager))
+
+		// 负载均衡
+		apiGroup.PUT("/loadbalance", handlers.UpdateLoadBalance(cfgManager))
+
+		// Ping测试
+		apiGroup.GET("/ping/:id", handlers.PingChannel(cfgManager))
+		apiGroup.GET("/ping", handlers.PingAllChannels(cfgManager))
 	}
 
 	// 代理端点 - 统一入口
@@ -94,11 +106,18 @@ func main() {
 	// 启动服务器
 	addr := fmt.Sprintf(":%d", envCfg.Port)
 	fmt.Printf("\n🚀 Claude API代理服务器已启动\n")
+	fmt.Printf("📌 版本: %s\n", Version)
+	if BuildTime != "unknown" {
+		fmt.Printf("🕐 构建时间: %s\n", BuildTime)
+	}
+	if GitCommit != "unknown" {
+		fmt.Printf("🔖 Git提交: %s\n", GitCommit)
+	}
 	fmt.Printf("📍 本地地址: http://localhost:%d\n", envCfg.Port)
 	fmt.Printf("🌐 管理界面: http://localhost:%d\n", envCfg.Port)
 	fmt.Printf("📋 统一入口: POST /v1/messages\n")
 	fmt.Printf("💚 健康检查: GET %s\n", envCfg.HealthCheckPath)
-	fmt.Printf("📊 环境: %s\n\n", envCfg.NodeEnv)
+	fmt.Printf("📊 环境: %s\n\n", envCfg.Env)
 
 	if err := r.Run(addr); err != nil {
 		log.Fatalf("服务器启动失败: %v", err)

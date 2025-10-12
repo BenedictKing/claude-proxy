@@ -4,7 +4,7 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
-	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,31 +21,120 @@ func ServeFrontend(r *gin.Engine, frontendFS embed.FS) {
 		return
 	}
 
-	// 使用 Gin 的静态文件服务
+	// 使用 Gin 的静态文件服务 - /assets 路由
 	r.StaticFS("/assets", http.FS(distFS))
 
-	// 处理所有其他路由（SPA 支持）
-	r.NoRoute(func(c *gin.Context) {
-		// 尝试读取 index.html
-		indexContent, err := fs.ReadFile(distFS, "index.html")
-		if err != nil {
-			c.HTML(503, "", getErrorPage())
-			return
-		}
-
-		c.Data(200, "text/html; charset=utf-8", indexContent)
-	})
-
-	// 根路径
+	// 根路径返回 index.html
 	r.GET("/", func(c *gin.Context) {
 		indexContent, err := fs.ReadFile(distFS, "index.html")
 		if err != nil {
 			c.HTML(503, "", getErrorPage())
 			return
 		}
-
 		c.Data(200, "text/html; charset=utf-8", indexContent)
 	})
+
+	// NoRoute 处理器 - 智能SPA支持
+	r.NoRoute(func(c *gin.Context) {
+		path := c.Request.URL.Path
+
+		// API 路由优先处理 - 返回 JSON 格式的 404
+		if isAPIPath(path) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "API endpoint not found",
+				"path":    path,
+				"message": "请求的API端点不存在",
+			})
+			return
+		}
+
+		// 去掉开头的 /
+		if len(path) > 0 && path[0] == '/' {
+			path = path[1:]
+		}
+
+		// 尝试从嵌入的文件系统读取文件
+		fileContent, err := fs.ReadFile(distFS, path)
+		if err == nil {
+			// 文件存在，根据扩展名设置正确的 Content-Type
+			contentType := getContentType(path)
+			c.Data(200, contentType, fileContent)
+			return
+		}
+
+		// 文件不存在，返回 index.html (SPA 路由支持)
+		indexContent, err := fs.ReadFile(distFS, "index.html")
+		if err != nil {
+			c.HTML(503, "", getErrorPage())
+			return
+		}
+		c.Data(200, "text/html; charset=utf-8", indexContent)
+	})
+}
+
+// isAPIPath 检查路径是否为 API 端点
+func isAPIPath(path string) bool {
+	// API 路由前缀列表
+	apiPrefixes := []string{
+		"/v1/",      // Claude API 代理端点
+		"/api/",     // Web 管理界面 API
+		"/admin/",   // 管理端点
+	}
+
+	for _, prefix := range apiPrefixes {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// getContentType 根据文件扩展名返回 Content-Type
+func getContentType(path string) string {
+	if len(path) == 0 {
+		return "text/html; charset=utf-8"
+	}
+
+	// 从路径末尾查找扩展名
+	ext := ""
+	for i := len(path) - 1; i >= 0 && path[i] != '/'; i-- {
+		if path[i] == '.' {
+			ext = path[i:]
+			break
+		}
+	}
+
+	switch ext {
+	case ".html":
+		return "text/html; charset=utf-8"
+	case ".css":
+		return "text/css; charset=utf-8"
+	case ".js":
+		return "application/javascript; charset=utf-8"
+	case ".json":
+		return "application/json; charset=utf-8"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".svg":
+		return "image/svg+xml"
+	case ".ico":
+		return "image/x-icon"
+	case ".woff":
+		return "font/woff"
+	case ".woff2":
+		return "font/woff2"
+	case ".ttf":
+		return "font/ttf"
+	case ".eot":
+		return "application/vnd.ms-fontobject"
+	default:
+		return "application/octet-stream"
+	}
 }
 
 // getErrorPage 获取错误页面

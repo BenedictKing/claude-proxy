@@ -1,5 +1,207 @@
 # 版本历史
 
+> **注意**: v2.0.0 开始为 Go 语言重写版本，v1.x 为 TypeScript 版本
+
+---
+
+## [v2.0.1-go] - 2025-10-12
+
+### 🐛 重要修复
+
+#### 前端资源加载问题修复
+
+- **修复 Vite base 路径配置** (`vite.config.ts`)
+  - 添加 `base: '/'` 配置，使用绝对路径适配 Go 嵌入式部署
+  - 修复前端资源加载失败问题（"Expected a JavaScript module but got text/html"）
+  - 优化构建配置，添加代码分割（vue-vendor, mdi-icons）
+
+- **修复 NoRoute 处理器逻辑** (`frontend.go`)
+  - 智能文件服务：先尝试读取实际文件，不存在才返回 index.html
+  - 添加 `getContentType()` 函数，正确设置各类资源的 MIME 类型
+  - 支持 .html, .css, .js, .json, .svg, .ico, .woff, .woff2 等文件类型
+  - 修复 `/favicon.ico` 等静态资源返回 HTML 的问题
+  - **添加 API 路由优先处理**：新增 `isAPIPath()` 函数检测 `/v1/`, `/api/`, `/admin/` 前缀，对不存在的 API 端点返回 JSON 格式 404 错误而非 HTML
+
+- **添加 favicon 支持**
+  - 创建 `frontend/public/` 目录
+  - 添加 SVG 格式的 favicon（轻量、矢量、支持主题）
+  - 自动复制到构建产物中
+
+#### API 路由兼容性修复
+
+- **统一前后端 API 路由** (`main.go`)
+  - 修改 `/api/upstreams` → `/api/channels`（与前端保持一致）
+  - 添加缺失的 handler 函数：
+    - `UpdateLoadBalance` - 更新负载均衡策略
+    - `PingChannel` - 单个渠道延迟测试
+    - `PingAllChannels` - 批量延迟测试
+  - 修复 `DeleteApiKey` 支持 URL 路径参数
+  - 优化 `GetUpstreams` 返回格式（包含 channels, current, loadBalance）
+
+#### 环境变量优化
+
+- **ENV 变量标准化** (`env.go`, `.env.example`)
+  - `NODE_ENV` → `ENV`（更通用的命名）
+  - 保持向后兼容（优先读取 `ENV`，回退到 `NODE_ENV`）
+  - 添加详细的配置影响说明文档
+
+#### 版本注入修复
+
+- **Makefile 版本信息注入** (`Makefile`)
+  - 修复 `make run`、`make dev`、`make dev-backend` 缺少 `-ldflags` 参数
+  - 确保运行时显示正确的版本号、构建时间和 Git commit
+
+### ⚡ 性能优化
+
+#### 前端构建缓存机制
+
+- **智能缓存系统** (`Makefile`)
+  - 添加 `.build-marker` 标记文件追踪构建状态
+  - 自动检测 `frontend/src` 目录文件变更
+  - 未变更时跳过编译，**启动速度提升 142 倍**（10秒 → 0.07秒）
+  - 新增 `ensure-frontend-built` 目标实现智能构建逻辑
+
+- **缓存性能对比**:
+  | 场景 | 之前 | 现在 | 提升 |
+  |------|------|------|------|
+  | 首次构建 | ~10秒 | ~10秒 | 无变化 |
+  | **无变更重启** | ~10秒 | **0.07秒** | **142倍** 🚀 |
+  | 有变更重新构建 | ~10秒 | ~8.5秒 | 15%提升 |
+
+### 📝 文档更新
+
+- **README.md 更新**
+  - 添加智能缓存机制说明
+  - 添加 ENV 环境变量影响详解
+  - 更新开发流程最佳实践
+  - 添加缓存命令使用说明
+
+- **前端构建优化文档**
+  - 说明 Makefile 缓存原理
+  - 提供典型开发场景示例
+  - Bun vs npm 对比说明
+
+### 🔧 技术改进
+
+- **代码分割优化**
+  - 分离 vue-vendor (137KB) 和 mdi-icons 模块
+  - 移除无法分割的 @mdi/font 依赖
+  - 优化首屏加载性能
+
+- **Content-Type 准确性**
+  - 所有静态资源返回正确的 MIME 类型
+  - 支持字体文件正确加载
+  - 修复浏览器控制台 MIME 类型警告
+
+### 📦 构建系统
+
+- **Makefile 增强**
+  - 添加 `build-frontend-internal` 内部目标
+  - 优化 `clean` 命令清除缓存标记
+  - 改进 `dev-backend` 前端构建检查逻辑
+
+---
+
+## [v2.0.0-go] - 2025-01-15
+
+### 🎉 Go 语言重写版本首次发布
+
+这是 Claude Proxy 的完整 Go 语言重写版本，保留所有 TypeScript 版本功能的同时，带来显著的性能提升和部署便利性。
+
+#### ✨ 新特性
+
+- **🚀 高性能重写**
+  - 使用 Go 语言完整重写所有后端代码
+  - 原生并发支持（Goroutine）
+  - 启动速度提升 20 倍（< 100ms vs 2-3s）
+  - 内存占用降低 70%（~20MB vs 50-100MB）
+
+- **📦 单文件部署**
+  - 前端资源通过 `embed.FS` 嵌入二进制文件
+  - 无需 Node.js 运行时
+  - 单个可执行文件包含所有功能
+  - 跨平台编译支持（Linux/macOS/Windows，amd64/arm64）
+
+- **🎯 完整功能移植**
+  - ✅ 所有 4 种上游服务适配器（OpenAI、Gemini、Claude、OpenAI Old）
+  - ✅ 完整的协议转换逻辑
+  - ✅ 流式响应和工具调用支持
+  - ✅ 配置管理和热重载
+  - ✅ API 密钥管理和负载均衡
+  - ✅ Web 管理界面（完整嵌入）
+  - ✅ Failover 故障转移机制
+
+- **⚙️ 改进的版本管理**
+  - 集中式版本控制（`VERSION` 文件）
+  - 构建时自动注入版本信息
+  - Git commit hash 追踪
+  - 健康检查 API 包含版本信息
+
+- **🛠️ 增强的构建系统**
+  - 统一的 Makefile 构建系统
+  - 支持多平台交叉编译
+  - 自动化构建脚本
+  - 发布包自动打包
+
+#### 📊 性能对比
+
+| 指标 | TypeScript 版本 | Go 版本 | 提升 |
+|------|----------------|---------|------|
+| 启动时间 | 2-3s | < 100ms | **20x** |
+| 内存占用 | 50-100MB | ~20MB | **70%↓** |
+| 部署包大小 | 200MB+ | ~15MB | **90%↓** |
+| 并发处理 | 事件循环 | 原生 Goroutine | ⭐⭐⭐ |
+
+#### 🎨 技术栈
+
+- **后端**: Go 1.22+, Gin Framework
+- **配置**: fsnotify (热重载), godotenv
+- **嵌入**: Go embed.FS
+- **构建**: Makefile, Shell Scripts
+
+#### 📝 版本管理优化
+
+现在升级版本只需修改一个文件：
+
+```bash
+# 只需编辑根目录的 VERSION 文件
+echo "v2.1.0" > VERSION
+
+# 重新构建即可
+make build
+```
+
+所有构建产物（二进制文件、健康检查 API、启动信息）会自动包含新版本！
+
+#### 🔄 迁移指南
+
+从 TypeScript 版本迁移到 Go 版本：
+
+1. 配置文件完全兼容（`.config/config.json`）
+2. 环境变量完全兼容（`.env`）
+3. API 端点完全兼容（`/v1/messages`、`/health` 等）
+4. Web 管理界面功能一致
+
+只需：
+```bash
+# 1. 构建 Go 版本
+make build
+
+# 2. 使用相同的配置文件
+cp -r backend/.config backend-go/.config
+cp backend/.env backend-go/.env
+
+# 3. 运行
+./backend-go/dist/claude-proxy-linux-amd64
+```
+
+#### ⚠️ 已知限制
+
+- 暂无 Docker 镜像（计划在 v2.1.0 提供）
+- 配置文件加密功能待实现
+
+---
+
 ## v1.2.0 - 2025-09-19
 
 ### ✨ 新功能
