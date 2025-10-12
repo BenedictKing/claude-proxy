@@ -353,11 +353,23 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 				}
 				return false
 			}
-			c.SSEvent("", event)
+			// 直接写入，因为provider已格式化为SSE事件
+			_, err := w.Write([]byte(event))
+			if err != nil {
+				// 客户端可能已断开连接
+				log.Printf("⚠️ 写入流时出错: %v", err)
+				return false
+			}
 			return true
 
-		case err := <-errChan:
-			log.Printf("💥 流式传输错误: %v", err)
+		case err, ok := <-errChan:
+			if !ok {
+				// errChan被关闭，这不是预期的退出路径
+				return false
+			}
+			if err != nil {
+				log.Printf("💥 流式传输错误: %v", err)
+			}
 			return false
 		}
 	})
