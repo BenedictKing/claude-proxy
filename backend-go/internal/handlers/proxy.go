@@ -431,8 +431,10 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 			if err != nil {
 				// 区分客户端断开(broken pipe/connection reset)和真正的错误
 				errMsg := err.Error()
-				if strings.Contains(errMsg, "broken pipe") ||
-					strings.Contains(errMsg, "connection reset") {
+				isNormalDisconnect := strings.Contains(errMsg, "broken pipe") ||
+					strings.Contains(errMsg, "connection reset")
+
+				if isNormalDisconnect {
 					// 这是客户端主动断开,使用info级别日志
 					if envCfg.ShouldLog("info") {
 						log.Printf("ℹ️ 客户端中断连接 (正常行为): %v", err)
@@ -443,12 +445,35 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 				}
 
 				if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
+					// 检测是否是 tool_use 导致的正常断开
+					// 条件1: 包含完整的 stop_reason: tool_use
+					// 条件2: 包含 tool_use 相关的 content_block (说明已发送tool use块)
+					bufferStr := logBuffer.String()
+					isToolUseCompletion := isNormalDisconnect &&
+						(strings.Contains(bufferStr, `"stop_reason":"tool_use"`) ||
+						 strings.Contains(bufferStr, `"stop_reason": "tool_use"`) ||
+						 (strings.Contains(bufferStr, `"type":"tool_use"`) &&
+						  strings.Contains(bufferStr, `event: content_block_stop`)))
+
 					if synthesizer != nil {
 						synthesizedContent := synthesizer.GetSynthesizedContent()
-						if synthesizedContent != "" && !synthesizer.IsParseFailed() {
-							log.Printf("🛰️  上游流式响应合成内容 (中断):\n%s", strings.TrimSpace(synthesizedContent))
-						} else if logBuffer.Len() > 0 {
-							log.Printf("🛰️  上游流式响应体 (中断):\n%s", logBuffer.String())
+						// 对于正常断开,优先显示合成内容;如果没有合成内容则不显示详细日志
+						if isNormalDisconnect {
+							if synthesizedContent != "" && !synthesizer.IsParseFailed() {
+								if isToolUseCompletion {
+									log.Printf("🛰️  上游流式响应合成内容:\n%s", strings.TrimSpace(synthesizedContent))
+								} else {
+									log.Printf("🛰️  上游流式响应合成内容 (客户端提前断开):\n%s", strings.TrimSpace(synthesizedContent))
+								}
+							}
+							// 正常断开时不再输出原始流式日志
+						} else {
+							// 非正常断开(真实错误),显示详细信息用于调试
+							if synthesizedContent != "" && !synthesizer.IsParseFailed() {
+								log.Printf("🛰️  上游流式响应合成内容 (异常中断):\n%s", strings.TrimSpace(synthesizedContent))
+							} else if logBuffer.Len() > 0 {
+								log.Printf("🛰️  上游流式响应体 (异常中断):\n%s", logBuffer.String())
+							}
 						}
 					}
 				}

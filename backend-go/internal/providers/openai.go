@@ -534,6 +534,15 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 		}
 
 		if err := scanner.Err(); err != nil {
+			// 在 tool_use 场景下，客户端主动断开是正常行为
+			// 如果已经发送了 tool_use stop 事件，并且错误是连接断开相关的，则忽略该错误
+			errMsg := err.Error()
+			if toolUseStopEmitted && (strings.Contains(errMsg, "broken pipe") ||
+				strings.Contains(errMsg, "connection reset") ||
+				strings.Contains(errMsg, "EOF")) {
+				// 这是预期的客户端行为，不报告错误
+				return
+			}
 			errChan <- err
 		}
 	}()
