@@ -396,20 +396,8 @@ func formatJSONWithCompactArrays(data interface{}, indent string, depth int) str
 				itemJSON, _ := json.Marshal(item)
 				items[i] = string(itemJSON)
 			}
-			// 如果工具数量较少，使用单行；否则换行显示
-			if len(items) <= 5 {
-				return "[" + strings.Join(items, ", ") + "]"
-			}
-			// 工具较多时每行显示5个
-			var lines []string
-			for i := 0; i < len(items); i += 5 {
-				end := i + 5
-				if end > len(items) {
-					end = len(items)
-				}
-				lines = append(lines, indent+"  "+strings.Join(items[i:end], ", "))
-			}
-			return "[\n" + strings.Join(lines, ",\n") + "\n" + indent + "]"
+			// 始终使用单行显示所有工具
+			return "[" + strings.Join(items, ", ") + "]"
 		}
 
 		// 普通数组的多行显示
