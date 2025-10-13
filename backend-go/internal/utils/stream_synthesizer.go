@@ -292,3 +292,8 @@ func (s *StreamSynthesizer) GetSynthesizedContent() string {
 func (s *StreamSynthesizer) IsParseFailed() bool {
 	return s.parseFailed
 }
+
+// HasToolCalls 检查是否有工具调用被处理
+func (s *StreamSynthesizer) HasToolCalls() bool {
+	return len(s.toolCallAccumulator) > 0
+}

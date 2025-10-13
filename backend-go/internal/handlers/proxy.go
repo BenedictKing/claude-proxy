@@ -368,48 +368,38 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
-	c.Header("X-Accel-Buffering", "no") // 禁用nginx缓冲
+	c.Header("X-Accel-Buffering", "no")
 
-	// 必须在写入数据前设置状态码
 	c.Status(200)
 
 	var logBuffer bytes.Buffer
 	var synthesizer *utils.StreamSynthesizer
 	if envCfg.IsDevelopment() {
-		// 关键修复：所有 provider 的输出流都已被转换为 Claude 格式，
-		// 因此日志合成器必须始终使用 "claude" 模式来解析。
 		synthesizer = utils.NewStreamSynthesizer("claude")
 	}
 
-	// 直接使用ResponseWriter而不是c.Stream，以便更好地控制flush
 	w := c.Writer
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		log.Printf("⚠️ ResponseWriter不支持Flush接口")
-		c.JSON(500, gin.H{"error": "Streaming not supported"})
 		return
 	}
-
-	// 立即flush一次，确保headers被发送
 	flusher.Flush()
 
-	// 流式传输循环
+	clientGone := false
 	for {
 		select {
 		case event, ok := <-eventChan:
 			if !ok {
-				// 通道关闭，流式传输结束
+				// 通道关闭，流式传输正常结束
 				if envCfg.EnableResponseLogs {
 					responseTime := time.Since(startTime).Milliseconds()
 					log.Printf("⏱️ 流式响应完成: %dms", responseTime)
-
 					if envCfg.IsDevelopment() && synthesizer != nil {
 						synthesizedContent := synthesizer.GetSynthesizedContent()
 						if synthesizedContent != "" && !synthesizer.IsParseFailed() {
-							// 输出合成的可读内容
 							log.Printf("🛰️  上游流式响应合成内容:\n%s", strings.TrimSpace(synthesizedContent))
 						} else if logBuffer.Len() > 0 {
-							// 如果合成失败或内容为空，输出原始日志
 							log.Printf("🛰️  上游流式响应体 (完整):\n%s", logBuffer.String())
 						}
 					}
@@ -417,11 +407,10 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 				return
 			}
 
-			// 写入事件数据
+			// 始终为日志处理事件
 			if envCfg.IsDevelopment() {
 				logBuffer.WriteString(event)
 				if synthesizer != nil {
-					// 逐行处理用于合成
 					lines := strings.Split(event, "\n")
 					for _, line := range lines {
 						synthesizer.ProcessLine(line)
@@ -429,77 +418,36 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 				}
 			}
 
-			_, err := w.Write([]byte(event))
-			if err != nil {
-				// 区分客户端断开(broken pipe/connection reset)和真正的错误
-				errMsg := err.Error()
-				isNormalDisconnect := strings.Contains(errMsg, "broken pipe") ||
-					strings.Contains(errMsg, "connection reset")
-
-				if isNormalDisconnect {
-					// 这是客户端主动断开,使用info级别日志
-					if envCfg.ShouldLog("info") {
-						log.Printf("ℹ️ 客户端中断连接 (正常行为): %v", err)
-					}
-				} else {
-					// 其他错误,使用warning级别
-					log.Printf("⚠️ 流式传输错误: %v", err)
-				}
-
-				if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
-					// 检测是否是 tool_use 导致的正常断开
-					// 条件1: 包含完整的 stop_reason: tool_use
-					// 条件2: 包含 tool_use 相关的 content_block (说明已发送tool use块)
-					bufferStr := logBuffer.String()
-					isToolUseCompletion := isNormalDisconnect &&
-						(strings.Contains(bufferStr, `"stop_reason":"tool_use"`) ||
-						 strings.Contains(bufferStr, `"stop_reason": "tool_use"`) ||
-						 (strings.Contains(bufferStr, `"type":"tool_use"`) &&
-						  strings.Contains(bufferStr, `event: content_block_stop`)))
-
-					if synthesizer != nil {
-						synthesizedContent := synthesizer.GetSynthesizedContent()
-						// 对于正常断开,优先显示合成内容;如果没有合成内容则不显示详细日志
-						if isNormalDisconnect {
-							if synthesizedContent != "" && !synthesizer.IsParseFailed() {
-								if isToolUseCompletion {
-									log.Printf("🛰️  上游流式响应合成内容:\n%s", strings.TrimSpace(synthesizedContent))
-								} else {
-									log.Printf("🛰️  上游流式响应合成内容 (客户端提前断开):\n%s", strings.TrimSpace(synthesizedContent))
-								}
-							}
-							// 正常断开时不再输出原始流式日志
-						} else {
-							// 非正常断开(真实错误),显示详细信息用于调试
-							if synthesizedContent != "" && !synthesizer.IsParseFailed() {
-								log.Printf("🛰️  上游流式响应合成内容 (异常中断):\n%s", strings.TrimSpace(synthesizedContent))
-							} else if logBuffer.Len() > 0 {
-								log.Printf("🛰️  上游流式响应体 (异常中断):\n%s", logBuffer.String())
-							}
+			// 仅在客户端连接正常时写入数据
+			if !clientGone {
+				_, err := w.Write([]byte(event))
+				if err != nil {
+					clientGone = true // 标记客户端已断开，停止后续写入
+					errMsg := err.Error()
+					if strings.Contains(errMsg, "broken pipe") || strings.Contains(errMsg, "connection reset") {
+						if envCfg.ShouldLog("info") {
+							log.Printf("ℹ️ 客户端中断连接 (正常行为)，继续接收上游数据以完成日志...", err)
 						}
+					} else {
+						log.Printf("⚠️ 流式传输写入错误: %v", err)
 					}
+					// 注意：这里不再return，而是继续循环以耗尽eventChan
+				} else {
+					flusher.Flush()
 				}
-				return
 			}
-
-			// 立即flush，确保数据被发送到客户端
-			flusher.Flush()
 
 		case err, ok := <-errChan:
-			if !ok {
-				// errChan被关闭
-				return
-			}
-			if err != nil {
+			if ok && err != nil {
 				log.Printf("💥 流式传输错误: %v", err)
-			}
-			if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
-				if synthesizer != nil {
-					synthesizedContent := synthesizer.GetSynthesizedContent()
-					if synthesizedContent != "" && !synthesizer.IsParseFailed() {
-						log.Printf("🛰️  上游流式响应合成内容 (错误):\n%s", strings.TrimSpace(synthesizedContent))
-					} else if logBuffer.Len() > 0 {
-						log.Printf("🛰️  上游流式响应体 (错误):\n%s", logBuffer.String())
+				if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
+					if synthesizer != nil {
+						synthesizedContent := synthesizer.GetSynthesizedContent()
+						if synthesizedContent != "" && !synthesizer.IsParseFailed() {
+							log.Printf("🛰️  上游流式响应合成内容 (错误):\n%s", strings.TrimSpace(synthesizedContent))
+						} else if logBuffer.Len() > 0 {
+							log.Printf("🛰️  上游流式响应体 (错误):\n%s", logBuffer.String())
+						}
 					}
 				}
 			}
