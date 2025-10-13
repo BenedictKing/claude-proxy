@@ -14,12 +14,20 @@ export class impl implements provider.Provider {
 
     // 1. 构建目标URL：baseUrl已包含完整路径，只需添加端点
     const originalUrl = new URL(request.url)
-    
+
     // 提取端点路径（移除 /v1 前缀）
     const endpoint = originalUrl.pathname.replace(/^\/v1/, '')
-    
-    // 构建完整目标URL
-    const targetUrl = baseUrl + endpoint + originalUrl.search
+
+    // 构建完整目标URL - 如果baseUrl不包含/v1，则需要添加
+    let targetUrl = baseUrl
+    if (!targetUrl.endsWith('/')) {
+      targetUrl += '/'
+    }
+    // 检测baseUrl是否已包含/v1路径
+    if (!targetUrl.includes('/v1/') && !targetUrl.endsWith('/v1')) {
+      targetUrl += 'v1/'
+    }
+    targetUrl += endpoint.replace(/^\//, '') + originalUrl.search
     
     // 从baseUrl解析出正确的主机信息用于Host头
     const baseUrlObj = new URL(baseUrl)
