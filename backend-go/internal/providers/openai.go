@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/types"
+	"github.com/BenedictKing/claude-proxy/internal/utils"
 )
 
 // OpenAIProvider OpenAI 提供商
@@ -66,14 +67,10 @@ func (p *OpenAIProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		return nil, originalBodyBytes, fmt.Errorf("创建OpenAI请求失败: %w", err)
 	}
 
-	// 复制原始Header，并覆盖认证和内容类型
-	req.Header = c.Request.Header.Clone()
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	// 使用统一的头部处理逻辑
+	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
+	utils.SetAuthenticationHeader(req.Header, apiKey)
 	req.Header.Set("Content-Type", "application/json")
-	req.Host = req.URL.Host // 设置正确的Host头部
-	req.Header.Del("x-proxy-key")
-	req.Header.Del("X-Forwarded-Host")
-	req.Header.Del("X-Forwarded-Proto")
 
 	return req, originalBodyBytes, nil
 }

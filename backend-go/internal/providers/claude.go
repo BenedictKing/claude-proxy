@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/types"
+	"github.com/BenedictKing/claude-proxy/internal/utils"
 )
 
 // ClaudeProvider Claude 提供商（直接透传）
@@ -67,29 +68,10 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		return nil, nil, err
 	}
 
-	// 复制并修改Header
-	req.Header = c.Request.Header.Clone()
-	req.Host = req.URL.Host // 设置正确的Host头部
-
-	// 正确设置认证头
-	if strings.HasPrefix(apiKey, "sk-ant-") {
-		req.Header.Set("x-api-key", apiKey)
-		req.Header.Del("Authorization")
-	} else {
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-		req.Header.Del("x-api-key")
-	}
-	req.Header.Del("x-proxy-key") // 移除代理访问密钥
-
-	// 确保兼容的User-Agent（如果用户未设置或设置不正确）
-	userAgent := req.Header.Get("User-Agent")
-	if userAgent == "" || !strings.HasPrefix(strings.ToLower(userAgent), "claude-cli") {
-		req.Header.Set("User-Agent", "claude-cli/1.0.58 (external, cli)")
-	}
-
-	// 移除可能存在的代理在请求链路中添加的 Host 头，确保使用正确的目标 Host
-	req.Header.Del("X-Forwarded-Host")
-	req.Header.Del("X-Forwarded-Proto")
+	// 使用统一的头部处理逻辑
+	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
+	utils.SetAuthenticationHeader(req.Header, apiKey)
+	utils.EnsureCompatibleUserAgent(req.Header, "claude")
 
 	return req, bodyBytes, nil
 }
