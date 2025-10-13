@@ -4,6 +4,88 @@
 
 ---
 
+## [v2.0.3-go] - 2025-10-13
+
+### 🐛 Bug 修复
+
+#### 流式响应文本块管理优化
+
+- **修复 OpenAI/Gemini 流式响应文本块状态追踪** (`openai.go`, `gemini.go`)
+  - 引入 `textBlockStarted` 状态标志，确保文本块正确开启/关闭
+  - 修复连续文本片段导致多个 `content_block_start` 事件的问题
+  - 确保在工具调用或流结束前正确关闭文本块
+  - 改进 `content_block_stop` 事件的发送时机和条件判断
+
+- **增强 Gemini Provider 的流式事件序列**:
+  - 首个文本块才发送 `content_block_start` 事件
+  - 后续文本增量统一使用 `content_block_delta` 事件
+  - 工具调用前自动关闭未完成的文本块
+  - 流结束时确保所有文本块已关闭
+
+- **改进 OpenAI Provider 的事件同步**:
+  - 统一文本块和工具调用的事件序列管理
+  - 修复工具调用和文本内容交错时的状态混乱
+  - 删除冗余的 `processTextPart` 辅助函数（90行代码减少）
+
+#### 请求头处理优化
+
+- **新增 `PrepareMinimalHeaders` 函数** (`headers.go`)
+  - 针对非 Claude 类型渠道（OpenAI、Gemini）使用最小化请求头
+  - 避免转发 Anthropic 特定头部（如 `anthropic-version`）导致上游拒绝请求
+  - 仅保留必要头部：`Host` 和 `Content-Type`
+  - 不显式设置 `Accept-Encoding`，由 Go 的 `http.Client` 自动处理 gzip 压缩
+
+- **区分 Claude 和非 Claude 渠道的头部策略**:
+  - **Claude 渠道**: 使用 `PrepareUpstreamHeaders`（保留原始请求头）
+  - **OpenAI/Gemini 渠道**: 使用 `PrepareMinimalHeaders`（最小化头部）
+  - 提升与不同上游 API 的兼容性
+
+#### OpenAI URL 路径智能拼接
+
+- **自动检测 baseURL 版本号后缀** (`openai.go`)
+  - 使用正则表达式 `/v\d$` 检测 URL 是否已包含版本号
+  - 已包含版本号（如 `/v1`、`/v2`）时直接拼接 `/chat/completions`
+  - 未包含版本号时自动添加 `/v1/chat/completions`
+  - 支持自定义上游 API 的灵活配置
+
+#### 日志格式优化
+
+- **简化流式响应日志输出** (`proxy.go`)
+  - 移除多余的 `---` 分隔符，减少日志噪音
+  - 统一日志格式：`🛰️ 上游流式响应合成内容:\n{content}`
+  - 减少视觉干扰，提升日志可读性
+
+- **区分客户端断开和真实错误**:
+  - 检测 `broken pipe` 和 `connection reset` 错误
+  - 客户端中断连接使用 `ℹ️` info 级别日志
+  - 其他错误使用 `⚠️` warning 级别日志
+  - 仅在 info 日志级别启用时输出客户端断开信息
+
+### 📝 技术改进
+
+- **代码简化**:
+  - 删除 OpenAI Provider 中的 `processTextPart` 辅助函数（45行）
+  - 状态管理从函数式转为声明式，提升可维护性
+  - 减少重复代码，遵循 DRY 原则
+
+- **错误处理增强**:
+  - 流式传输错误分级处理（client vs server error）
+  - 改进错误日志的上下文信息
+  - 在开发模式下提供更详细的调试信息
+
+### ⚡ 性能优化
+
+- **减少不必要的函数调用**:
+  - 文本块事件生成从函数调用改为内联代码
+  - 减少 JSON 序列化次数
+  - 降低 CPU 和内存开销
+
+- **优化请求头处理**:
+  - 最小化头部策略减少请求体大小
+  - 避免转发无关头部提升网络效率
+
+---
+
 ## [v2.0.2-go] - 2025-10-12
 
 ### ✨ 新功能

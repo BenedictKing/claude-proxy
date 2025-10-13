@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -60,17 +61,31 @@ func (p *OpenAIProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		return nil, originalBodyBytes, fmt.Errorf("序列化OpenAI请求体失败: %w", err)
 	}
 
-	url := strings.TrimSuffix(upstream.BaseURL, "/") + "/chat/completions"
+	// 构建URL - baseURL可能已包含版本号(如/v1, /v2等),需要智能拼接
+	baseURL := strings.TrimSuffix(upstream.BaseURL, "/")
+
+	// 检查baseURL是否以版本号结尾(如/v1, /v2, /v3等)
+	// 使用正则表达式匹配 /v\d 的模式(v后跟单个数字)
+	versionPattern := regexp.MustCompile(`/v\d$`)
+	hasVersionSuffix := versionPattern.MatchString(baseURL)
+
+	// 如果baseURL已经包含版本号,直接拼接/chat/completions
+	// 否则拼接/v1/chat/completions
+	endpoint := "/chat/completions"
+	if !hasVersionSuffix {
+		endpoint = "/v1" + endpoint
+	}
+	url := baseURL + endpoint
 
 	req, err := http.NewRequest("POST", url, bytes.NewReader(reqBodyBytes))
 	if err != nil {
 		return nil, originalBodyBytes, fmt.Errorf("创建OpenAI请求失败: %w", err)
 	}
 
-	// 使用统一的头部处理逻辑
-	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
+	// 对于OpenAI类型的渠道,使用最小化头部(只包含必要的头部)
+	// 避免转发Anthropic特定的头部导致上游拒绝请求
+	req.Header = utils.PrepareMinimalHeaders(req.URL.Host)
 	utils.SetAuthenticationHeader(req.Header, apiKey)
-	req.Header.Set("Content-Type", "application/json")
 
 	return req, originalBodyBytes, nil
 }
@@ -343,10 +358,13 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 		defer body.Close()
 
 		scanner := bufio.NewScanner(body)
-		textBlockIndex := 0
 		toolUseBlockIndex := 0
 		toolCallAccumulator := make(map[int]*ToolCallAccumulator)
 		toolUseStopEmitted := false
+
+		// 文本块状态跟踪
+		textBlockStarted := false
+		textBlockIndex := 0
 
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -390,15 +408,48 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 
 			// 处理文本内容
 			if content, ok := delta["content"].(string); ok && content != "" {
-				events := processTextPart(content, textBlockIndex)
-				for _, event := range events {
-					eventChan <- event
+				// 如果是第一个文本块,发送 content_block_start
+				if !textBlockStarted {
+					startEvent := map[string]interface{}{
+						"type":  "content_block_start",
+						"index": textBlockIndex,
+						"content_block": map[string]string{
+							"type": "text",
+							"text": "",
+						},
+					}
+					startJSON, _ := json.Marshal(startEvent)
+					eventChan <- fmt.Sprintf("event: content_block_start\ndata: %s\n\n", startJSON)
+					textBlockStarted = true
 				}
-				textBlockIndex++
+
+				// 发送 content_block_delta
+				deltaEvent := map[string]interface{}{
+					"type":  "content_block_delta",
+					"index": textBlockIndex,
+					"delta": map[string]string{
+						"type": "text_delta",
+						"text": content,
+					},
+				}
+				deltaJSON, _ := json.Marshal(deltaEvent)
+				eventChan <- fmt.Sprintf("event: content_block_delta\ndata: %s\n\n", deltaJSON)
 			}
 
 			// 处理工具调用
-			if toolCalls, ok := delta["tool_calls"].([]interface{});  ok {
+			if toolCalls, ok := delta["tool_calls"].([]interface{}); ok {
+				// 如果有文本块正在进行,先关闭它
+				if textBlockStarted {
+					stopEvent := map[string]interface{}{
+						"type":  "content_block_stop",
+						"index": textBlockIndex,
+					}
+					stopJSON, _ := json.Marshal(stopEvent)
+					eventChan <- fmt.Sprintf("event: content_block_stop\ndata: %s\n\n", stopJSON)
+					textBlockStarted = false
+					textBlockIndex++
+				}
+
 				for _, tc := range toolCalls {
 					toolCall, ok := tc.(map[string]interface{})
 					if !ok {
@@ -447,6 +498,17 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 
 			// 处理结束原因
 			if finishReason, ok := choice["finish_reason"].(string); ok {
+				// 如果有未关闭的文本块,先关闭它
+				if textBlockStarted {
+					stopEvent := map[string]interface{}{
+						"type":  "content_block_stop",
+						"index": textBlockIndex,
+					}
+					stopJSON, _ := json.Marshal(stopEvent)
+					eventChan <- fmt.Sprintf("event: content_block_stop\ndata: %s\n\n", stopJSON)
+					textBlockStarted = false
+				}
+
 				if !toolUseStopEmitted && (finishReason == "tool_calls" || finishReason == "function_call") {
 					event := map[string]interface{}{
 						"type": "message_delta",
@@ -459,6 +521,16 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 					toolUseStopEmitted = true
 				}
 			}
+		}
+
+		// 确保流结束时关闭任何未关闭的文本块
+		if textBlockStarted {
+			stopEvent := map[string]interface{}{
+				"type":  "content_block_stop",
+				"index": textBlockIndex,
+			}
+			stopJSON, _ := json.Marshal(stopEvent)
+			eventChan <- fmt.Sprintf("event: content_block_stop\ndata: %s\n\n", stopJSON)
 		}
 
 		if err := scanner.Err(); err != nil {
@@ -474,45 +546,6 @@ type ToolCallAccumulator struct {
 	ID        string
 	Name      string
 	Arguments string
-}
-
-// processTextPart 处理文本部分
-func processTextPart(text string, index int) []string {
-	events := []string{}
-
-	// content_block_start
-	startEvent := map[string]interface{}{
-		"type": "content_block_start",
-		"index": index,
-		"content_block": map[string]string{
-			"type": "text",
-			"text": "",
-		},
-	}
-	startJSON, _ := json.Marshal(startEvent)
-	events = append(events, fmt.Sprintf("event: content_block_start\ndata: %s\n\n", startJSON))
-
-	// content_block_delta
-	deltaEvent := map[string]interface{}{
-		"type": "content_block_delta",
-		"index": index,
-		"delta": map[string]string{
-			"type": "text_delta",
-			"text": text,
-		},
-	}
-	deltaJSON, _ := json.Marshal(deltaEvent)
-	events = append(events, fmt.Sprintf("event: content_block_delta\ndata: %s\n\n", deltaJSON))
-
-	// content_block_stop
-	stopEvent := map[string]interface{}{
-		"type": "content_block_stop",
-		"index": index,
-	}
-	stopJSON, _ := json.Marshal(stopEvent)
-	events = append(events, fmt.Sprintf("event: content_block_stop\ndata: %s\n\n", stopJSON))
-
-	return events
 }
 
 // processToolUsePart 处理工具使用部分

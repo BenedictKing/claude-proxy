@@ -55,10 +55,10 @@ func (p *GeminiProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		return nil, originalBodyBytes, fmt.Errorf("创建Gemini请求失败: %w", err)
 	}
 
-	// 使用统一的头部处理逻辑
-	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
+	// 对于Gemini类型的渠道,使用最小化头部(只包含必要的头部)
+	// 避免转发Anthropic特定的头部导致上游拒绝请求
+	req.Header = utils.PrepareMinimalHeaders(req.URL.Host)
 	utils.SetGeminiAuthenticationHeader(req.Header, apiKey)
-	req.Header.Set("Content-Type", "application/json")
 
 	return req, originalBodyBytes, nil
 }
@@ -330,8 +330,11 @@ func (p *GeminiProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 		defer body.Close()
 
 		scanner := bufio.NewScanner(body)
-		textBlockIndex := 0
 		toolUseBlockIndex := 0
+
+		// 文本块状态跟踪
+		textBlockStarted := false
+		textBlockIndex := 0
 
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -380,15 +383,48 @@ func (p *GeminiProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 
 				// 处理文本
 				if text, ok := part["text"].(string); ok {
-					events := processTextPart(text, textBlockIndex)
-					for _, event := range events {
-						eventChan <- event
+					// 如果是第一个文本块,发送 content_block_start
+					if !textBlockStarted {
+						startEvent := map[string]interface{}{
+							"type":  "content_block_start",
+							"index": textBlockIndex,
+							"content_block": map[string]string{
+								"type": "text",
+								"text": "",
+							},
+						}
+						startJSON, _ := json.Marshal(startEvent)
+						eventChan <- fmt.Sprintf("event: content_block_start\ndata: %s\n\n", startJSON)
+						textBlockStarted = true
 					}
-					textBlockIndex++
+
+					// 发送 content_block_delta
+					deltaEvent := map[string]interface{}{
+						"type":  "content_block_delta",
+						"index": textBlockIndex,
+						"delta": map[string]string{
+							"type": "text_delta",
+							"text": text,
+						},
+					}
+					deltaJSON, _ := json.Marshal(deltaEvent)
+					eventChan <- fmt.Sprintf("event: content_block_delta\ndata: %s\n\n", deltaJSON)
 				}
 
 				// 处理函数调用
 				if fc, ok := part["functionCall"].(map[string]interface{}); ok {
+					// 如果有文本块正在进行,先关闭它
+					if textBlockStarted {
+						stopEvent := map[string]interface{}{
+							"type":  "content_block_stop",
+							"index": textBlockIndex,
+						}
+						stopJSON, _ := json.Marshal(stopEvent)
+						eventChan <- fmt.Sprintf("event: content_block_stop\ndata: %s\n\n", stopJSON)
+						textBlockStarted = false
+						textBlockIndex++
+					}
+
 					name, _ := fc["name"].(string)
 					args := fc["args"]
 					id := fmt.Sprintf("toolu_%d", toolUseBlockIndex)
@@ -403,6 +439,17 @@ func (p *GeminiProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 
 			// 处理结束原因
 			if finishReason, ok := candidate["finishReason"].(string); ok {
+				// 如果有未关闭的文本块,先关闭它
+				if textBlockStarted {
+					stopEvent := map[string]interface{}{
+						"type":  "content_block_stop",
+						"index": textBlockIndex,
+					}
+					stopJSON, _ := json.Marshal(stopEvent)
+					eventChan <- fmt.Sprintf("event: content_block_stop\ndata: %s\n\n", stopJSON)
+					textBlockStarted = false
+				}
+
 				if strings.Contains(strings.ToLower(finishReason), "stop") {
 					event := map[string]interface{}{
 						"type": "message_delta",
@@ -414,6 +461,16 @@ func (p *GeminiProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 					eventChan <- fmt.Sprintf("event: message_delta\ndata: %s\n\n", eventJSON)
 				}
 			}
+		}
+
+		// 确保流结束时关闭任何未关闭的文本块
+		if textBlockStarted {
+			stopEvent := map[string]interface{}{
+				"type":  "content_block_stop",
+				"index": textBlockIndex,
+			}
+			stopJSON, _ := json.Marshal(stopEvent)
+			eventChan <- fmt.Sprintf("event: content_block_stop\ndata: %s\n\n", stopJSON)
 		}
 
 		if err := scanner.Err(); err != nil {

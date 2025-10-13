@@ -233,15 +233,6 @@ func FormatJSONForLog(data interface{}, maxTextLength int) string {
 	// 使用自定义格式化来实现content数组的紧凑显示
 	result := formatJSONWithCompactArrays(truncated, "", 0)
 
-	// 如果格式化后仍然太长,智能截断（不在JSON中间截断）
-	if len(result) > 8000 {
-		// 尝试找到最后一个完整的JSON对象边界
-		lastNewline := strings.LastIndex(result[:8000], "\n")
-		if lastNewline > 0 && lastNewline > 7000 {
-			return result[:lastNewline] + "\n... (输出已截断)"
-		}
-		return result[:8000] + "\n... (输出已截断)"
-	}
 	return result
 }
 

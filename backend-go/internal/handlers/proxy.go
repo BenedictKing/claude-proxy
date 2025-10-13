@@ -405,10 +405,10 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 						synthesizedContent := synthesizer.GetSynthesizedContent()
 						if synthesizedContent != "" && !synthesizer.IsParseFailed() {
 							// 输出合成的可读内容
-							log.Printf("🛰️  上游流式响应合成内容:\n---\n%s\n---", strings.TrimSpace(synthesizedContent))
+							log.Printf("🛰️  上游流式响应合成内容:\n%s", strings.TrimSpace(synthesizedContent))
 						} else if logBuffer.Len() > 0 {
 							// 如果合成失败或内容为空，输出原始日志
-							log.Printf("🛰️  上游流式响应体 (完整):\n---\n%s---", logBuffer.String())
+							log.Printf("🛰️  上游流式响应体 (完整):\n%s", logBuffer.String())
 						}
 					}
 				}
@@ -429,14 +429,26 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 
 			_, err := w.Write([]byte(event))
 			if err != nil {
-				log.Printf("⚠️ 写入流时出错: %v", err)
+				// 区分客户端断开(broken pipe/connection reset)和真正的错误
+				errMsg := err.Error()
+				if strings.Contains(errMsg, "broken pipe") ||
+					strings.Contains(errMsg, "connection reset") {
+					// 这是客户端主动断开,使用info级别日志
+					if envCfg.ShouldLog("info") {
+						log.Printf("ℹ️ 客户端中断连接 (正常行为): %v", err)
+					}
+				} else {
+					// 其他错误,使用warning级别
+					log.Printf("⚠️ 流式传输错误: %v", err)
+				}
+
 				if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
 					if synthesizer != nil {
 						synthesizedContent := synthesizer.GetSynthesizedContent()
 						if synthesizedContent != "" && !synthesizer.IsParseFailed() {
-							log.Printf("🛰️  上游流式响应合成内容 (中断):\n---\n%s\n---", strings.TrimSpace(synthesizedContent))
+							log.Printf("🛰️  上游流式响应合成内容 (中断):\n%s", strings.TrimSpace(synthesizedContent))
 						} else if logBuffer.Len() > 0 {
-							log.Printf("🛰️  上游流式响应体 (中断):\n---\n%s---", logBuffer.String())
+							log.Printf("🛰️  上游流式响应体 (中断):\n%s", logBuffer.String())
 						}
 					}
 				}
@@ -458,9 +470,9 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 				if synthesizer != nil {
 					synthesizedContent := synthesizer.GetSynthesizedContent()
 					if synthesizedContent != "" && !synthesizer.IsParseFailed() {
-						log.Printf("🛰️  上游流式响应合成内容 (错误):\n---\n%s\n---", strings.TrimSpace(synthesizedContent))
+						log.Printf("🛰️  上游流式响应合成内容 (错误):\n%s", strings.TrimSpace(synthesizedContent))
 					} else if logBuffer.Len() > 0 {
-						log.Printf("🛰️  上游流式响应体 (错误):\n---\n%s---", logBuffer.String())
+						log.Printf("🛰️  上游流式响应体 (错误):\n%s", logBuffer.String())
 					}
 				}
 			}

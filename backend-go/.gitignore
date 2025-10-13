@@ -2,6 +2,7 @@
 dist/
 *.exe
 claude-proxy-*
+claude-proxy
 
 # 忽略前端资源（会在构建时复制）
 frontend/
