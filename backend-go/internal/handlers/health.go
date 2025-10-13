@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yourusername/claude-proxy/internal/config"
+	"github.com/BenedictKing/claude-proxy/internal/config"
 )
 
 // HealthCheck 健康检查处理器

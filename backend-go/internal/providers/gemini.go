@@ -2,30 +2,20 @@ package providers
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 
-	"github.com/yourusername/claude-proxy/internal/config"
-	"github.com/yourusername/claude-proxy/internal/types"
+	"github.com/gin-gonic/gin"
+	"github.com/BenedictKing/claude-proxy/internal/config"
+	"github.com/BenedictKing/claude-proxy/internal/types"
 )
 
 // GeminiProvider Gemini 提供商
 type GeminiProvider struct{}
-
-import (
-	"bufio"
-	"bytes" // 引入 bytes 包
-	"encoding/json"
-	"fmt"
-	"io"
-	"strings"
-
-	"github.com/gin-gonic/gin" // 引入 gin 包
-	"github.com/yourusername/claude-proxy/internal/config"
-	"github.com/yourusername/claude-proxy/internal/types"
-)
 
 // ConvertToProviderRequest 转换为 Gemini 请求
 func (p *GeminiProvider) ConvertToProviderRequest(c *gin.Context, upstream *config.UpstreamConfig, apiKey string) (*http.Request, []byte, error) {
@@ -226,7 +216,7 @@ func (p *GeminiProvider) convertTools(claudeTools []types.ClaudeTool) []map[stri
 		tools = append(tools, map[string]interface{}{
 			"name":        tool.Name,
 			"description": tool.Description,
-			"parameters":  tool.InputSchema,
+			"parameters":  cleanJsonSchema(tool.InputSchema),
 		})
 	}
 

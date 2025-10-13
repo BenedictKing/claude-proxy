@@ -270,7 +270,7 @@ func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[
 		return "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)
 	}
 
-	// 获取可用密钥列表
+	// 综合考虑临时失败密钥和内存中的失败密钥
 	availableKeys := []string{}
 	for _, key := range upstream.APIKeys {
 		if !failedKeys[key] && !cm.isKeyFailed(key) {
@@ -279,6 +279,38 @@ func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[
 	}
 
 	if len(availableKeys) == 0 {
+		// 如果所有密钥都失效,检查是否有可以恢复的密钥
+		allFailedKeys := []string{}
+		for _, key := range upstream.APIKeys {
+			if failedKeys[key] || cm.isKeyFailed(key) {
+				allFailedKeys = append(allFailedKeys, key)
+			}
+		}
+
+		if len(allFailedKeys) == len(upstream.APIKeys) {
+			// 如果所有密钥都在内存失败缓存中,尝试选择失败时间最早的密钥
+			var oldestFailedKey string
+			oldestTime := time.Now()
+
+			cm.mu.RLock()
+			for _, key := range upstream.APIKeys {
+				if !failedKeys[key] { // 排除本次请求已经尝试过的密钥
+					if failure, exists := cm.failedKeysCache[key]; exists {
+						if failure.Timestamp.Before(oldestTime) {
+							oldestTime = failure.Timestamp
+							oldestFailedKey = key
+						}
+					}
+				}
+			}
+			cm.mu.RUnlock()
+
+			if oldestFailedKey != "" {
+				log.Printf("⚠️ 所有密钥都失效,尝试最早失败的密钥: %s", maskAPIKey(oldestFailedKey))
+				return oldestFailedKey, nil
+			}
+		}
+
 		return "", fmt.Errorf("上游 %s 的所有API密钥都暂时不可用", upstream.Name)
 	}
 
@@ -288,17 +320,31 @@ func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[
 		cm.mu.Lock()
 		cm.requestCount++
 		index := (cm.requestCount - 1) % len(availableKeys)
+		selectedKey := availableKeys[index]
 		cm.mu.Unlock()
-		return availableKeys[index], nil
+		log.Printf("轮询选择密钥 %s (%d/%d)", maskAPIKey(selectedKey), index+1, len(availableKeys))
+		return selectedKey, nil
 
 	case "random":
 		index := rand.Intn(len(availableKeys))
-		return availableKeys[index], nil
+		selectedKey := availableKeys[index]
+		log.Printf("随机选择密钥 %s (%d/%d)", maskAPIKey(selectedKey), index+1, len(availableKeys))
+		return selectedKey, nil
 
 	case "failover":
 		fallthrough
 	default:
-		return availableKeys[0], nil
+		selectedKey := availableKeys[0]
+		// 获取该密钥在原始列表中的索引
+		keyIndex := 0
+		for i, key := range upstream.APIKeys {
+			if key == selectedKey {
+				keyIndex = i + 1
+				break
+			}
+		}
+		log.Printf("故障转移选择密钥 %s (%d/%d)", maskAPIKey(selectedKey), keyIndex, len(upstream.APIKeys))
+		return selectedKey, nil
 	}
 }
 

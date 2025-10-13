@@ -9,8 +9,8 @@ import (
 	"time" // 新增
 
 	"github.com/gin-gonic/gin"
-	"github.com/yourusername/claude-proxy/internal/config"
-	"github.com/yourusername/claude-proxy/internal/httpclient" // 新增
+	"github.com/BenedictKing/claude-proxy/internal/config"
+	"github.com/BenedictKing/claude-proxy/internal/httpclient" // 新增
 )
 
 // GetUpstreams 获取上游列表 (兼容前端 channels 字段名)
@@ -316,11 +316,11 @@ func PingChannel(cfgManager *config.ConfigManager) gin.HandlerFunc {
 // PingAllChannels Ping所有渠道
 func PingAllChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		config := cfgManager.GetConfig()
+		cfg := cfgManager.GetConfig()
 		results := make(chan gin.H)
 		var wg sync.WaitGroup
 
-		for i, channel := range config.Upstream {
+		for i, channel := range cfg.Upstream {
 			wg.Add(1)
 			go func(id int, ch config.UpstreamConfig) {
 				defer wg.Done()

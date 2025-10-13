@@ -7,9 +7,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-	"github.com/yourusername/claude-proxy/internal/config"
-	"github.com/yourusername/claude-proxy/internal/handlers"
-	"github.com/yourusername/claude-proxy/internal/middleware"
+	"github.com/BenedictKing/claude-proxy/internal/config"
+	"github.com/BenedictKing/claude-proxy/internal/handlers"
+	"github.com/BenedictKing/claude-proxy/internal/middleware"
 )
 
 //go:embed frontend/dist/*

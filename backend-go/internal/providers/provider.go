@@ -2,18 +2,11 @@ package providers
 
 import (
 	"io"
-
-	"github.com/yourusername/claude-proxy/internal/config"
-	"github.com/yourusername/claude-proxy/internal/types"
-)
-
-import (
-	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yourusername/claude-proxy/internal/config"
-	"github.com/yourusername/claude-proxy/internal/types"
+	"github.com/BenedictKing/claude-proxy/internal/config"
+	"github.com/BenedictKing/claude-proxy/internal/types"
 )
 
 // Provider 提供商接口

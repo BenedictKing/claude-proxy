@@ -11,71 +11,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yourusername/claude-proxy/internal/config"
-	"github.com/yourusername/claude-proxy/internal/httpclient"
-	"github.com/yourusername/claude-proxy/internal/middleware"
-	"github.com/yourusername/claude-proxy/internal/providers"
-	"github.com/yourusername/claude-proxy/internal/types"
+	"github.com/BenedictKing/claude-proxy/internal/config"
+	"github.com/BenedictKing/claude-proxy/internal/httpclient"
+	"github.com/BenedictKing/claude-proxy/internal/middleware"
+	"github.com/BenedictKing/claude-proxy/internal/providers"
+	"github.com/BenedictKing/claude-proxy/internal/types"
+	"github.com/BenedictKing/claude-proxy/internal/utils"
 )
-
-// simplifyTools 递归地简化一个值，主要是处理'tools'字段
-func simplifyTools(data interface{}) interface{} {
-	switch v := data.(type) {
-	case map[string]interface{}:
-		newMap := make(map[string]interface{}, len(v))
-		for key, val := range v {
-			if key == "tools" {
-				if tools, ok := val.([]interface{}); ok {
-					var simplifiedTools []interface{}
-					for _, tool := range tools {
-						var simplifiedTool interface{} = tool // 默认是原始 tool 对象
-						if toolMap, ok := tool.(map[string]interface{}); ok {
-							// 检查 Claude 格式: tool.name
-							if name, ok := toolMap["name"].(string); ok {
-								simplifiedTool = name
-							} else if function, ok := toolMap["function"].(map[string]interface{}); ok {
-								// 检查 OpenAI 格式: tool.function.name
-								if name, ok := function["name"].(string); ok {
-									simplifiedTool = name
-								}
-							}
-						}
-						simplifiedTools = append(simplifiedTools, simplifiedTool)
-					}
-					newMap[key] = simplifiedTools
-					continue
-				}
-			}
-			newMap[key] = simplifyTools(val)
-		}
-		return newMap
-	case []interface{}:
-		newSlice := make([]interface{}, len(v))
-		for i, item := range v {
-			newSlice[i] = simplifyTools(item)
-		}
-		return newSlice
-	default:
-		return v
-	}
-}
-
-// simplifyToolsInJSON 接收 JSON 字节数组，简化其中的 'tools' 字段以供日志记录
-func simplifyToolsInJSON(jsonData []byte) []byte {
-	var data interface{}
-	if err := json.Unmarshal(jsonData, &data); err != nil {
-		return jsonData // 如果不是有效的JSON，返回原始数据
-	}
-
-	simplifiedData := simplifyTools(data)
-
-	simplifiedBytes, err := json.Marshal(simplifiedData)
-	if err != nil {
-		return jsonData // 如果重新序列化失败，返回原始数据
-	}
-
-	return simplifiedBytes
-}
 
 // ProxyHandler 代理处理器
 func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gin.HandlerFunc {
@@ -88,10 +30,21 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gi
 
 		startTime := time.Now()
 
-		// claudeReq 变量现在仅用于判断是否流式请求及日志记录，不直接传递给 provider
+		// 读取原始请求体
+		bodyBytes, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Failed to read request body"})
+			return
+		}
+		// 恢复请求体供后续使用
+		c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+		// claudeReq 变量用于判断是否流式请求
 		var claudeReq types.ClaudeRequest
-		// 尝试解析，失败也无妨，因为 provider 会处理原始 body
-		_ = c.ShouldBindJSON(&claudeReq)
+		// 尝试解析，失败也无妨
+		if len(bodyBytes) > 0 {
+			_ = json.Unmarshal(bodyBytes, &claudeReq)
+		}
 
 		// 获取当前上游配置
 		upstream, err := cfgManager.GetCurrentUpstream()
@@ -160,17 +113,9 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gi
 						logBody = bodyFromContext
 					}
 
-					simplifiedLogBody := simplifyToolsInJSON(logBody)
-					var prettyBody bytes.Buffer
-					if err := json.Indent(&prettyBody, simplifiedLogBody, "", "  "); err == nil {
-						log.Printf("📄 原始请求体:\n%s", prettyBody.String())
-					} else {
-						if len(logBody) > 500 {
-							log.Printf("📄 原始请求体: %s...", string(logBody[:500]))
-						} else {
-							log.Printf("📄 原始请求体: %s", string(logBody))
-						}
-					}
+					// 使用智能截断和简化函数（与TS版本对齐）
+					formattedBody := utils.FormatJSONBytesForLog(logBody, 500)
+					log.Printf("📄 原始请求体:\n%s", formattedBody)
 				}
 			}
 			// --- 请求日志记录结束 ---
@@ -225,7 +170,7 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gi
 }
 
 // sendRequest 发送HTTP请求
-func sendRequest(providerReq *types.ProviderRequest, upstream *config.UpstreamConfig, envCfg *config.EnvConfig, isStream bool) (*http.Response, error) {
+func sendRequest(req *http.Request, upstream *config.UpstreamConfig, envCfg *config.EnvConfig, isStream bool) (*http.Response, error) {
 	// 使用全局客户端管理器
 	clientManager := httpclient.GetManager()
 
@@ -240,56 +185,22 @@ func sendRequest(providerReq *types.ProviderRequest, upstream *config.UpstreamCo
 	}
 
 	if upstream.InsecureSkipVerify && envCfg.EnableRequestLogs {
-		log.Printf("⚠️ 正在跳过对 %s 的TLS证书验证", providerReq.URL)
-	}
-
-	// 处理请求体：支持两种类型
-	var bodyBytes []byte
-	var err error
-
-	switch v := providerReq.Body.(type) {
-	case []byte:
-		// 已经是字节数组，直接使用
-		bodyBytes = v
-	case string:
-		// 字符串类型，转换为字节数组
-		bodyBytes = []byte(v)
-	default:
-		// 其他类型，需要JSON序列化
-		bodyBytes, err = json.Marshal(providerReq.Body)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	req, err := http.NewRequest(providerReq.Method, providerReq.URL, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return nil, err
-	}
-
-	// 设置请求头
-	for key, value := range providerReq.Headers {
-		req.Header.Set(key, value)
+		log.Printf("⚠️ 正在跳过对 %s 的TLS证书验证", req.URL.String())
 	}
 
 	if envCfg.EnableRequestLogs {
-		log.Printf("🌐 实际请求URL: %s", providerReq.URL)
-		log.Printf("📤 请求方法: %s", providerReq.Method)
-		if envCfg.IsDevelopment() {
-			// 像TS版一样，简化日志中的tools数组
-			simplifiedLogBody := simplifyToolsInJSON(bodyBytes)
+		log.Printf("🌐 实际请求URL: %s", req.URL.String())
+		log.Printf("📤 请求方法: %s", req.Method)
+		if envCfg.IsDevelopment() && req.Body != nil {
+			// 读取请求体用于日志
+			bodyBytes, err := io.ReadAll(req.Body)
+			if err == nil {
+				// 恢复请求体
+				req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
-			// 在开发模式下，打印实际发出的请求体
-			var prettyBody bytes.Buffer
-			if err := json.Indent(&prettyBody, simplifiedLogBody, "", "  "); err == nil {
-				log.Printf("📦 实际请求体:\n%s", prettyBody.String())
-			} else {
-				// 如果不是有效的JSON，则按原样截断打印
-				if len(bodyBytes) > 500 {
-					log.Printf("📦 实际请求体: %s...", string(bodyBytes[:500]))
-				} else {
-					log.Printf("📦 实际请求体: %s", string(bodyBytes))
-				}
+				// 使用智能截断和简化函数（与TS版本对齐）
+				formattedBody := utils.FormatJSONBytesForLog(bodyBytes, 500)
+				log.Printf("📦 实际请求体:\n%s", formattedBody)
 			}
 		}
 	}
@@ -311,17 +222,9 @@ func handleNormalResponse(c *gin.Context, resp *http.Response, provider provider
 		responseTime := time.Since(startTime).Milliseconds()
 		log.Printf("⏱️ 响应完成: %dms, 状态: %d", responseTime, resp.StatusCode)
 		if envCfg.IsDevelopment() {
-			var prettyBody bytes.Buffer
-			if err := json.Indent(&prettyBody, bodyBytes, "", "  "); err == nil {
-				log.Printf("📦 响应体:\n%s", prettyBody.String())
-			} else {
-				// 如果不是有效的JSON，则按原样截断打印
-				if len(bodyBytes) > 500 {
-					log.Printf("📦 响应体: %s...", string(bodyBytes[:500]))
-				} else {
-					log.Printf("📦 响应体: %s", string(bodyBytes))
-				}
-			}
+			// 使用智能截断（与TS版本对齐）
+			formattedBody := utils.FormatJSONBytesForLog(bodyBytes, 500)
+			log.Printf("📦 响应体:\n%s", formattedBody)
 		}
 	}
 
@@ -355,19 +258,31 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no") // 禁用nginx缓冲
+
+	// 必须在写入数据前设置状态码
+	c.Status(200)
 
 	var logBuffer bytes.Buffer
 
-	// 流式传输
-	c.Stream(func(w io.Writer) bool {
-		var writer io.Writer = w
-		if envCfg.IsDevelopment() {
-			writer = io.MultiWriter(w, &logBuffer)
-		}
+	// 直接使用ResponseWriter而不是c.Stream，以便更好地控制flush
+	w := c.Writer
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		log.Printf("⚠️ ResponseWriter不支持Flush接口")
+		c.JSON(500, gin.H{"error": "Streaming not supported"})
+		return
+	}
 
+	// 立即flush一次，确保headers被发送
+	flusher.Flush()
+
+	// 流式传输循环
+	for {
 		select {
 		case event, ok := <-eventChan:
 			if !ok {
+				// 通道关闭，流式传输结束
 				if envCfg.EnableResponseLogs {
 					responseTime := time.Since(startTime).Milliseconds()
 					log.Printf("⏱️ 流式响应完成: %dms", responseTime)
@@ -375,24 +290,30 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 						log.Printf("🛰️  上游流式响应体 (完整):\n---\n%s---", logBuffer.String())
 					}
 				}
-				return false
+				return
 			}
-			// 直接写入，因为provider已格式化为SSE事件
-			_, err := writer.Write([]byte(event))
+
+			// 写入事件数据
+			if envCfg.IsDevelopment() {
+				logBuffer.WriteString(event)
+			}
+
+			_, err := w.Write([]byte(event))
 			if err != nil {
-				// 客户端可能已断开连接
 				log.Printf("⚠️ 写入流时出错: %v", err)
 				if envCfg.EnableResponseLogs && envCfg.IsDevelopment() && logBuffer.Len() > 0 {
 					log.Printf("🛰️  上游流式响应体 (中断):\n---\n%s---", logBuffer.String())
 				}
-				return false
+				return
 			}
-			return true
+
+			// 立即flush，确保数据被发送到客户端
+			flusher.Flush()
 
 		case err, ok := <-errChan:
 			if !ok {
-				// errChan被关闭，这不是预期的退出路径
-				return false
+				// errChan被关闭
+				return
 			}
 			if err != nil {
 				log.Printf("💥 流式传输错误: %v", err)
@@ -400,9 +321,9 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 			if envCfg.EnableResponseLogs && envCfg.IsDevelopment() && logBuffer.Len() > 0 {
 				log.Printf("🛰️  上游流式响应体 (错误):\n---\n%s---", logBuffer.String())
 			}
-			return false
+			return
 		}
-	})
+	}
 }
 
 // shouldRetryWithNextKey 判断是否应该使用下一个密钥重试

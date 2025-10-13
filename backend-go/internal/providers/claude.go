@@ -2,18 +2,6 @@ package providers
 
 import (
 	"bufio"
-	"encoding/json"
-	"io"
-	"strings"
-
-	"github.com/yourusername/claude-proxy/internal/config"
-	"github.com/yourusername/claude-proxy/internal/types"
-)
-
-// ClaudeProvider Claude 提供商（直接透传）
-type ClaudeProvider struct{}
-
-import (
 	"bytes"
 	"encoding/json"
 	"io"
@@ -21,9 +9,12 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yourusername/claude-proxy/internal/config"
-	"github.com/yourusername/claude-proxy/internal/types"
+	"github.com/BenedictKing/claude-proxy/internal/config"
+	"github.com/BenedictKing/claude-proxy/internal/types"
 )
+
+// ClaudeProvider Claude 提供商（直接透传）
+type ClaudeProvider struct{}
 
 // ConvertToProviderRequest 转换为 Claude 请求（实现真正的透传）
 func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *config.UpstreamConfig, apiKey string) (*http.Request, []byte, error) {
@@ -59,7 +50,10 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 
 	// 构建目标URL
 	endpoint := strings.TrimPrefix(c.Request.URL.Path, "/v1")
-	targetURL := strings.TrimSuffix(upstream.BaseURL, "/") + endpoint + c.Request.URL.RawQuery
+	targetURL := strings.TrimSuffix(upstream.BaseURL, "/") + endpoint
+	if c.Request.URL.RawQuery != "" {
+		targetURL += "?" + c.Request.URL.RawQuery
+	}
 
 	// 创建请求
 	var req *http.Request
@@ -86,6 +80,13 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		req.Header.Del("x-api-key")
 	}
 	req.Header.Del("x-proxy-key") // 移除代理访问密钥
+
+	// 确保兼容的User-Agent（如果用户未设置或设置不正确）
+	userAgent := req.Header.Get("User-Agent")
+	if userAgent == "" || !strings.HasPrefix(strings.ToLower(userAgent), "claude-cli") {
+		req.Header.Set("User-Agent", "claude-cli/1.0.58 (external, cli)")
+	}
+
 	// 移除可能存在的代理在请求链路中添加的 Host 头，确保使用正确的目标 Host
 	req.Header.Del("X-Forwarded-Host")
 	req.Header.Del("X-Forwarded-Proto")
@@ -109,7 +110,7 @@ func (p *ClaudeProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 
 	go func() {
 		defer close(eventChan)
-		// defer close(errChan) // 移除此行，避免竞态条件
+		defer close(errChan)
 		defer body.Close()
 
 		scanner := bufio.NewScanner(body)
@@ -117,7 +118,7 @@ func (p *ClaudeProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 		for scanner.Scan() {
 			line := scanner.Text()
 
-			// 直接转发 SSE 事件
+			// 直接转发 SSE 事件（包括空行）
 			if strings.HasPrefix(line, "event:") || strings.HasPrefix(line, "data:") || line == "" {
 				eventChan <- line + "\n"
 			}

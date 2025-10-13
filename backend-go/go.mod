@@ -1,4 +1,4 @@
-module github.com/yourusername/claude-proxy
+module github.com/BenedictKing/claude-proxy
 
 go 1.22
 

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yourusername/claude-proxy/internal/config"
+	"github.com/BenedictKing/claude-proxy/internal/config"
 )
 
 // WebAuthMiddleware Web 访问控制中间件
