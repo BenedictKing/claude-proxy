@@ -376,7 +376,9 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 	var logBuffer bytes.Buffer
 	var synthesizer *utils.StreamSynthesizer
 	if envCfg.IsDevelopment() {
-		synthesizer = utils.NewStreamSynthesizer(upstream.ServiceType)
+		// 关键修复：所有 provider 的输出流都已被转换为 Claude 格式，
+		// 因此日志合成器必须始终使用 "claude" 模式来解析。
+		synthesizer = utils.NewStreamSynthesizer("claude")
 	}
 
 	// 直接使用ResponseWriter而不是c.Stream，以便更好地控制flush
