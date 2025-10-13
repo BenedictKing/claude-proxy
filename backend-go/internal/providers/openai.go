@@ -61,12 +61,12 @@ func (p *OpenAIProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		return nil, originalBodyBytes, fmt.Errorf("序列化OpenAI请求体失败: %w", err)
 	}
 
-	// 构建URL - baseURL可能已包含版本号(如/v1, /v2等),需要智能拼接
+	// 构建URL - baseURL可能已包含版本号(如/v1, /v2, /v1beta, /v2alpha等),需要智能拼接
 	baseURL := strings.TrimSuffix(upstream.BaseURL, "/")
 
-	// 检查baseURL是否以版本号结尾(如/v1, /v2, /v3等)
-	// 使用正则表达式匹配 /v\d 的模式(v后跟单个数字)
-	versionPattern := regexp.MustCompile(`/v\d$`)
+	// 检查baseURL是否以版本号结尾(如/v1, /v2, /v1beta, /v2alpha等)
+	// 使用正则表达式匹配 /v\d+[a-z]* 的模式(v后跟数字,可选字母后缀)
+	versionPattern := regexp.MustCompile(`/v\d+[a-z]*$`)
 	hasVersionSuffix := versionPattern.MatchString(baseURL)
 
 	// 如果baseURL已经包含版本号,直接拼接/chat/completions

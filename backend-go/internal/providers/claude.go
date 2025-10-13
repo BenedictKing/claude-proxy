@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -50,8 +51,24 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	}
 
 	// 构建目标URL
+	// 智能拼接逻辑：
+	// 1. 如果 baseURL 已包含版本号后缀（如 /v1, /v2, /v3），直接拼接端点路径
+	// 2. 如果 baseURL 不包含版本号后缀，自动添加 /v1 再拼接端点路径
 	endpoint := strings.TrimPrefix(c.Request.URL.Path, "/v1")
-	targetURL := strings.TrimSuffix(upstream.BaseURL, "/") + endpoint
+	baseURL := strings.TrimSuffix(upstream.BaseURL, "/")
+
+	// 使用正则表达式检测 baseURL 是否以版本号结尾（/v1, /v2, /v1beta, /v2alpha等）
+	versionPattern := regexp.MustCompile(`/v\d+[a-z]*$`)
+
+	var targetURL string
+	if versionPattern.MatchString(baseURL) {
+		// baseURL 已包含版本号，直接拼接
+		targetURL = baseURL + endpoint
+	} else {
+		// baseURL 不包含版本号，添加 /v1
+		targetURL = baseURL + "/v1" + endpoint
+	}
+
 	if c.Request.URL.RawQuery != "" {
 		targetURL += "?" + c.Request.URL.RawQuery
 	}

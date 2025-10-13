@@ -1,4 +1,11 @@
-# 开发模式说明
+# 开发指南
+
+本文档为开发者提供开发环境配置、工作流程、调试技巧和最佳实践。
+
+> 📚 **相关文档**
+> - 架构设计和技术选型: [ARCHITECTURE.md](ARCHITECTURE.md)
+> - 环境变量配置: [ENVIRONMENT.md](ENVIRONMENT.md)
+> - 贡献规范: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## 开发脚本说明
 
@@ -158,80 +165,9 @@ curl -X POST http://localhost:3000/admin/config/reload
 6. **配置修改无需重启**
 7. **源码修改会自动重启**
 
-## 🏗️ 项目架构
-
-### 核心组件
-
-```
-claude-api-proxy/
-├── backend/
-│   ├── .config/
-│   │   └── config.json       # 运行时配置文件
-│   └── src/
-│       ├── providers/      # 各提供商适配器
-│       ├── config/         # 配置管理
-│       ├── api/            # Web API路由
-│       ├── utils/
-│       ├── server.ts       # Express 服务器
-│       ├── dev-runner.ts   # 开发模式自动重启
-│       ├── config-cli.ts   # 配置命令行工具
-│       └── .env            # 环境变量配置
-├── frontend/
-│   └── ...
-└── scripts/              # 构建脚本
-```
-
-### 设计模式
-
-#### 1. 提供商模式 (Provider Pattern)
-
-所有上游 AI 服务都实现统一的 `Provider` 接口：
-
-```typescript
-interface Provider {
-  convertToProviderRequest(request: Request, baseUrl: string, apiKey: string): Promise<Request>
-  convertToClaudeResponse(response: Response): Promise<Response>
-}
-```
-
-#### 2. 配置管理器模式
-
-`ConfigManager` 负责：
-
-- 配置文件的读写
-- 配置变更监听
-- 基于文件的配置管理
-- API 密钥轮询策略
-
-#### 3. 中间件模式
-
-Express 服务器使用中间件架构：
-
-- 身份验证中间件
-- 日志记录中间件
-- 错误处理中间件
-- CORS 中间件
-
-### 数据流图
-
-```mermaid
-graph TD
-    A[Client Request] --> B[Express Server]
-    B --> C[Auth Middleware]
-    C --> D[Request Logger]
-    D --> E[Config Manager]
-    E --> F[Load Balancer]
-    F --> G[Provider Factory]
-    G --> H[Format Converter]
-    H --> I[Upstream API]
-    I --> J[Response Converter]
-    J --> K[Response Logger]
-    K --> L[Client Response]
-
-    M[Config File] --> E
-```
-
 ## 🎯 代码质量标准
+
+> 📚 完整的编码规范和设计模式请参考 [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ### 编程原则
 
@@ -496,5 +432,12 @@ docker run -p 3000:3000 -v $(pwd)/backend/.config:/app/.config -v $(pwd)/backend
 
 ## 🤝 贡献与发布
 
--   有关如何为项目贡献代码，请继续阅读本文档。
--   有关如何发布新版本，请参考 [RELEASE.md](./RELEASE.md)。
+### 贡献指南
+
+欢迎提交 Issue 和 Pull Request！
+
+> 📚 详细的贡献规范和提交指南请参考 [CONTRIBUTING.md](CONTRIBUTING.md)
+
+### 版本发布
+
+> 📚 维护者版本发布流程请参考 [RELEASE.md](RELEASE.md)

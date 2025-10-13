@@ -22,44 +22,18 @@
 
 ## 🏗️ 架构设计
 
-### 一体化架构优势
+项目采用一体化架构，单容器部署，完全替代 Nginx：
 
 ```
-传统分离架构：
-用户 → nginx:80 → 前端静态文件
-     → nginx:80/api → 后端:3000
-
-一体化架构 (推荐)：
-用户 → 后端:3000 → 
+用户 → 后端:3000 →
      ├─ / → 前端界面（需要密钥）
      ├─ /api/* → 管理API（需要密钥）
      └─ /v1/messages → Claude代理（需要密钥）
 ```
 
-**优势对比**:
-- ✅ **部署简化**: 从 2 个容器减少到 1 个，从 2 个端口减少到 1 个
-- ✅ **无需 Nginx**: 后端直接提供静态文件服务
-- ✅ **统一认证**: 所有访问入口使用同一密钥保护
-- ✅ **无跨域问题**: 前后端同源访问
-- ✅ **资源优化**: 镜像体积减少约 40%，内存占用更低
-- ✅ **维护简便**: 单个服务进程，统一日志和监控
+**核心优势**: 单端口、统一认证、无跨域问题、资源占用低
 
-### 部署模式选择
-
-#### 1. 一体化模式 (默认推荐)
-```bash
-ENABLE_WEB_UI=true
-```
-- ✅ 单端口访问：`http://localhost:3000`
-- ✅ 包含完整的 Web 管理界面
-- ✅ 适合：个人使用、小团队、简单部署
-
-#### 2. 纯API模式 (微服务)
-```bash
-ENABLE_WEB_UI=false
-```
-- ✅ 仅提供API服务，更轻量
-- ✅ 适合：微服务架构、CDN前端、容器集群
+> 📚 详细架构设计和技术选型请参考 [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## 🏁 快速开始
 
@@ -211,32 +185,11 @@ fly logs
 
 ## 🔧 配置管理
 
-### 命令行工具
+**两种配置方式**:
+1. **Web界面** (推荐): 访问 `http://localhost:3000` → 输入密钥 → 可视化管理
+2. **命令行工具**: `cd backend && bun run config --help`
 
-```bash
-cd backend
-
-# 查看帮助
-bun run config --help
-
-# 添加上游服务
-bun run config add openai openai https://api.openai.com/v1
-
-# 添加API密钥
-bun run config key openai add sk-your-api-key
-
-# 设置当前使用的上游
-bun run config use openai
-
-# 查看当前配置
-bun run config show
-```
-
-### Web界面管理
-
-1. 访问 `http://localhost:3000`
-2. 输入 `PROXY_ACCESS_KEY`
-3. 使用可视化界面管理渠道、密钥、负载均衡等
+> 📚 环境变量配置详见 [ENVIRONMENT.md](ENVIRONMENT.md)
 
 ## 🔐 安全配置
 
@@ -559,15 +512,20 @@ git pull origin main
 docker-compose up -d --build
 ```
 
-## 🤝 贡献指南
+## 📖 使用指南
 
-欢迎提交 Issue 和 Pull Request！
+### 命令行配置工具
+```bash
+cd backend-go && make help
+```
 
-1. Fork 本项目
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交改动 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
+### 相关文档
+- **📐 架构设计**: [ARCHITECTURE.md](ARCHITECTURE.md) - 技术选型、设计模式、数据流
+- **⚙️ 环境配置**: [ENVIRONMENT.md](ENVIRONMENT.md) - 环境变量、配置场景、故障排除
+- **🔨 开发指南**: [DEVELOPMENT.md](DEVELOPMENT.md) - 开发流程、调试技巧、最佳实践
+- **🤝 贡献规范**: [CONTRIBUTING.md](CONTRIBUTING.md) - 提交规范、代码质量标准
+- **📝 版本历史**: [CHANGELOG.md](CHANGELOG.md) - 完整变更记录和升级指南
+- **🚀 发布流程**: [RELEASE.md](RELEASE.md) - 维护者发布流程
 
 ## 📄 许可证
 
