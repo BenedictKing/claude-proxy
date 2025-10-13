@@ -31,10 +31,6 @@ func NewStreamSynthesizer(serviceType string) *StreamSynthesizer {
 
 // ProcessLine 处理SSE流的一行
 func (s *StreamSynthesizer) ProcessLine(line string) {
-	if s.parseFailed {
-		return
-	}
-
 	trimmedLine := strings.TrimSpace(line)
 	if trimmedLine == "" {
 		return
@@ -52,11 +48,20 @@ func (s *StreamSynthesizer) ProcessLine(line string) {
 		return
 	}
 
-	// 解析JSON
+	// 解析JSON - 不再因失败而停止处理
 	var data map[string]interface{}
 	if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
-		s.parseFailed = true
+		// 记录解析失败但继续处理后续行，而不是完全停止
+		if !s.parseFailed {
+			s.parseFailed = true
+			s.synthesizedContent.WriteString("\n[解析警告: 部分JSON解析失败，将显示原始文本内容]")
+		}
 		return
+	}
+
+	// 如果之前解析失败，但现在成功了，重置失败标记
+	if s.parseFailed {
+		s.parseFailed = false
 	}
 
 	// 根据服务类型解析
@@ -237,10 +242,7 @@ func (s *StreamSynthesizer) processClaude(data map[string]interface{}) {
 
 // GetSynthesizedContent 获取合成的内容
 func (s *StreamSynthesizer) GetSynthesizedContent() string {
-	if s.parseFailed {
-		return ""
-	}
-
+	// 不再完全失败，即使有解析错误也返回部分结果
 	result := s.synthesizedContent.String()
 
 	// 添加工具调用信息
