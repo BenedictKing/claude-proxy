@@ -391,16 +391,29 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 		select {
 		case event, ok := <-eventChan:
 			if !ok {
-				// 通道关闭，流式传输正常结束
+				// 通道关闭，流式传输结束。根据客户端是否已断开来决定日志输出。
 				if envCfg.EnableResponseLogs {
-					responseTime := time.Since(startTime).Milliseconds()
-					log.Printf("⏱️ 流式响应完成: %dms", responseTime)
-					if envCfg.IsDevelopment() && synthesizer != nil {
-						synthesizedContent := synthesizer.GetSynthesizedContent()
-						if synthesizedContent != "" && !synthesizer.IsParseFailed() {
-							log.Printf("🛰️  上游流式响应合成内容:\n%s", strings.TrimSpace(synthesizedContent))
-						} else if logBuffer.Len() > 0 {
-							log.Printf("🛰️  上游流式响应体 (完整):\n%s", logBuffer.String())
+					if clientGone {
+						// 客户端已断开，但我们成功接收了所有上游数据
+						if envCfg.IsDevelopment() && synthesizer != nil {
+							synthesizedContent := synthesizer.GetSynthesizedContent()
+							if synthesizedContent != "" && !synthesizer.IsParseFailed() {
+								log.Printf("🛰️  上游流式响应合成内容 (客户端已断开):\n%s", strings.TrimSpace(synthesizedContent))
+							} else if logBuffer.Len() > 0 {
+								log.Printf("🛰️  上游流式响应体 (客户端已断开):\n%s", logBuffer.String())
+							}
+						}
+					} else {
+						// 客户端正常连接，流式传输正常结束
+						responseTime := time.Since(startTime).Milliseconds()
+						log.Printf("⏱️ 流式响应完成: %dms", responseTime)
+						if envCfg.IsDevelopment() && synthesizer != nil {
+							synthesizedContent := synthesizer.GetSynthesizedContent()
+							if synthesizedContent != "" && !synthesizer.IsParseFailed() {
+								log.Printf("🛰️  上游流式响应合成内容:\n%s", strings.TrimSpace(synthesizedContent))
+							} else if logBuffer.Len() > 0 {
+								log.Printf("🛰️  上游流式响应体 (完整):\n%s", logBuffer.String())
+							}
 						}
 					}
 				}
