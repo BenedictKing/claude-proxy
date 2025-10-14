@@ -391,37 +391,32 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 		select {
 		case event, ok := <-eventChan:
 			if !ok {
-				// 通道关闭，流式传输结束。根据客户端是否已断开来决定日志输出。
+				// 通道关闭，流式传输结束
 				if envCfg.EnableResponseLogs {
-					if clientGone {
-						// 客户端已断开，但我们成功接收了所有上游数据
-						if envCfg.IsDevelopment() && synthesizer != nil {
+					responseTime := time.Since(startTime).Milliseconds()
+					log.Printf("⏱️ 流式响应完成: %dms", responseTime)
+
+					// 打印完整的响应内容
+					if envCfg.IsDevelopment() {
+						if synthesizer != nil {
 							synthesizedContent := synthesizer.GetSynthesizedContent()
-							if synthesizedContent != "" && !synthesizer.IsParseFailed() {
-								log.Printf("🛰️  上游流式响应合成内容 (客户端已断开):\n%s", strings.TrimSpace(synthesizedContent))
-							} else if logBuffer.Len() > 0 {
-								log.Printf("🛰️  上游流式响应体 (客户端已断开):\n%s", logBuffer.String())
-							}
-						}
-					} else {
-						// 客户端正常连接，流式传输正常结束
-						responseTime := time.Since(startTime).Milliseconds()
-						log.Printf("⏱️ 流式响应完成: %dms", responseTime)
-						if envCfg.IsDevelopment() && synthesizer != nil {
-							synthesizedContent := synthesizer.GetSynthesizedContent()
-							if synthesizedContent != "" && !synthesizer.IsParseFailed() {
+							parseFailed := synthesizer.IsParseFailed()
+							if synthesizedContent != "" && !parseFailed {
 								log.Printf("🛰️  上游流式响应合成内容:\n%s", strings.TrimSpace(synthesizedContent))
 							} else if logBuffer.Len() > 0 {
-								log.Printf("🛰️  上游流式响应体 (完整):\n%s", logBuffer.String())
+								log.Printf("🛰️  上游流式响应原始内容:\n%s", logBuffer.String())
 							}
+						} else if logBuffer.Len() > 0 {
+							// synthesizer为nil时，直接打印原始内容
+							log.Printf("🛰️  上游流式响应原始内容:\n%s", logBuffer.String())
 						}
 					}
 				}
 				return
 			}
 
-			// 始终为日志处理事件
-			if envCfg.IsDevelopment() {
+			// 缓存事件用于最后的日志输出
+			if envCfg.IsDevelopment() && envCfg.EnableResponseLogs {
 				logBuffer.WriteString(event)
 				if synthesizer != nil {
 					lines := strings.Split(event, "\n")
@@ -431,7 +426,7 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 				}
 			}
 
-			// 仅在客户端连接正常时写入数据
+			// 实时转发给客户端（流式传输）
 			if !clientGone {
 				_, err := w.Write([]byte(event))
 				if err != nil {
@@ -439,7 +434,7 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 					errMsg := err.Error()
 					if strings.Contains(errMsg, "broken pipe") || strings.Contains(errMsg, "connection reset") {
 						if envCfg.ShouldLog("info") {
-							log.Printf("ℹ️ 客户端中断连接 (正常行为)，继续接收上游数据以完成日志...", err)
+							log.Printf("ℹ️ 客户端中断连接 (正常行为)，继续接收上游数据...")
 						}
 					} else {
 						log.Printf("⚠️ 流式传输写入错误: %v", err)
@@ -451,20 +446,27 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 			}
 
 		case err, ok := <-errChan:
-			if ok && err != nil {
+			if !ok {
+				// errChan关闭，但这不一定意味着流结束，继续等待eventChan
+				continue
+			}
+			if err != nil {
+				// 真的有错误发生
 				log.Printf("💥 流式传输错误: %v", err)
+
+				// 打印已接收到的部分响应
 				if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
 					if synthesizer != nil {
 						synthesizedContent := synthesizer.GetSynthesizedContent()
 						if synthesizedContent != "" && !synthesizer.IsParseFailed() {
-							log.Printf("🛰️  上游流式响应合成内容 (错误):\n%s", strings.TrimSpace(synthesizedContent))
+							log.Printf("🛰️  上游流式响应合成内容 (部分):\n%s", strings.TrimSpace(synthesizedContent))
 						} else if logBuffer.Len() > 0 {
-							log.Printf("🛰️  上游流式响应体 (错误):\n%s", logBuffer.String())
+							log.Printf("🛰️  上游流式响应原始内容 (部分):\n%s", logBuffer.String())
 						}
 					}
 				}
+				return
 			}
-			return
 		}
 	}
 }
