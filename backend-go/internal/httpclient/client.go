@@ -24,7 +24,7 @@ func GetManager() *ClientManager {
 }
 
 // GetStandardClient 获取标准客户端（有超时，用于普通请求）
-// 注意：禁用了自动压缩以避免gzip响应体乱码问题，与流式客户端保持一致
+// 注意：启用自动压缩让Go处理gzip，配合请求头清理确保正确解压
 func (cm *ClientManager) GetStandardClient(timeout time.Duration, insecure bool) *http.Client {
 	key := fmt.Sprintf("standard-%d-%t", timeout, insecure)
 
@@ -47,7 +47,7 @@ func (cm *ClientManager) GetStandardClient(timeout time.Duration, insecure bool)
 		MaxIdleConns:          100,
 		MaxIdleConnsPerHost:   10,
 		IdleConnTimeout:       90 * time.Second,
-		DisableCompression:    true, // 禁用自动压缩，避免gzip乱码问题
+		DisableCompression:    false, // 启用自动压缩，让Go处理gzip
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: 30 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,

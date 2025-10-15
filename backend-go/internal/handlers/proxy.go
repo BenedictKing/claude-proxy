@@ -154,6 +154,10 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gi
 				bodyBytes, _ := io.ReadAll(resp.Body)
 				resp.Body.Close()
 
+				// 兜底处理：如果响应体是 gzip 压缩的，尝试解压缩
+				// 这确保错误信息始终可读，用于日志和重试逻辑
+				bodyBytes = utils.DecompressGzipIfNeeded(resp, bodyBytes)
+
 				// 检查是否需要 failover
 				shouldFailover, isQuotaRelated := shouldRetryWithNextKey(resp.StatusCode, bodyBytes)
 				if shouldFailover {

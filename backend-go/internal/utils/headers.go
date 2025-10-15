@@ -21,6 +21,10 @@ func PrepareUpstreamHeaders(c *gin.Context, targetHost string) http.Header {
 	headers.Del("X-Forwarded-Host")
 	headers.Del("X-Forwarded-Proto")
 
+	// 移除 Accept-Encoding，让 Go 的 http.Client 自动处理 gzip 压缩/解压缩
+	// 这样可以避免在原始请求包含 Accept-Encoding 时 Go 不自动解压缩的问题
+	headers.Del("Accept-Encoding")
+
 	return headers
 }
 
