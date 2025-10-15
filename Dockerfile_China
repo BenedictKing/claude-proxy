@@ -1,70 +1,61 @@
-# --- 阶段 1: 项目构建 ---
-FROM docker.1ms.run/oven/bun:latest AS builder
+# --- 阶段 1: 准备 Bun 运行时 ---
+FROM docker.1ms.run/oven/bun:alpine AS bun-runtime
+
+# --- 阶段 2: 构建阶段 (Go + Bun) ---
+FROM docker.1ms.run/library/golang:1.22-alpine AS builder
 
 WORKDIR /src
 
-# 复制项目根目录配置文件
-COPY package.json ./
-COPY tsconfig.json ./
-COPY scripts ./scripts
+# 配置 Go 代理（使用国内镜像）
+ENV GOPROXY=https://goproxy.cn,direct
+ENV GO111MODULE=on
 
-# 复制backend必要文件
-COPY backend/src ./backend/src
-COPY backend/package.json ./backend/package.json
-COPY backend/tsconfig.json ./backend/tsconfig.json
+# 配置国内镜像源并安装构建工具和 bun 依赖（libstdc++ libgcc 是 bun:alpine 运行所需）
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
+    apk add --no-cache git make libstdc++ libgcc
 
-# 复制frontend必要文件
-COPY frontend/src ./frontend/src
-COPY frontend/index.html ./frontend/index.html
-COPY frontend/package.json ./frontend/package.json
-COPY frontend/postcss.config.js ./frontend/postcss.config.js
-COPY frontend/tailwind.config.js ./frontend/tailwind.config.js
-COPY frontend/tsconfig.json ./frontend/tsconfig.json
-COPY frontend/vite.config.ts ./frontend/vite.config.ts
+# 从 bun-runtime 复制 bun 和 bunx 到 Go 镜像
+COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=bun-runtime /usr/local/bin/bunx /usr/local/bin/bunx
 
-# 使用淘宝npm镜像配置bun并安装依赖
-RUN echo '[install]\nregistry = "https://registry.npmmirror.com/"' > bunfig.toml && \
-    bun install
-RUN bun run build
+# 将 bun 添加到 PATH
+ENV PATH="/usr/local/bin:${PATH}"
 
-# 验证构建产物
-RUN ls -la /src/frontend/dist/ || echo "前端构建失败"
-RUN ls -la /src/backend/dist/ || echo "后端构建失败"
+# 复制项目必要文件（.dockerignore 会排除不需要的文件）
+COPY Makefile VERSION tsconfig.json ./
+COPY frontend/ ./frontend/
+COPY backend-go/ ./backend-go/
 
-# --- 阶段 2: 一体化运行时 ---
-FROM docker.1ms.run/oven/bun:latest AS runtime
+# 使用 bun 安装前端依赖（使用国内镜像，比 npm 快 10-100 倍）
+RUN cd frontend && bun install --registry https://registry.npmmirror.com
+
+# 使用 Makefile 构建整个项目（前端 + 后端）
+RUN make build-current
+
+# --- 阶段 3: 运行时 ---
+FROM docker.1ms.run/library/alpine:latest AS runtime
 
 WORKDIR /app
 
-# 从构建阶段复制后端构建产物和必要文件
-COPY --from=builder /src/backend/dist ./dist
-COPY --from=builder /src/backend/package.json ./package.json
+# 配置国内镜像源并安装运行时依赖
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
+    apk --no-cache add ca-certificates tzdata
 
-# 从构建阶段复制前端构建产物到 frontend/dist（保持相对路径结构）
-COPY --from=builder /src/frontend/dist ./frontend/dist
-
-# 使用淘宝npm镜像配置bun并安装生产依赖
-RUN echo '[install]\nregistry = "https://registry.npmmirror.com/"' > bunfig.toml && \
-    bun install --production
-
-# 验证文件复制结果
-RUN ls -la /app/frontend/dist/ || echo "前端文件复制失败"
-RUN ls -la /app/dist/ || echo "后端文件复制失败"
+# 从构建阶段复制 Go 二进制文件（已内嵌前端资源）
+COPY --from=builder /src/backend-go/dist/claude-proxy /app/claude-proxy
 
 # 创建配置目录和日志目录
 RUN mkdir -p /app/.config/backups /app/logs
 
-# 暴露统一端口
+# 设置时区
+ENV TZ=Asia/Shanghai
+
+# 暴露端口
 EXPOSE 3000
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD bun run -e 'await fetch("http://localhost:3000/health").then(r => r.ok ? process.exit(0) : process.exit(1))' || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
-# 设置环境变量
-ENV PORT=3000
-ENV NODE_ENV=production
-ENV ENABLE_WEB_UI=true
-
-# 启动命令 - 直接运行编译后的文件
-CMD ["bun", "run", "dist/server.js"]
+# 启动命令
+CMD ["/app/claude-proxy"]

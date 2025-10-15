@@ -37,12 +37,86 @@
 
 ## 🏁 快速开始
 
-### 前置要求
+### 📦 推荐部署方式
+
+我们**强烈推荐**以下两种方式部署，它们经过充分测试，性能优异：
+
+| 部署方式 | 启动时间 | 内存占用 | 适用场景 |
+|---------|---------|---------|---------|
+| **🐳 Docker** | ~2s | ~25MB | 生产环境、一键部署 |
+| **🚀 Go 版本** | <100ms | ~20MB | 高性能、原生部署 |
+| 🔧 Node.js/Bun | ~1s | ~50MB | 开发调试（备用） |
+
+---
+
+### 方式一：🐳 Docker 部署（推荐）
+
+**适合所有用户，无需安装依赖，一键启动**
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/BenedictKing/claude-proxy
+cd claude-proxy
+
+# 2. 配置环境变量（重要！）
+cp backend-go/.env.example backend-go/.env
+# 编辑 backend-go/.env 设置强密钥：PROXY_ACCESS_KEY=your-super-strong-secret-key
+
+# 3. 启动服务（国内用户使用 Dockerfile_China）
+docker-compose up -d
+```
+
+访问地址：
+- **Web管理界面**: http://localhost:3000
+- **API代理端点**: http://localhost:3000/v1/messages
+- **健康检查**: http://localhost:3000/health
+
+---
+
+### 方式二：🚀 Go 原生部署（推荐）
+
+**适合追求极致性能的用户，启动时间 <100ms**
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/BenedictKing/claude-proxy
+cd claude-proxy
+
+# 2. 配置环境变量
+cp backend-go/.env.example backend-go/.env
+# 编辑 backend-go/.env 文件，设置你的配置
+
+# 3. 构建并启动（自动构建前端+后端）
+make build-current
+cd backend-go && ./dist/claude-proxy
+```
+
+**或使用 Makefile 快捷命令：**
+
+```bash
+cd backend-go
+make help          # 查看所有可用命令
+make dev           # 开发模式（热重载）
+make build-run     # 构建并运行
+```
+
+> 📚 Go 版本配置管理详见 `cd backend-go && make help`
+
+---
+
+### 方式三：🔧 Node.js/Bun 部署（备用）
+
+**仅推荐用于开发调试，生产环境请使用 Docker 或 Go 版本**
+
+<details>
+<summary>点击展开 Node.js/Bun 部署说明</summary>
+
+#### 前置要求
 
 - Node.js 18+ 或 Bun
 - 包管理器：支持 pnpm、npm 或 bun
 
-### 安装步骤
+#### 安装步骤
 
 1. 克隆项目
 
@@ -68,14 +142,14 @@ cp backend/.env.example backend/.env
 
 4. 启动服务器
 
-### 开发模式
+#### 开发模式
 
 ```bash
 # 前后端同时启动，支持热重载
 bun run dev
 ```
 
-### 生产模式
+#### 生产模式
 
 ```bash
 # 构建项目（会同时构建前后端）
@@ -95,6 +169,8 @@ bun run start
 - **Web管理界面**: http://localhost:3000
 - **API代理端点**: http://localhost:3000/v1/messages
 - **健康检查**: http://localhost:3000/health
+
+</details>
 
 ## 🐳 Docker 部署 (推荐)
 

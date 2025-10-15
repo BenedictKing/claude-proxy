@@ -61,8 +61,7 @@ ensure-frontend-built:
 # 内部前端构建目标
 .PHONY: build-frontend-internal
 build-frontend-internal:
-	@cd $(FRONTEND_DIR) && npm install
-	@cd $(FRONTEND_DIR) && npm run build
+	@cd $(FRONTEND_DIR) && bun run build
 	@mkdir -p $(BACKEND_DIR)/frontend/dist
 	@cp -r $(FRONTEND_DIR)/dist/* $(BACKEND_DIR)/frontend/dist/
 	@touch $(FRONTEND_BUILD_MARKER)
@@ -98,7 +97,7 @@ dev-backend: ## Run backend only with air (skips frontend build check)
 .PHONY: dev-frontend
 dev-frontend: ## Run frontend development server
 	@echo "$(COLOR_YELLOW)🔧 Starting frontend dev server...$(COLOR_RESET)"
-	cd $(FRONTEND_DIR) && npm run dev
+	cd $(FRONTEND_DIR) && bun run dev
 
 # ==============================================================================
 # Build
@@ -126,8 +125,8 @@ build-linux: build-frontend ## Build for Linux (amd64 + arm64)
 	@echo "$(COLOR_CYAN)🐧 Building for Linux...$(COLOR_RESET)"
 	@mkdir -p $(BACKEND_DIR)/frontend/dist $(DIST_DIR)
 	@cp -r $(FRONTEND_DIR)/dist/* $(BACKEND_DIR)/frontend/dist/
-	cd $(BACKEND_DIR) && GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/$(BINARY_LINUX_AMD64) .
-	cd $(BACKEND_DIR) && GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/$(BINARY_LINUX_ARM64) .
+	cd $(BACKEND_DIR) && GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/$(BINARY_LINUX_AMD64) .
+	cd $(BACKEND_DIR) && GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o dist/$(BINARY_LINUX_ARM64) .
 	@echo "$(COLOR_GREEN)✅ Linux builds complete$(COLOR_RESET)"
 
 .PHONY: build-darwin
@@ -135,8 +134,8 @@ build-darwin: build-frontend ## Build for macOS (amd64 + arm64)
 	@echo "$(COLOR_CYAN)🍎 Building for macOS...$(COLOR_RESET)"
 	@mkdir -p $(BACKEND_DIR)/frontend/dist $(DIST_DIR)
 	@cp -r $(FRONTEND_DIR)/dist/* $(BACKEND_DIR)/frontend/dist/
-	cd $(BACKEND_DIR) && GOOS=darwin GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/$(BINARY_DARWIN_AMD64) .
-	cd $(BACKEND_DIR) && GOOS=darwin GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/$(BINARY_DARWIN_ARM64) .
+	cd $(BACKEND_DIR) && GOOS=darwin GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/$(BINARY_DARWIN_AMD64) .
+	cd $(BACKEND_DIR) && GOOS=darwin GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o dist/$(BINARY_DARWIN_ARM64) .
 	@echo "$(COLOR_GREEN)✅ macOS builds complete$(COLOR_RESET)"
 
 .PHONY: build-windows
@@ -144,7 +143,7 @@ build-windows: build-frontend ## Build for Windows (amd64)
 	@echo "$(COLOR_CYAN)🪟 Building for Windows...$(COLOR_RESET)"
 	@mkdir -p $(BACKEND_DIR)/frontend/dist $(DIST_DIR)
 	@cp -r $(FRONTEND_DIR)/dist/* $(BACKEND_DIR)/frontend/dist/
-	cd $(BACKEND_DIR) && GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/$(BINARY_WINDOWS_AMD64) .
+	cd $(BACKEND_DIR) && GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/$(BINARY_WINDOWS_AMD64) .
 	@echo "$(COLOR_GREEN)✅ Windows build complete$(COLOR_RESET)"
 
 .PHONY: build-current
@@ -152,7 +151,7 @@ build-current: build-frontend ## Build for current platform only
 	@echo "$(COLOR_CYAN)🔨 Building for current platform...$(COLOR_RESET)"
 	@mkdir -p $(BACKEND_DIR)/frontend/dist $(DIST_DIR)
 	@cp -r $(FRONTEND_DIR)/dist/* $(BACKEND_DIR)/frontend/dist/
-	cd $(BACKEND_DIR) && go build -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/$(BINARY_PREFIX) .
+	cd $(BACKEND_DIR) && go build -ldflags "$(LDFLAGS)" -o dist/$(BINARY_PREFIX) .
 	@echo "$(COLOR_GREEN)✅ Build complete: $(DIST_DIR)/$(BINARY_PREFIX)$(COLOR_RESET)"
 
 # ==============================================================================
@@ -184,7 +183,7 @@ deps: deps-frontend deps-backend ## Install all dependencies
 .PHONY: deps-frontend
 deps-frontend: ## Install frontend dependencies
 	@echo "$(COLOR_CYAN)📥 Installing frontend dependencies...$(COLOR_RESET)"
-	cd $(FRONTEND_DIR) && npm install
+	cd $(FRONTEND_DIR) && bun install
 	@echo "$(COLOR_GREEN)✅ Frontend dependencies installed$(COLOR_RESET)"
 
 .PHONY: deps-backend
@@ -224,7 +223,7 @@ lint: ## Run linters
 fmt: ## Format code
 	@echo "$(COLOR_CYAN)✨ Formatting code...$(COLOR_RESET)"
 	cd $(BACKEND_DIR) && go fmt ./...
-	cd $(FRONTEND_DIR) && npm run format || true
+	cd $(FRONTEND_DIR) && bun run format || true
 	@echo "$(COLOR_GREEN)✅ Formatting complete$(COLOR_RESET)"
 
 # ==============================================================================
@@ -289,7 +288,7 @@ info: ## Show project information
 	@echo "  Git Commit: $(GIT_COMMIT)"
 	@echo ""
 	@echo "$(COLOR_GREEN)Frontend:$(COLOR_RESET)"
-	@cd $(FRONTEND_DIR) && npm --version 2>/dev/null && node --version 2>/dev/null || echo "  Node.js not installed"
+	@cd $(FRONTEND_DIR) && bun --version 2>/dev/null && node --version 2>/dev/null || echo "  Node.js not installed"
 	@echo ""
 	@echo "$(COLOR_GREEN)Backend:$(COLOR_RESET)"
 	@cd $(BACKEND_DIR) && go version 2>/dev/null || echo "  Go not installed"

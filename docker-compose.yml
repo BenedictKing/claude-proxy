@@ -18,43 +18,36 @@ services:
       - ./logs:/app/logs
     environment:
       # 基础配置
-      - NODE_ENV=production
+      - ENV=production
       # 是否启用Web管理界面 (true=一体化模式, false=纯API模式)
       - ENABLE_WEB_UI=true
       # 代理访问密钥 - 用于验证客户端对代理服务器的访问权限
       - PROXY_ACCESS_KEY=your-super-strong-secret-key
       # 日志级别 (error, warn, info, debug)
-      - LOG_LEVEL=info
+      - LOG_LEVEL=warn
       # 负载均衡策略 (round-robin, random, failover)
       - LOAD_BALANCE_STRATEGY=failover
       # 是否启用请求日志
-      - ENABLE_REQUEST_LOGS=true
+      - ENABLE_REQUEST_LOGS=false
       # 是否启用响应日志
-      - ENABLE_RESPONSE_LOGS=true
+      - ENABLE_RESPONSE_LOGS=false
     # 健康检查配置
     healthcheck:
-      test:
-        [
-          'CMD',
-          'bun',
-          'run',
-          '-e',
-          "await fetch('http://localhost:3000/health').then(r => r.ok ? process.exit(0) : process.exit(1))"
-        ]
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
 
-    # 资源限制
+    # 资源限制 (Go 应用内存占用更低)
     deploy:
       resources:
         limits:
-          memory: 768M
-          cpus: '1.0'
-        reservations:
-          memory: 384M
+          memory: 256M
           cpus: '0.5'
+        reservations:
+          memory: 64M
+          cpus: '0.25'
 
     # 重启策略
     restart: unless-stopped

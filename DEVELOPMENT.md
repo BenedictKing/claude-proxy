@@ -7,15 +7,77 @@
 > - 环境变量配置: [ENVIRONMENT.md](ENVIRONMENT.md)
 > - 贡献规范: [CONTRIBUTING.md](CONTRIBUTING.md)
 
-## 开发脚本说明
+---
 
-### 生产环境
+## 🎯 推荐开发方式
+
+| 开发方式 | 启动速度 | 热重载 | 适用场景 |
+|---------|---------|-------|---------|
+| **🚀 Go 开发** | ⚡ 极快 | ✅ 支持 | **推荐：后端开发** |
+| **🐳 Docker** | 🔄 中等 | ❌ 需重启 | 生产环境测试 |
+| 🔧 Node.js/Bun | 🟢 较快 | ✅ 支持 | 备用：调试 JS/TS |
+
+---
+
+## 方式一：🚀 Go 版本开发（推荐）
+
+**适合后端开发和性能优化，启动时间 <100ms**
+
+### 快速开始
+
+```bash
+cd backend-go
+
+# 查看所有可用命令
+make help
+
+# 开发模式（支持热重载）
+make dev
+
+# 构建并运行
+make build-run
+
+# 仅构建
+make build-current
+```
+
+### 常用开发命令
+
+```bash
+# 配置管理
+make config-interactive    # 交互式配置
+make config-show          # 显示当前配置
+make config-reset         # 重置配置
+
+# 开发调试
+make dev                  # 热重载开发模式
+make test                 # 运行测试
+make clean                # 清理构建产物
+```
+
+### Go 开发环境要求
+
+- Go 1.22+
+- Make（构建工具）
+- Bun（前端构建）
+
+> 📚 详细 Go 开发说明请参考 `backend-go/README.md`
+
+---
+
+## 方式二：🔧 Node.js/Bun 开发（备用）
+
+**仅推荐用于前端开发或 JavaScript/TypeScript 调试**
+
+### 开发脚本说明
+
+#### 生产环境
 
 ```bash
 bun run start                 # 启动生产服务器
 ```
 
-### 开发环境
+#### 开发环境
 
 ```bash
 bun run dev                   # 启动开发服务器（源码文件变化时自动重启）
