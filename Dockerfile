@@ -24,6 +24,9 @@ COPY backend-go/ ./backend-go/
 # 使用 bun 安装前端依赖（比 npm 快 10-100 倍）
 RUN cd frontend && bun install
 
+# 安装 Go 后端依赖
+RUN make deps-backend
+
 # 使用 Makefile 构建整个项目（前端 + 后端）
 RUN make build-current
 
