@@ -3,9 +3,9 @@ services:
   claude-proxy:
     build:
       context: .
-      # dockerfile: Dockerfile
+      dockerfile: Dockerfile
       # 中国网络使用:
-      dockerfile: Dockerfile_China
+      # dockerfile: Dockerfile_China
       target: runtime
     container_name: claude-proxy
     ports:
