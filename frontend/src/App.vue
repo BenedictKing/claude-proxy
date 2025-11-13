@@ -117,6 +117,25 @@
     <!-- 主要内容 -->
     <v-main>
       <v-container fluid class="pa-6">
+        <!-- Tab 切换 -->
+        <v-card elevation="2" class="mb-6" rounded="lg">
+          <v-tabs
+            v-model="activeTab"
+            color="primary"
+            align-tabs="center"
+            grow
+          >
+            <v-tab value="messages">
+              <v-icon start>mdi-message-processing</v-icon>
+              Claude Messages
+            </v-tab>
+            <v-tab value="responses">
+              <v-icon start>mdi-diamond-stone</v-icon>
+              Codex Responses
+            </v-tab>
+          </v-tabs>
+        </v-card>
+
         <!-- 统计卡片 -->
         <v-row class="mb-6">
           <v-col cols="12" sm="6" md="3">
@@ -124,7 +143,7 @@
               <v-card-text class="pb-2">
                 <div class="d-flex align-center justify-space-between">
                   <div>
-                    <div class="text-h4 text-info font-weight-bold">{{ channelsData.channels?.length || 0 }}</div>
+                    <div class="text-h4 text-info font-weight-bold">{{ currentChannelsData.channels?.length || 0 }}</div>
                     <div class="text-subtitle-1 text-medium-emphasis">总渠道数</div>
                     <div class="text-caption text-medium-emphasis">已配置的API渠道</div>
                   </div>
@@ -158,7 +177,7 @@
               <v-card-text class="pb-2">
                 <div class="d-flex align-center justify-space-between">
                   <div>
-                    <div class="text-h6 text-info font-weight-bold text-capitalize">{{ channelsData.loadBalance || 'none' }}</div>
+                    <div class="text-h6 text-info font-weight-bold text-capitalize">{{ currentChannelsData.loadBalance || 'none' }}</div>
                     <div class="text-subtitle-1 text-medium-emphasis">API密钥分配</div>
                     <div class="text-caption text-medium-emphasis">当前渠道内密钥使用策略</div>
                   </div>
@@ -317,6 +336,7 @@
     <AddChannelModal
       v-model:show="showAddChannelModal"
       :channel="editingChannel"
+      :channel-type="activeTab"
       @save="saveChannel"
     />
 
@@ -365,7 +385,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useTheme } from 'vuetify'
 import { api, type Channel, type ChannelsResponse } from './services/api'
 import ChannelCard from './components/ChannelCard.vue'
@@ -375,7 +395,9 @@ import AddChannelModal from './components/AddChannelModal.vue'
 const theme = useTheme()
 
 // 响应式数据
+const activeTab = ref<'messages' | 'responses'>('messages') // Tab 切换状态
 const channelsData = ref<ChannelsResponse>({ channels: [], current: -1, loadBalance: 'round-robin' })
+const responsesChannelsData = ref<ChannelsResponse>({ channels: [], current: -1, loadBalance: 'round-robin' }) // Responses渠道数据
 const showAddChannelModal = ref(false)
 const showAddKeyModalRef = ref(false)
 const editingChannel = ref<Channel | null>(null)
@@ -422,27 +444,32 @@ interface Toast {
 const toasts = ref<Toast[]>([])
 let toastId = 0
 
-// 计算属性
+// 计算属性 - 根据当前Tab动态返回数据
+const currentChannelsData = computed(() => {
+  return activeTab.value === 'messages' ? channelsData.value : responsesChannelsData.value
+})
+
 const getCurrentChannelName = () => {
-  const current = channelsData.value.channels?.find(c => c.index === channelsData.value.current)
+  const current = currentChannelsData.value.channels?.find(c => c.index === currentChannelsData.value.current)
   return current?.name || current?.serviceType || '未设置'
 }
 
 const currentChannelType = computed(() => {
-  const current = channelsData.value.channels?.find(c => c.index === channelsData.value.current)
+  const current = currentChannelsData.value.channels?.find(c => c.index === currentChannelsData.value.current)
   return current?.serviceType?.toUpperCase() || ''
 })
 
 // 自动排序渠道：当前渠道排在最前面，pinned渠道排在当前渠道后面
 const sortedChannels = computed(() => {
-  if (!channelsData.value.channels) return []
-  
-  const channels = [...channelsData.value.channels]
-  
+  const data = currentChannelsData.value
+  if (!data.channels) return []
+
+  const channels = [...data.channels]
+
   // 排序逻辑：当前渠道 > pinned渠道 > 其他渠道
   return channels.sort((a, b) => {
-    const aIsCurrent = a.index === channelsData.value.current
-    const bIsCurrent = b.index === channelsData.value.current
+    const aIsCurrent = a.index === data.current
+    const bIsCurrent = b.index === data.current
     const aIsPinned = pinnedChannels.value.has(a.index)
     const bIsPinned = pinnedChannels.value.has(b.index)
     
@@ -531,7 +558,11 @@ const updateChannelsPinnedStatus = () => {
 // 主要功能函数
 const refreshChannels = async () => {
   try {
-    channelsData.value = await api.getChannels()
+    if (activeTab.value === 'messages') {
+      channelsData.value = await api.getChannels()
+    } else {
+      responsesChannelsData.value = await api.getResponsesChannels()
+    }
     updateChannelsPinnedStatus()
   } catch (error) {
     handleAuthError(error)
@@ -540,11 +571,20 @@ const refreshChannels = async () => {
 
 const saveChannel = async (channel: Omit<Channel, 'index' | 'latency' | 'status'>) => {
   try {
+    const isResponses = activeTab.value === 'responses'
     if (editingChannel.value) {
-      await api.updateChannel(editingChannel.value.index, channel)
+      if (isResponses) {
+        await api.updateResponsesChannel(editingChannel.value.index, channel)
+      } else {
+        await api.updateChannel(editingChannel.value.index, channel)
+      }
       showToast('渠道更新成功', 'success')
     } else {
-      await api.addChannel(channel)
+      if (isResponses) {
+        await api.addResponsesChannel(channel)
+      } else {
+        await api.addChannel(channel)
+      }
       showToast('渠道添加成功', 'success')
     }
     showAddChannelModal.value = false
@@ -562,9 +602,13 @@ const editChannel = (channel: Channel) => {
 
 const deleteChannel = async (channelId: number) => {
   if (!confirm('确定要删除这个渠道吗？')) return
-  
+
   try {
-    await api.deleteChannel(channelId)
+    if (activeTab.value === 'responses') {
+      await api.deleteResponsesChannel(channelId)
+    } else {
+      await api.deleteChannel(channelId)
+    }
     showToast('渠道删除成功', 'success')
     await refreshChannels()
   } catch (error) {
@@ -579,7 +623,11 @@ const openAddChannelModal = () => {
 
 const setCurrentChannel = async (channelId: number) => {
   try {
-    await api.setCurrentChannel(channelId)
+    if (activeTab.value === 'responses') {
+      await api.setCurrentResponsesChannel(channelId)
+    } else {
+      await api.setCurrentChannel(channelId)
+    }
     showToast('当前渠道设置成功', 'success')
     await refreshChannels()
   } catch (error) {
@@ -595,9 +643,13 @@ const openAddKeyModal = (channelId: number) => {
 
 const addApiKey = async () => {
   if (!newApiKey.value.trim()) return
-  
+
   try {
-    await api.addApiKey(selectedChannelForKey.value, newApiKey.value.trim())
+    if (activeTab.value === 'responses') {
+      await api.addResponsesApiKey(selectedChannelForKey.value, newApiKey.value.trim())
+    } else {
+      await api.addApiKey(selectedChannelForKey.value, newApiKey.value.trim())
+    }
     showToast('API密钥添加成功', 'success')
     showAddKeyModalRef.value = false
     newApiKey.value = ''
@@ -609,9 +661,13 @@ const addApiKey = async () => {
 
 const removeApiKey = async (channelId: number, apiKey: string) => {
   if (!confirm('确定要删除这个API密钥吗？')) return
-  
+
   try {
-    await api.removeApiKey(channelId, apiKey)
+    if (activeTab.value === 'responses') {
+      await api.removeResponsesApiKey(channelId, apiKey)
+    } else {
+      await api.removeApiKey(channelId, apiKey)
+    }
     showToast('API密钥删除成功', 'success')
     await refreshChannels()
   } catch (error) {
@@ -622,7 +678,8 @@ const removeApiKey = async (channelId: number, apiKey: string) => {
 const pingChannel = async (channelId: number) => {
   try {
     const result = await api.pingChannel(channelId)
-    const channel = channelsData.value.channels?.find(c => c.index === channelId)
+    const data = activeTab.value === 'messages' ? channelsData.value : responsesChannelsData.value
+    const channel = data.channels?.find(c => c.index === channelId)
     if (channel) {
       channel.latency = result.latency
       channel.status = result.success ? 'healthy' : 'error'
@@ -635,12 +692,13 @@ const pingChannel = async (channelId: number) => {
 
 const pingAllChannels = async () => {
   if (isPingingAll.value) return
-  
+
   isPingingAll.value = true
   try {
     const results = await api.pingAllChannels()
+    const data = activeTab.value === 'messages' ? channelsData.value : responsesChannelsData.value
     results.forEach(result => {
-      const channel = channelsData.value.channels?.find(c => c.index === result.id)
+      const channel = data.channels?.find(c => c.index === result.id)
       if (channel) {
         channel.latency = result.latency
         channel.status = result.status as 'healthy' | 'error'
@@ -845,6 +903,13 @@ onMounted(async () => {
     loadPinnedChannels()
 
     // 加载渠道数据
+    await refreshChannels()
+  }
+})
+
+// 监听 Tab 切换，刷新对应数据
+watch(activeTab, async () => {
+  if (isAuthenticated.value) {
     await refreshChannels()
   }
 })

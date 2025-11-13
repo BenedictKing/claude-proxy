@@ -369,3 +369,186 @@ func PingAllChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		c.JSON(http.StatusOK, finalResults)
 	}
 }
+
+// ============== Responses 渠道管理 API ==============
+
+// GetResponsesUpstreams 获取 Responses 上游列表
+func GetResponsesUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg := cfgManager.GetConfig()
+
+		upstreams := make([]gin.H, len(cfg.ResponsesUpstream))
+		for i, up := range cfg.ResponsesUpstream {
+			upstreams[i] = gin.H{
+				"index":              i,
+				"name":               up.Name,
+				"serviceType":        up.ServiceType,
+				"baseUrl":            up.BaseURL,
+				"apiKeys":            up.APIKeys,
+				"description":        up.Description,
+				"website":            up.Website,
+				"insecureSkipVerify": up.InsecureSkipVerify,
+				"modelMapping":       up.ModelMapping,
+				"latency":            nil,
+				"status":             "unknown",
+			}
+		}
+
+		c.JSON(200, gin.H{
+			"channels":    upstreams,
+			"current":     cfg.CurrentResponsesUpstream,
+			"loadBalance": cfg.LoadBalance,
+		})
+	}
+}
+
+// AddResponsesUpstream 添加 Responses 上游
+func AddResponsesUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var upstream config.UpstreamConfig
+		if err := c.ShouldBindJSON(&upstream); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		if err := cfgManager.AddResponsesUpstream(upstream); err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, gin.H{"message": "Responses upstream added successfully"})
+	}
+}
+
+// UpdateResponsesUpstream 更新 Responses 上游
+func UpdateResponsesUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		idStr := c.Param("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid upstream ID"})
+			return
+		}
+
+		var updates config.UpstreamUpdate
+		if err := c.ShouldBindJSON(&updates); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		if err := cfgManager.UpdateResponsesUpstream(id, updates); err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, gin.H{"message": "Responses upstream updated successfully"})
+	}
+}
+
+// DeleteResponsesUpstream 删除 Responses 上游
+func DeleteResponsesUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		idStr := c.Param("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid upstream ID"})
+			return
+		}
+
+		if _, err := cfgManager.RemoveResponsesUpstream(id); err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, gin.H{"message": "Responses upstream deleted successfully"})
+	}
+}
+
+// SetCurrentResponsesUpstream 设置当前 Responses 上游
+func SetCurrentResponsesUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		idStr := c.Param("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid upstream ID"})
+			return
+		}
+
+		if err := cfgManager.SetCurrentResponsesUpstream(id); err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, gin.H{"message": "Current Responses upstream set successfully"})
+	}
+}
+
+// AddResponsesApiKey 添加 Responses 渠道 API 密钥
+func AddResponsesApiKey(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		idStr := c.Param("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid upstream ID"})
+			return
+		}
+
+		var req struct {
+			APIKey string `json:"apiKey"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid request body"})
+			return
+		}
+
+		if err := cfgManager.AddResponsesAPIKey(id, req.APIKey); err != nil {
+			if strings.Contains(err.Error(), "无效的上游索引") {
+				c.JSON(404, gin.H{"error": "Upstream not found"})
+			} else if strings.Contains(err.Error(), "API密钥已存在") {
+				c.JSON(400, gin.H{"error": "API密钥已存在"})
+			} else {
+				c.JSON(500, gin.H{"error": "Failed to save config"})
+			}
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"message": "API密钥已添加",
+			"success": true,
+		})
+	}
+}
+
+// DeleteResponsesApiKey 删除 Responses 渠道 API 密钥
+func DeleteResponsesApiKey(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		idStr := c.Param("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid upstream ID"})
+			return
+		}
+
+		apiKey := c.Param("apiKey")
+		if apiKey == "" {
+			c.JSON(400, gin.H{"error": "API key is required"})
+			return
+		}
+
+		if err := cfgManager.RemoveResponsesAPIKey(id, apiKey); err != nil {
+			if strings.Contains(err.Error(), "无效的上游索引") {
+				c.JSON(404, gin.H{"error": "Upstream not found"})
+			} else if strings.Contains(err.Error(), "API密钥不存在") {
+				c.JSON(404, gin.H{"error": "API key not found"})
+			} else {
+				c.JSON(500, gin.H{"error": "Failed to save config"})
+			}
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"message": "API密钥已删除",
+		})
+	}
+}
+

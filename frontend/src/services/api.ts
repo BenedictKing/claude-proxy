@@ -33,7 +33,7 @@ if (import.meta.env.DEV) {
 
 export interface Channel {
   name: string
-  serviceType: 'openai' | 'openaiold' | 'gemini' | 'claude'
+  serviceType: 'openai' | 'openaiold' | 'gemini' | 'claude' | 'responses'
   baseUrl: string
   apiKeys: string[]
   description?: string
@@ -197,6 +197,51 @@ class ApiService {
     await this.request('/loadbalance', {
       method: 'PUT',
       body: JSON.stringify({ strategy })
+    })
+  }
+
+  // ============== Responses 渠道管理 API ==============
+
+  async getResponsesChannels(): Promise<ChannelsResponse> {
+    return this.request('/responses/channels')
+  }
+
+  async addResponsesChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>): Promise<void> {
+    await this.request('/responses/channels', {
+      method: 'POST',
+      body: JSON.stringify(channel)
+    })
+  }
+
+  async updateResponsesChannel(id: number, channel: Partial<Channel>): Promise<void> {
+    await this.request(`/responses/channels/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(channel)
+    })
+  }
+
+  async deleteResponsesChannel(id: number): Promise<void> {
+    await this.request(`/responses/channels/${id}`, {
+      method: 'DELETE'
+    })
+  }
+
+  async setCurrentResponsesChannel(id: number): Promise<void> {
+    await this.request(`/responses/channels/${id}/current`, {
+      method: 'POST'
+    })
+  }
+
+  async addResponsesApiKey(channelId: number, apiKey: string): Promise<void> {
+    await this.request(`/responses/channels/${channelId}/keys`, {
+      method: 'POST',
+      body: JSON.stringify({ apiKey })
+    })
+  }
+
+  async removeResponsesApiKey(channelId: number, apiKey: string): Promise<void> {
+    await this.request(`/responses/channels/${channelId}/keys/${encodeURIComponent(apiKey)}`, {
+      method: 'DELETE'
     })
   }
 }

@@ -1,10 +1,5 @@
 <template>
-  <v-dialog 
-    :model-value="show"
-    @update:model-value="$emit('update:show', $event)"
-    max-width="800"
-    persistent
-  >
+  <v-dialog :model-value="show" @update:model-value="$emit('update:show', $event)" max-width="800" persistent>
     <v-card rounded="lg">
       <v-card-title class="d-flex align-center ga-3 pa-6" :class="headerClasses">
         <v-avatar :color="avatarColor" variant="flat" size="40">
@@ -90,15 +85,12 @@
                   <v-icon color="warning">mdi-shield-alert</v-icon>
                   <div>
                     <div class="text-body-1 font-weight-medium">跳过 TLS 证书验证</div>
-                    <div class="text-caption text-medium-emphasis">仅在自签名或域名不匹配时临时启用，生产环境请关闭</div>
+                    <div class="text-caption text-medium-emphasis">
+                      仅在自签名或域名不匹配时临时启用，生产环境请关闭
+                    </div>
                   </div>
                 </div>
-                <v-switch
-                  inset
-                  color="warning"
-                  hide-details
-                  v-model="form.insecureSkipVerify"
-                />
+                <v-switch inset color="warning" hide-details v-model="form.insecureSkipVerify" />
               </div>
             </v-col>
 
@@ -124,9 +116,7 @@
                     <v-icon color="primary">mdi-swap-horizontal</v-icon>
                     <span class="text-body-1 font-weight-bold">模型重定向 (可选)</span>
                   </div>
-                  <v-chip size="small" color="secondary" variant="tonal">
-                    自动转换模型名称
-                  </v-chip>
+                  <v-chip size="small" color="secondary" variant="tonal"> 自动转换模型名称 </v-chip>
                 </v-card-title>
 
                 <v-card-text class="pt-2">
@@ -137,7 +127,7 @@
                   <!-- 现有映射列表 -->
                   <div v-if="Object.keys(form.modelMapping).length" class="mb-4">
                     <v-list density="compact" class="bg-transparent">
-                      <v-list-item 
+                      <v-list-item
                         v-for="[source, target] in Object.entries(form.modelMapping)"
                         :key="source"
                         class="mb-2"
@@ -148,7 +138,7 @@
                         <template v-slot:prepend>
                           <v-icon size="small" color="primary">mdi-arrow-right</v-icon>
                         </template>
-                        
+
                         <v-list-item-title>
                           <div class="d-flex align-center ga-2">
                             <code class="text-caption">{{ source }}</code>
@@ -158,13 +148,7 @@
                         </v-list-item-title>
 
                         <template v-slot:append>
-                          <v-btn
-                            size="small"
-                            color="error"
-                            icon
-                            variant="text"
-                            @click="removeModelMapping(source)"
-                          >
+                          <v-btn size="small" color="error" icon variant="text" @click="removeModelMapping(source)">
                             <v-icon size="small" color="error">mdi-close</v-icon>
                           </v-btn>
                         </template>
@@ -216,16 +200,14 @@
                     <v-icon color="primary">mdi-key</v-icon>
                     <span class="text-body-1 font-weight-bold">API密钥管理</span>
                   </div>
-                  <v-chip size="small" color="info" variant="tonal">
-                    可添加多个密钥用于负载均衡
-                  </v-chip>
+                  <v-chip size="small" color="info" variant="tonal"> 可添加多个密钥用于负载均衡 </v-chip>
                 </v-card-title>
 
                 <v-card-text class="pt-2">
                   <!-- 现有密钥列表 -->
                   <div v-if="form.apiKeys.length" class="mb-4">
                     <v-list density="compact" class="bg-transparent">
-                      <v-list-item 
+                      <v-list-item
                         v-for="(key, index) in form.apiKeys"
                         :key="index"
                         class="mb-2"
@@ -235,23 +217,15 @@
                         :class="{ 'animate-pulse': duplicateKeyIndex === index }"
                       >
                         <template v-slot:prepend>
-                          <v-icon 
-                            size="small" 
-                            :color="duplicateKeyIndex === index ? 'error' : 'primary'"
-                          >
+                          <v-icon size="small" :color="duplicateKeyIndex === index ? 'error' : 'primary'">
                             {{ duplicateKeyIndex === index ? 'mdi-alert' : 'mdi-key' }}
                           </v-icon>
                         </template>
-                        
+
                         <v-list-item-title>
                           <div class="d-flex align-center justify-space-between">
                             <code class="text-caption">{{ maskApiKey(key) }}</code>
-                            <v-chip 
-                              v-if="duplicateKeyIndex === index"
-                              size="x-small"
-                              color="error"
-                              variant="text"
-                            >
+                            <v-chip v-if="duplicateKeyIndex === index" size="x-small" color="error" variant="text">
                               重复密钥
                             </v-chip>
                           </div>
@@ -259,7 +233,11 @@
 
                         <template v-slot:append>
                           <div class="d-flex align-center ga-1">
-                            <v-tooltip :text="copiedKeyIndex === index ? '已复制!' : '复制密钥'" location="top" :open-delay="150">
+                            <v-tooltip
+                              :text="copiedKeyIndex === index ? '已复制!' : '复制密钥'"
+                              location="top"
+                              :open-delay="150"
+                            >
                               <template #activator="{ props: tooltipProps }">
                                 <v-btn
                                   v-bind="tooltipProps"
@@ -269,17 +247,13 @@
                                   variant="text"
                                   @click="copyApiKey(key, index)"
                                 >
-                                  <v-icon size="small">{{ copiedKeyIndex === index ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
+                                  <v-icon size="small">{{
+                                    copiedKeyIndex === index ? 'mdi-check' : 'mdi-content-copy'
+                                  }}</v-icon>
                                 </v-btn>
                               </template>
                             </v-tooltip>
-                            <v-btn
-                              size="small"
-                              color="error"
-                              icon
-                              variant="text"
-                              @click="removeApiKey(index)"
-                            >
+                            <v-btn size="small" color="error" icon variant="text" @click="removeApiKey(index)">
                               <v-icon size="small" color="error">mdi-close</v-icon>
                             </v-btn>
                           </div>
@@ -301,7 +275,7 @@
                       @keyup.enter="addApiKey"
                       :error="!!apiKeyError"
                       :error-messages="apiKeyError"
-                      @input="apiKeyError = ''; duplicateKeyIndex = -1"
+                      @input="handleApiKeyInput"
                       class="flex-grow-1"
                     />
                     <v-btn
@@ -325,12 +299,7 @@
 
       <v-card-actions class="pa-6 pt-0">
         <v-spacer />
-        <v-btn
-          variant="text" 
-          @click="handleCancel"
-        >
-          取消
-        </v-btn>
+        <v-btn variant="text" @click="handleCancel"> 取消 </v-btn>
         <v-btn
           color="primary"
           variant="elevated"
@@ -353,9 +322,12 @@ import type { Channel } from '../services/api'
 interface Props {
   show: boolean
   channel?: Channel | null
+  channelType?: 'messages' | 'responses'
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  channelType: 'messages'
+})
 
 const emit = defineEmits<{
   'update:show': [value: boolean]
@@ -368,13 +340,24 @@ const theme = useTheme()
 // 表单引用
 const formRef = ref()
 
-// 服务类型选项
-const serviceTypeOptions = [
-  { title: 'OpenAI (新版API)', value: 'openai' },
-  { title: 'OpenAI (兼容旧版)', value: 'openaiold' },
-  { title: 'Claude', value: 'claude' },
-  { title: 'Gemini', value: 'gemini' }
-]
+// 服务类型选项 - 根据渠道类型动态显示
+const serviceTypeOptions = computed(() => {
+  if (props.channelType === 'responses') {
+    return [
+      { title: 'Responses (原生接口)', value: 'responses' },
+      { title: 'OpenAI (新版API)', value: 'openai' },
+      { title: 'OpenAI (兼容旧版)', value: 'openaiold' },
+      { title: 'Claude', value: 'claude' }
+    ]
+  } else {
+    return [
+      { title: 'OpenAI (新版API)', value: 'openai' },
+      { title: 'OpenAI (兼容旧版)', value: 'openaiold' },
+      { title: 'Claude', value: 'claude' },
+      { title: 'Gemini', value: 'gemini' }
+    ]
+  }
+})
 
 // 源模型选项 (Claude模型的常用别名)
 const sourceModelOptions = [
@@ -386,7 +369,7 @@ const sourceModelOptions = [
 // 表单数据
 const form = reactive({
   name: '',
-  serviceType: '' as 'openai' | 'openaiold' | 'gemini' | 'claude' | '',
+  serviceType: '' as 'openai' | 'openaiold' | 'gemini' | 'claude' | 'responses' | '',
   baseUrl: '',
   website: '',
   insecureSkipVerify: false,
@@ -404,6 +387,12 @@ const newApiKey = ref('')
 // 密钥重复检测状态
 const apiKeyError = ref('')
 const duplicateKeyIndex = ref(-1)
+
+// 处理 API 密钥输入事件
+const handleApiKeyInput = () => {
+  apiKeyError.value = ''
+  duplicateKeyIndex.value = -1
+}
 
 // 复制功能相关状态
 const copiedKeyIndex = ref<number | null>(null)
@@ -435,7 +424,12 @@ const rules = {
   },
   urlOptional: (value: string) => {
     if (!value) return true
-    try { new URL(value); return true } catch { return '请输入有效的URL' }
+    try {
+      new URL(value)
+      return true
+    } catch {
+      return '请输入有效的URL'
+    }
   }
 }
 
@@ -459,10 +453,7 @@ const headerIconStyle = computed(() => ({
 const subtitleClasses = computed(() => 'text-medium-emphasis')
 
 const isFormValid = computed(() => {
-  return form.name.trim() && 
-         form.serviceType && 
-         form.baseUrl.trim() && 
-         isValidUrl(form.baseUrl)
+  return form.name.trim() && form.serviceType && form.baseUrl.trim() && isValidUrl(form.baseUrl)
 })
 
 // 工具函数
@@ -477,10 +468,11 @@ const isValidUrl = (url: string): boolean => {
 
 const getUrlHint = (): string => {
   const hints: Record<string, string> = {
-    'openai': '通常为：https://api.openai.com/v1',
-    'openaiold': '通常为：https://api.openai.com/v1',
-    'claude': '通常为：https://api.anthropic.com',
-    'gemini': '通常为：https://generativelanguage.googleapis.com/v1'
+    responses: '通常为：https://api.openai.com/v1',
+    openai: '通常为：https://api.openai.com/v1',
+    openaiold: '通常为：https://api.openai.com/v1',
+    claude: '通常为：https://api.anthropic.com',
+    gemini: '通常为：https://generativelanguage.googleapis.com/v1'
   }
   return hints[form.serviceType] || '请输入完整的API基础URL'
 }
@@ -503,14 +495,14 @@ const resetForm = () => {
   newApiKey.value = ''
   newMapping.source = ''
   newMapping.target = ''
-  
+
   // 清空原始密钥映射
   originalKeyMap.value.clear()
-  
+
   // 清空密钥错误状态
   apiKeyError.value = ''
   duplicateKeyIndex.value = -1
-  
+
   // 清除错误信息
   errors.name = ''
   errors.serviceType = ''
@@ -524,13 +516,13 @@ const loadChannelData = (channel: Channel) => {
   form.website = channel.website || ''
   form.insecureSkipVerify = !!channel.insecureSkipVerify
   form.description = channel.description || ''
-  
+
   // 直接存储原始密钥，不需要映射关系
   form.apiKeys = [...channel.apiKeys]
-  
+
   // 清空原始密钥映射（现在不需要了）
   originalKeyMap.value.clear()
-  
+
   form.modelMapping = { ...(channel.modelMapping || {}) }
 }
 
@@ -628,17 +620,17 @@ const removeModelMapping = (source: string) => {
 
 const handleSubmit = async () => {
   if (!formRef.value) return
-  
+
   const { valid } = await formRef.value.validate()
   if (!valid) return
-  
+
   // 直接使用原始密钥，不需要转换
   const processedApiKeys = form.apiKeys.filter(key => key.trim())
-  
+
   // 类型断言，因为表单验证已经确保serviceType不为空
   const channelData = {
     name: form.name.trim(),
-    serviceType: form.serviceType as 'openai' | 'openaiold' | 'gemini' | 'claude',
+    serviceType: form.serviceType as 'openai' | 'openaiold' | 'gemini' | 'claude' | 'responses',
     baseUrl: form.baseUrl.trim().replace(/\/$/, ''), // 移除末尾斜杠
     website: form.website.trim() || undefined,
     insecureSkipVerify: form.insecureSkipVerify || undefined,
@@ -646,7 +638,7 @@ const handleSubmit = async () => {
     apiKeys: processedApiKeys,
     modelMapping: form.modelMapping
   }
-  
+
   emit('save', channelData)
 }
 
@@ -656,21 +648,27 @@ const handleCancel = () => {
 }
 
 // 监听props变化
-watch(() => props.show, (newShow) => {
-  if (newShow) {
-    if (props.channel) {
-      loadChannelData(props.channel)
-    } else {
-      resetForm()
+watch(
+  () => props.show,
+  newShow => {
+    if (newShow) {
+      if (props.channel) {
+        loadChannelData(props.channel)
+      } else {
+        resetForm()
+      }
     }
   }
-})
+)
 
-watch(() => props.channel, (newChannel) => {
-  if (newChannel && props.show) {
-    loadChannelData(newChannel)
+watch(
+  () => props.channel,
+  newChannel => {
+    if (newChannel && props.show) {
+      loadChannelData(newChannel)
+    }
   }
-})
+)
 
 // ESC键监听
 const handleKeydown = (event: KeyboardEvent) => {
@@ -694,7 +692,8 @@ onUnmounted(() => {
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {

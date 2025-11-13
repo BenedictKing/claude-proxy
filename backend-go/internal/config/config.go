@@ -43,6 +43,10 @@ type Config struct {
 	Upstream        []UpstreamConfig `json:"upstream"`
 	CurrentUpstream int              `json:"currentUpstream"`
 	LoadBalance     string           `json:"loadBalance"` // round-robin, random, failover
+
+	// Responses 接口专用配置（独立于 /v1/messages）
+	ResponsesUpstream        []UpstreamConfig `json:"responsesUpstream"`
+	CurrentResponsesUpstream int              `json:"currentResponsesUpstream"`
 }
 
 // FailedKey 失败密钥记录
@@ -110,8 +114,10 @@ func (cm *ConfigManager) loadConfig() error {
 					ServiceType: "gemini",
 				},
 			},
-			CurrentUpstream: 0,
-			LoadBalance:     "round-robin",
+			CurrentUpstream:          0,
+			LoadBalance:              "failover",
+			ResponsesUpstream:        []UpstreamConfig{},
+			CurrentResponsesUpstream: 0,
 		}
 
 		// 确保目录存在
@@ -440,6 +446,12 @@ func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig) error {
 
 	cm.config.Upstream = append(cm.config.Upstream, upstream)
 
+	// 如果这是第一个渠道,自动设为当前
+	if len(cm.config.Upstream) == 1 {
+		cm.config.CurrentUpstream = 0
+		log.Printf("首个Messages渠道已自动设为当前: %s", upstream.Name)
+	}
+
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return err
 	}
@@ -511,6 +523,12 @@ func (cm *ConfigManager) RemoveUpstream(index int) (*UpstreamConfig, error) {
 		} else {
 			cm.config.CurrentUpstream = 0
 		}
+	}
+
+	// 如果删除后只剩一个渠道,自动设为当前
+	if len(cm.config.Upstream) == 1 {
+		cm.config.CurrentUpstream = 0
+		log.Printf("唯一Messages渠道已自动设为当前: %s", cm.config.Upstream[0].Name)
 	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -672,5 +690,201 @@ func (cm *ConfigManager) Close() error {
 	if cm.watcher != nil {
 		return cm.watcher.Close()
 	}
+	return nil
+}
+
+// ============== Responses 接口专用方法 ==============
+
+// GetCurrentResponsesUpstream 获取当前 Responses 上游配置
+func (cm *ConfigManager) GetCurrentResponsesUpstream() (*UpstreamConfig, error) {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	if len(cm.config.ResponsesUpstream) == 0 {
+		return nil, fmt.Errorf("未配置任何 Responses 渠道")
+	}
+
+	if cm.config.CurrentResponsesUpstream >= len(cm.config.ResponsesUpstream) {
+		return nil, fmt.Errorf("当前 Responses 渠道索引 %d 无效", cm.config.CurrentResponsesUpstream)
+	}
+
+	upstream := cm.config.ResponsesUpstream[cm.config.CurrentResponsesUpstream]
+	return &upstream, nil
+}
+
+// SetCurrentResponsesUpstream 设置当前 Responses 上游
+func (cm *ConfigManager) SetCurrentResponsesUpstream(index int) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if index < 0 || index >= len(cm.config.ResponsesUpstream) {
+		return fmt.Errorf("无效的 Responses 上游索引: %d", index)
+	}
+
+	cm.config.CurrentResponsesUpstream = index
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("已切换到 Responses 上游: [%d] %s", index, cm.config.ResponsesUpstream[index].Name)
+	return nil
+}
+
+// AddResponsesUpstream 添加 Responses 上游
+func (cm *ConfigManager) AddResponsesUpstream(upstream UpstreamConfig) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	cm.config.ResponsesUpstream = append(cm.config.ResponsesUpstream, upstream)
+
+	// 如果这是第一个渠道,自动设为当前
+	if len(cm.config.ResponsesUpstream) == 1 {
+		cm.config.CurrentResponsesUpstream = 0
+		log.Printf("首个Responses渠道已自动设为当前: %s", upstream.Name)
+	}
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("已添加 Responses 上游: %s", upstream.Name)
+	return nil
+}
+
+// UpdateResponsesUpstream 更新 Responses 上游
+func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpdate) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if index < 0 || index >= len(cm.config.ResponsesUpstream) {
+		return fmt.Errorf("无效的 Responses 上游索引: %d", index)
+	}
+
+	upstream := &cm.config.ResponsesUpstream[index]
+
+	if updates.Name != nil {
+		upstream.Name = *updates.Name
+	}
+	if updates.BaseURL != nil {
+		upstream.BaseURL = *updates.BaseURL
+	}
+	if updates.ServiceType != nil {
+		upstream.ServiceType = *updates.ServiceType
+	}
+	if updates.Description != nil {
+		upstream.Description = *updates.Description
+	}
+	if updates.Website != nil {
+		upstream.Website = *updates.Website
+	}
+	if updates.APIKeys != nil {
+		upstream.APIKeys = updates.APIKeys
+	}
+	if updates.ModelMapping != nil {
+		upstream.ModelMapping = updates.ModelMapping
+	}
+	if updates.InsecureSkipVerify != nil {
+		upstream.InsecureSkipVerify = *updates.InsecureSkipVerify
+	}
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("已更新 Responses 上游: [%d] %s", index, cm.config.ResponsesUpstream[index].Name)
+	return nil
+}
+
+// RemoveResponsesUpstream 删除 Responses 上游
+func (cm *ConfigManager) RemoveResponsesUpstream(index int) (*UpstreamConfig, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if index < 0 || index >= len(cm.config.ResponsesUpstream) {
+		return nil, fmt.Errorf("无效的 Responses 上游索引: %d", index)
+	}
+
+	removed := cm.config.ResponsesUpstream[index]
+	cm.config.ResponsesUpstream = append(cm.config.ResponsesUpstream[:index], cm.config.ResponsesUpstream[index+1:]...)
+
+	// 调整当前上游索引
+	if cm.config.CurrentResponsesUpstream >= len(cm.config.ResponsesUpstream) {
+		if len(cm.config.ResponsesUpstream) > 0 {
+			cm.config.CurrentResponsesUpstream = len(cm.config.ResponsesUpstream) - 1
+		} else {
+			cm.config.CurrentResponsesUpstream = 0
+		}
+	}
+
+	// 如果删除后只剩一个渠道,自动设为当前
+	if len(cm.config.ResponsesUpstream) == 1 {
+		cm.config.CurrentResponsesUpstream = 0
+		log.Printf("唯一Responses渠道已自动设为当前: %s", cm.config.ResponsesUpstream[0].Name)
+	}
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return nil, err
+	}
+
+	log.Printf("已删除 Responses 上游: %s", removed.Name)
+	return &removed, nil
+}
+
+// AddResponsesAPIKey 添加 Responses 上游的 API 密钥
+func (cm *ConfigManager) AddResponsesAPIKey(index int, apiKey string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if index < 0 || index >= len(cm.config.ResponsesUpstream) {
+		return fmt.Errorf("无效的上游索引: %d", index)
+	}
+
+	// 检查密钥是否已存在
+	for _, key := range cm.config.ResponsesUpstream[index].APIKeys {
+		if key == apiKey {
+			return fmt.Errorf("API密钥已存在")
+		}
+	}
+
+	cm.config.ResponsesUpstream[index].APIKeys = append(cm.config.ResponsesUpstream[index].APIKeys, apiKey)
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("已添加API密钥到 Responses 上游 [%d] %s", index, cm.config.ResponsesUpstream[index].Name)
+	return nil
+}
+
+// RemoveResponsesAPIKey 删除 Responses 上游的 API 密钥
+func (cm *ConfigManager) RemoveResponsesAPIKey(index int, apiKey string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if index < 0 || index >= len(cm.config.ResponsesUpstream) {
+		return fmt.Errorf("无效的上游索引: %d", index)
+	}
+
+	// 查找并删除密钥
+	keys := cm.config.ResponsesUpstream[index].APIKeys
+	found := false
+	for i, key := range keys {
+		if key == apiKey {
+			cm.config.ResponsesUpstream[index].APIKeys = append(keys[:i], keys[i+1:]...)
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("API密钥不存在")
+	}
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("已从 Responses 上游 [%d] %s 删除API密钥", index, cm.config.ResponsesUpstream[index].Name)
 	return nil
 }

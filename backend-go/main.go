@@ -4,12 +4,14 @@ import (
 	"embed"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/handlers"
 	"github.com/BenedictKing/claude-proxy/internal/middleware"
+	"github.com/BenedictKing/claude-proxy/internal/session"
 )
 
 //go:embed frontend/dist/*
@@ -30,6 +32,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("初始化配置管理器失败: %v", err)
 	}
+
+	// 初始化会话管理器（Responses API 专用）
+	sessionManager := session.NewSessionManager(
+		24*time.Hour, // 24小时过期
+		100,          // 最多100条消息
+		100000,       // 最多100k tokens
+	)
+	log.Printf("✅ 会话管理器已初始化")
 
 	// 设置 Gin 模式
 	if envCfg.IsProduction() {
@@ -68,6 +78,14 @@ func main() {
 		apiGroup.DELETE("/channels/:id/keys/:apiKey", handlers.DeleteApiKey(cfgManager))
 		apiGroup.POST("/channels/:id/current", handlers.SetCurrentUpstream(cfgManager))
 
+		// Responses 渠道管理
+		apiGroup.GET("/responses/channels", handlers.GetResponsesUpstreams(cfgManager))
+		apiGroup.POST("/responses/channels", handlers.AddResponsesUpstream(cfgManager))
+		apiGroup.PUT("/responses/channels/:id", handlers.UpdateResponsesUpstream(cfgManager))
+		apiGroup.DELETE("/responses/channels/:id", handlers.DeleteResponsesUpstream(cfgManager))
+		apiGroup.POST("/responses/channels/:id/keys", handlers.AddResponsesApiKey(cfgManager))
+		apiGroup.DELETE("/responses/channels/:id/keys/:apiKey", handlers.DeleteResponsesApiKey(cfgManager))
+		apiGroup.POST("/responses/channels/:id/current", handlers.SetCurrentResponsesUpstream(cfgManager))
 
 		// 负载均衡
 		apiGroup.PUT("/loadbalance", handlers.UpdateLoadBalance(cfgManager))
@@ -79,6 +97,9 @@ func main() {
 
 	// 代理端点 - 统一入口
 	r.POST("/v1/messages", handlers.ProxyHandler(envCfg, cfgManager))
+
+	// Responses API 端点
+	r.POST("/v1/responses", handlers.ResponsesHandler(envCfg, cfgManager, sessionManager))
 
 	// 静态文件服务 (嵌入的前端)
 	if envCfg.EnableWebUI {
@@ -112,7 +133,8 @@ func main() {
 	}
 	fmt.Printf("📍 本地地址: http://localhost:%d\n", envCfg.Port)
 	fmt.Printf("🌐 管理界面: http://localhost:%d\n", envCfg.Port)
-	fmt.Printf("📋 统一入口: POST /v1/messages\n")
+	fmt.Printf("📋 Claude Messages: POST /v1/messages\n")
+	fmt.Printf("📋 Codex Responses: POST /v1/responses\n")
 	fmt.Printf("💚 健康检查: GET %s\n", envCfg.HealthCheckPath)
 	fmt.Printf("📊 环境: %s\n\n", envCfg.Env)
 
