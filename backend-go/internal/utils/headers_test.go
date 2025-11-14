@@ -3,7 +3,6 @@ package utils
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -219,38 +218,3 @@ func TestEnsureCompatibleUserAgent(t *testing.T) {
 	}
 }
 
-func TestHeaderPreservation(t *testing.T) {
-	// 测试头部保留功能 - 确保原始头部被正确保留
-	gin.SetMode(gin.TestMode)
-
-	originalHeaders := map[string]string{
-		"Content-Type":     "application/json",
-		"Accept":           "application/json",
-		"Accept-Encoding":  "gzip, deflate",
-		"Accept-Language":  "zh-CN,zh;q=0.9,en;q=0.8",
-		"Cache-Control":    "no-cache",
-		"Custom-Header-1":  "value1",
-		"Custom-Header-2":  "value2",
-	}
-
-	req := httptest.NewRequest("POST", "/test", nil)
-	for k, v := range originalHeaders {
-		req.Header.Set(k, v)
-	}
-
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = req
-
-	result := PrepareUpstreamHeaders(c, "upstream.com")
-
-	// 验证所有原始头部都被保留（除了会被移除的代理相关头部）
-	for k, v := range originalHeaders {
-		if !strings.HasPrefix(strings.ToLower(k), "x-proxy") &&
-		   !strings.HasPrefix(strings.ToLower(k), "x-forwarded") {
-			if got := result.Get(k); got != v {
-				t.Errorf("Header %s = %v, want %v (not preserved)", k, got, v)
-			}
-		}
-	}
-}

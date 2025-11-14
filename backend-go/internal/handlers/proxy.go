@@ -158,6 +158,73 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gi
 				// 这确保错误信息始终可读，用于日志和重试逻辑
 				bodyBytes = utils.DecompressGzipIfNeeded(resp, bodyBytes)
 
+				// 优先检测 thinking 参数错误（混合策略：立即重试当前密钥）
+				if isThinkingError(resp.StatusCode, bodyBytes) {
+					if envCfg.ShouldLog("info") {
+						log.Printf("⚠️ 检测到 thinking 参数错误，尝试移除该参数并重试")
+						if envCfg.IsDevelopment() {
+							log.Printf("🔍 原始错误响应: %s", string(bodyBytes))
+						}
+					}
+
+					// 移除 thinking 参数
+					modifiedBody, err := removeThinkingParam(lastOriginalBodyBytes)
+					if err != nil {
+						log.Printf("❌ 移除 thinking 参数失败: %v", err)
+						// 移除失败，继续常规 failover 流程
+					} else {
+						if envCfg.ShouldLog("info") {
+							log.Printf("✅ 已移除 thinking 参数，使用相同密钥重试")
+						}
+
+						// 使用修改后的请求体重新构建请求
+						retryReq, _, err := provider.ConvertToProviderRequest(c, upstream, apiKey)
+						if err == nil {
+							// 替换请求体
+							retryReq.Body = io.NopCloser(bytes.NewReader(modifiedBody))
+							retryReq.ContentLength = int64(len(modifiedBody))
+
+							// 立即重试（使用相同密钥）
+							retryResp, retryErr := sendRequest(retryReq, upstream, envCfg, claudeReq.Stream)
+							if retryErr == nil && retryResp.StatusCode >= 200 && retryResp.StatusCode < 300 {
+								// 重试成功！
+								if envCfg.ShouldLog("info") {
+									log.Printf("✅ Thinking 回退成功，请求已成功")
+								}
+
+								// 处理成功响应（与下方逻辑一致）
+								if len(deprioritizeCandidates) > 0 {
+									for key := range deprioritizeCandidates {
+										if err := cfgManager.DeprioritizeAPIKey(key); err != nil {
+											log.Printf("⚠️ 密钥降级失败: %v", err)
+										}
+									}
+								}
+
+								if claudeReq.Stream {
+									handleStreamResponse(c, retryResp, provider, envCfg, startTime, upstream)
+								} else {
+									handleNormalResponse(c, retryResp, provider, envCfg, startTime)
+								}
+								return
+							}
+
+							// 重试仍然失败
+							if retryErr != nil {
+								log.Printf("⚠️ Thinking 回退重试失败: %v，继续 failover", retryErr)
+							} else if retryResp != nil {
+								retryBody, _ := io.ReadAll(retryResp.Body)
+								retryResp.Body.Close()
+								retryBody = utils.DecompressGzipIfNeeded(retryResp, retryBody)
+								log.Printf("⚠️ Thinking 回退重试返回错误状态 %d: %s，继续 failover",
+									retryResp.StatusCode, string(retryBody))
+							}
+						}
+					}
+
+					// 如果 thinking 回退失败，继续常规 failover 流程
+				}
+
 				// 检查是否需要 failover
 				shouldFailover, isQuotaRelated := shouldRetryWithNextKey(resp.StatusCode, bodyBytes)
 				if shouldFailover {
@@ -536,6 +603,62 @@ func shouldRetryWithNextKey(statusCode int, bodyBytes []byte) (bool, bool) {
 	}
 
 	return false, false
+}
+
+// isThinkingError 检测是否为 thinking 参数相关的 400 错误
+func isThinkingError(statusCode int, bodyBytes []byte) bool {
+	// 必须是 400 错误
+	if statusCode != 400 {
+		return false
+	}
+
+	// 解析错误响应
+	var errResp map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &errResp); err != nil {
+		return false
+	}
+
+	if errObj, ok := errResp["error"].(map[string]interface{}); ok {
+		// 检查错误类型
+		if errType, ok := errObj["type"].(string); ok {
+			if errType != "invalid_request_error" {
+				return false
+			}
+		}
+
+		// 检查错误消息是否包含 thinking 相关关键词
+		if msg, ok := errObj["message"].(string); ok {
+			msgLower := strings.ToLower(msg)
+			// 匹配典型的 thinking 字段验证错误
+			if strings.Contains(msgLower, "thinking") &&
+				(strings.Contains(msgLower, "field required") ||
+					strings.Contains(msgLower, "invalid") ||
+					strings.Contains(msgLower, "validation")) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// removeThinkingParam 从请求体中移除 thinking 参数
+func removeThinkingParam(originalBody []byte) ([]byte, error) {
+	var reqMap map[string]interface{}
+	if err := json.Unmarshal(originalBody, &reqMap); err != nil {
+		return nil, fmt.Errorf("failed to parse request body: %w", err)
+	}
+
+	// 删除 thinking 字段
+	delete(reqMap, "thinking")
+
+	// 重新序列化
+	newBody, err := json.Marshal(reqMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal modified request: %w", err)
+	}
+
+	return newBody, nil
 }
 
 // maskAPIKey 掩码API密钥（与 TS 版本保持一致）
