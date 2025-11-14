@@ -936,7 +936,7 @@ watch(activeTab, async () => {
   width: auto !important;
 }
 
-/* API 类型切换文本样式：更简洁的下划线高亮 */
+/* API 类型切换文本样式：下划线高亮 */
 .api-type-text {
   cursor: pointer;
   opacity: 0.55;
