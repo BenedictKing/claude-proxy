@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -161,28 +163,36 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gi
 				// 优先检测 thinking 参数错误（混合策略：立即重试当前密钥）
 				if isThinkingError(resp.StatusCode, bodyBytes) {
 					if envCfg.ShouldLog("info") {
-						log.Printf("⚠️ 检测到 thinking 参数错误，尝试移除该参数并重试")
+						log.Printf("⚠️ 检测到 thinking 参数错误，尝试修复并重试")
 						if envCfg.IsDevelopment() {
 							log.Printf("🔍 原始错误响应: %s", string(bodyBytes))
 						}
 					}
 
-					// 移除 thinking 参数
-					modifiedBody, err := removeThinkingParam(lastOriginalBodyBytes)
+					// 修复 messages 中不完整的 thinking 内容块
+					modifiedBody, err := repairThinkingParam(lastOriginalBodyBytes)
 					if err != nil {
-						log.Printf("❌ 移除 thinking 参数失败: %v", err)
-						// 移除失败，继续常规 failover 流程
+						log.Printf("❌ 修复 thinking 内容块失败: %v", err)
+						// 修复失败，继续常规 failover 流程
 					} else {
 						if envCfg.ShouldLog("info") {
-							log.Printf("✅ 已移除 thinking 参数，使用相同密钥重试")
+							log.Printf("✅ 已修复 thinking 内容块，使用相同密钥重试")
 						}
+
+						// 开发模式下记录修复后的请求体
+						if envCfg.IsDevelopment() {
+							formattedBody := utils.FormatJSONBytesForLog(modifiedBody, 500)
+							log.Printf("🔧 修复后的请求体:\n%s", formattedBody)
+						}
+
+						// 将修复后的请求体写入 context，让 provider 读取修复后的数据
+						c.Request.Body = io.NopCloser(bytes.NewReader(modifiedBody))
+						c.Request.ContentLength = int64(len(modifiedBody))
 
 						// 使用修改后的请求体重新构建请求
 						retryReq, _, err := provider.ConvertToProviderRequest(c, upstream, apiKey)
 						if err == nil {
-							// 替换请求体
-							retryReq.Body = io.NopCloser(bytes.NewReader(modifiedBody))
-							retryReq.ContentLength = int64(len(modifiedBody))
+							// provider 已经从修复后的 Body 中读取数据
 
 							// 立即重试（使用相同密钥）
 							retryResp, retryErr := sendRequest(retryReq, upstream, envCfg, claudeReq.Stream)
@@ -642,23 +652,95 @@ func isThinkingError(statusCode int, bodyBytes []byte) bool {
 	return false
 }
 
-// removeThinkingParam 从请求体中移除 thinking 参数
-func removeThinkingParam(originalBody []byte) ([]byte, error) {
-	var reqMap map[string]interface{}
-	if err := json.Unmarshal(originalBody, &reqMap); err != nil {
-		return nil, fmt.Errorf("failed to parse request body: %w", err)
+// generateThinkingSignature 生成 thinking 块的签名
+// 格式：claude-thinking-v1-[base64(sha256(timestamp))]
+func generateThinkingSignature() string {
+	timestamp := fmt.Sprintf("%d", time.Now().UnixNano())
+	hash := sha256.Sum256([]byte(timestamp))
+	encoded := base64.StdEncoding.EncodeToString(hash[:])
+	// 取前 16 个字符作为签名
+	if len(encoded) > 16 {
+		encoded = encoded[:16]
 	}
+	return fmt.Sprintf("claude-thinking-v1-%s", encoded)
+}
 
-	// 删除 thinking 字段
-	delete(reqMap, "thinking")
+// repairThinkingParam 从请求体的 messages 中移除不完整的 thinking 内容块
+func repairThinkingParam(originalBody []byte) ([]byte, error) {
+    var reqMap map[string]interface{}
+    if err := json.Unmarshal(originalBody, &reqMap); err != nil {
+        return nil, fmt.Errorf("failed to parse request body: %w", err)
+    }
 
-	// 重新序列化
-	newBody, err := json.Marshal(reqMap)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal modified request: %w", err)
-	}
+    modified := false
+    fixedCount := 0
 
-	return newBody, nil
+    // 处理 messages 数组
+    if messages, ok := reqMap["messages"].([]interface{}); ok {
+        for _, msg := range messages {
+            if msgMap, ok := msg.(map[string]interface{}); ok {
+                // 只处理 assistant 角色的消息
+                role, hasRole := msgMap["role"].(string)
+                if !hasRole || role != "assistant" {
+                    continue
+                }
+
+                if content, exists := msgMap["content"]; exists {
+                    if contentArr, isArray := content.([]interface{}); isArray {
+                        var newContentArr []interface{}
+                        contentModifiedInMessage := false
+
+                        // 遍历所有 content block
+                        for _, item := range contentArr {
+                            if itemMap, ok := item.(map[string]interface{}); ok {
+                                if itemType, hasType := itemMap["type"].(string); hasType && itemType == "thinking" {
+                                    // 检查是否缺少 thinking 或 signature 字段
+                                    _, hasThinkingField := itemMap["thinking"]
+                                    _, hasSignature := itemMap["signature"]
+
+                                    if !hasThinkingField || !hasSignature {
+                                        // 发现不完整的 thinking 块, 跳过它 (即删除)
+                                        contentModifiedInMessage = true
+                                        fixedCount++
+                                        continue
+                                    }
+                                }
+                            }
+                            newContentArr = append(newContentArr, item)
+                        }
+
+                        if contentModifiedInMessage {
+                            msgMap["content"] = newContentArr
+                            modified = true
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 总是检查并移除顶层的 thinking 参数
+    // if _, hasTopLevelThinking := reqMap["thinking"]; hasTopLevelThinking {
+    //     delete(reqMap, "thinking")
+    //     modified = true
+    //     log.Printf("🔧 移除顶层 thinking 参数")
+    // }
+
+    if !modified {
+        return originalBody, nil
+    }
+
+    if fixedCount > 0 {
+        log.Printf("✅ 共移除 %d 个不完整的 thinking 块", fixedCount)
+    }
+
+    // 重新序列化
+    newBody, err := json.Marshal(reqMap)
+    if err != nil {
+        return nil, fmt.Errorf("failed to marshal modified request: %w", err)
+    }
+
+    return newBody, nil
 }
 
 // maskAPIKey 掩码API密钥（与 TS 版本保持一致）
