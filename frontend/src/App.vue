@@ -83,8 +83,23 @@
       </template>
       
       <v-app-bar-title class="d-flex flex-column justify-center">
-        <div :class="$vuetify.display.mobile ? 'text-h6' : 'text-h5'" class="font-weight-bold mb-1">
-          Claude API Proxy
+        <div :class="$vuetify.display.mobile ? 'text-h6' : 'text-h5'" class="font-weight-bold mb-1 d-flex align-center">
+          <span
+            class="api-type-text"
+            :class="{ 'active': activeTab === 'messages' }"
+            @click="activeTab = 'messages'"
+          >
+            Claude
+          </span>
+          <span class="api-type-text separator">/</span>
+          <span
+            class="api-type-text"
+            :class="{ 'active': activeTab === 'responses' }"
+            @click="activeTab = 'responses'"
+          >
+            Codex
+          </span>
+          <span style="margin-left: 12px;">API Proxy</span>
         </div>
         <div class="text-body-2 opacity-90 d-none d-sm-block">
           智能API代理管理平台
@@ -117,25 +132,6 @@
     <!-- 主要内容 -->
     <v-main>
       <v-container fluid class="pa-6">
-        <!-- Tab 切换 -->
-        <v-card elevation="2" class="mb-6" rounded="lg">
-          <v-tabs
-            v-model="activeTab"
-            color="primary"
-            align-tabs="center"
-            grow
-          >
-            <v-tab value="messages">
-              <v-icon start>mdi-message-processing</v-icon>
-              Claude Messages
-            </v-tab>
-            <v-tab value="responses">
-              <v-icon start>mdi-diamond-stone</v-icon>
-              Codex Responses
-            </v-tab>
-          </v-tabs>
-        </v-card>
-
         <!-- 统计卡片 -->
         <v-row class="mb-6">
           <v-col cols="12" sm="6" md="3">
@@ -254,7 +250,7 @@
                     append-icon="mdi-chevron-down"
                     variant="elevated"
                   >
-                    API密钥分配: {{ channelsData.loadBalance }}
+                    API密钥分配: {{ currentChannelsData.loadBalance }}
                   </v-btn>
                 </template>
                 <v-list>
@@ -299,7 +295,7 @@
             >
             <ChannelCard
               :channel="channel"
-              :is-current="channel.index === channelsData.current"
+              :is-current="channel.index === currentChannelsData.current"
               @edit="editChannel"
               @delete="deleteChannel"
               @set-current="setCurrentChannel"
@@ -548,8 +544,16 @@ const isChannelPinned = (channelId: number): boolean => {
 
 // 更新渠道的pinned状态
 const updateChannelsPinnedStatus = () => {
+  // 更新 Messages Tab 的渠道数据
   if (channelsData.value.channels) {
     channelsData.value.channels.forEach(channel => {
+      channel.pinned = pinnedChannels.value.has(channel.index)
+    })
+  }
+
+  // 更新 Codex Tab 的渠道数据
+  if (responsesChannelsData.value.channels) {
+    responsesChannelsData.value.channels.forEach(channel => {
       channel.pinned = pinnedChannels.value.has(channel.index)
     })
   }
@@ -715,7 +719,12 @@ const pingAllChannels = async () => {
 const updateLoadBalance = async (strategy: string) => {
   try {
     await api.updateLoadBalance(strategy)
-    channelsData.value.loadBalance = strategy
+    // 根据当前 Tab 更新对应的 loadBalance
+    if (activeTab.value === 'messages') {
+      channelsData.value.loadBalance = strategy
+    } else {
+      responsesChannelsData.value.loadBalance = strategy
+    }
     showToast(`负载均衡策略已更新为: ${strategy}`, 'success')
   } catch (error) {
     handleError(error, '更新负载均衡策略失败')
@@ -925,6 +934,48 @@ watch(activeTab, async () => {
 .app-header .v-toolbar-title {
   overflow: visible !important;
   width: auto !important;
+}
+
+/* API 类型切换文本样式：更简洁的下划线高亮 */
+.api-type-text {
+  cursor: pointer;
+  opacity: 0.55;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+  padding: 2px 4px;
+  display: inline-block;
+  position: relative;
+}
+
+.api-type-text:not(.separator):hover {
+  opacity: 0.85;
+  transform: translateY(-0.5px);
+}
+
+.api-type-text.active {
+  opacity: 1;
+  transform: translateY(-0.5px);
+  font-weight: 900;
+}
+
+.api-type-text.active::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 0;
+  height: 3px;
+  border-radius: 999px;
+  background-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.separator {
+  opacity: 0.32;
+  margin: 0 6px;
+  cursor: default;
+  padding: 0;
 }
 
 /* 响应式内边距调整 */

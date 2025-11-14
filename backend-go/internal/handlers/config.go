@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt" // 新增
 	"net/http" // 新增
 	"strconv"
 	"strings"
@@ -269,11 +268,8 @@ func PingChannel(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		channel := config.Upstream[id]
 		startTime := time.Now()
 
+		// 简化测试：只检查连通性，不关心HTTP状态码
 		testURL := strings.TrimSuffix(channel.BaseURL, "/")
-		switch channel.ServiceType {
-		case "openai", "openaiold", "gemini":
-			testURL += "/models"
-		}
 
 		client := httpclient.GetManager().GetStandardClient(5*time.Second, channel.InsecureSkipVerify)
 		req, err := http.NewRequest("HEAD", testURL, nil)
@@ -286,6 +282,7 @@ func PingChannel(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		latency := time.Since(startTime).Milliseconds()
 
 		if err != nil {
+			// 网络连接失败
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"latency": latency,
@@ -296,20 +293,12 @@ func PingChannel(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		}
 		defer resp.Body.Close()
 
-		if resp.StatusCode >= 200 && resp.StatusCode < 400 {
-			c.JSON(http.StatusOK, gin.H{
-				"success": true,
-				"latency": latency,
-				"status":  "healthy",
-			})
-		} else {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"latency": latency,
-				"status":  "unhealthy",
-				"error":   fmt.Sprintf("Status code: %d", resp.StatusCode),
-			})
-		}
+		// 只要能完成请求就算成功，不检查HTTP状态码
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"latency": latency,
+			"status":  "healthy",
+		})
 	}
 }
 
@@ -326,11 +315,8 @@ func PingAllChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				defer wg.Done()
 
 				startTime := time.Now()
+				// 简化测试：只检查连通性，不关心HTTP状态码
 				testURL := strings.TrimSuffix(ch.BaseURL, "/")
-				switch ch.ServiceType {
-				case "openai", "openaiold", "gemini":
-					testURL += "/models"
-				}
 
 				client := httpclient.GetManager().GetStandardClient(5*time.Second, ch.InsecureSkipVerify)
 				req, err := http.NewRequest("HEAD", testURL, nil)
@@ -343,16 +329,14 @@ func PingAllChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				latency := time.Since(startTime).Milliseconds()
 
 				if err != nil {
+					// 网络连接失败
 					results <- gin.H{"id": id, "name": ch.Name, "latency": latency, "status": "error", "error": err.Error()}
 					return
 				}
 				defer resp.Body.Close()
 
-				if resp.StatusCode >= 200 && resp.StatusCode < 400 {
-					results <- gin.H{"id": id, "name": ch.Name, "latency": latency, "status": "healthy"}
-				} else {
-					results <- gin.H{"id": id, "name": ch.Name, "latency": latency, "status": "unhealthy"}
-				}
+				// 只要能完成请求就算成功，不检查HTTP状态码
+				results <- gin.H{"id": id, "name": ch.Name, "latency": latency, "status": "healthy"}
 			}(i, channel)
 		}
 
