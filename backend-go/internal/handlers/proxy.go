@@ -665,82 +665,128 @@ func generateThinkingSignature() string {
 	return fmt.Sprintf("claude-thinking-v1-%s", encoded)
 }
 
-// repairThinkingParam 从请求体的 messages 中移除不完整的 thinking 内容块
+// repairThinkingParam 从请求体的 messages 中修复 thinking 相关问题
+// 1. 移除不完整的 thinking 内容块
+// 2. 如果启用了 thinking，确保最终的 assistant 消息以 thinking 块开头
 func repairThinkingParam(originalBody []byte) ([]byte, error) {
-    var reqMap map[string]interface{}
-    if err := json.Unmarshal(originalBody, &reqMap); err != nil {
-        return nil, fmt.Errorf("failed to parse request body: %w", err)
-    }
+	var reqMap map[string]interface{}
+	if err := json.Unmarshal(originalBody, &reqMap); err != nil {
+		return nil, fmt.Errorf("failed to parse request body: %w", err)
+	}
 
-    modified := false
-    fixedCount := 0
+	modified := false
+	fixedCount := 0
 
-    // 处理 messages 数组
-    if messages, ok := reqMap["messages"].([]interface{}); ok {
-        for _, msg := range messages {
-            if msgMap, ok := msg.(map[string]interface{}); ok {
-                // 只处理 assistant 角色的消息
-                role, hasRole := msgMap["role"].(string)
-                if !hasRole || role != "assistant" {
-                    continue
-                }
+	messages, ok := reqMap["messages"].([]interface{})
+	if !ok {
+		return originalBody, nil // No messages to process
+	}
 
-                if content, exists := msgMap["content"]; exists {
-                    if contentArr, isArray := content.([]interface{}); isArray {
-                        var newContentArr []interface{}
-                        contentModifiedInMessage := false
+	// 步骤 1: 清理所有 assistant 消息中不完整的 thinking 块
+	for _, msgInterface := range messages {
+		msgMap, ok := msgInterface.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		role, hasRole := msgMap["role"].(string)
+		if !hasRole || role != "assistant" {
+			continue
+		}
 
-                        // 遍历所有 content block
-                        for _, item := range contentArr {
-                            if itemMap, ok := item.(map[string]interface{}); ok {
-                                if itemType, hasType := itemMap["type"].(string); hasType && itemType == "thinking" {
-                                    // 检查是否缺少 thinking 或 signature 字段
-                                    _, hasThinkingField := itemMap["thinking"]
-                                    _, hasSignature := itemMap["signature"]
+		if content, exists := msgMap["content"]; exists {
+			if contentArr, isArray := content.([]interface{}); isArray {
+				var newContentArr []interface{}
+				contentModifiedInMessage := false
+				for _, item := range contentArr {
+					if itemMap, ok := item.(map[string]interface{}); ok {
+						if itemType, hasType := itemMap["type"].(string); hasType && itemType == "thinking" {
+							_, hasThinkingField := itemMap["thinking"]
+							_, hasSignature := itemMap["signature"]
+							if !hasThinkingField || !hasSignature {
+								contentModifiedInMessage = true
+								fixedCount++
+								continue // 跳过 (即移除) 畸形的 thinking 块
+							}
+						}
+					}
+					newContentArr = append(newContentArr, item)
+				}
+				if contentModifiedInMessage {
+					msgMap["content"] = newContentArr
+					modified = true
+				}
+			}
+		}
+	}
 
-                                    if !hasThinkingField || !hasSignature {
-                                        // 发现不完整的 thinking 块, 跳过它 (即删除)
-                                        contentModifiedInMessage = true
-                                        fixedCount++
-                                        continue
-                                    }
-                                }
-                            }
-                            newContentArr = append(newContentArr, item)
-                        }
+	// 步骤 2: 如果启用了 thinking, 确保最终的 assistant 消息以 thinking 块开头
+	_, hasTopLevelThinking := reqMap["thinking"]
+	if hasTopLevelThinking {
+		// 从后往前找到最后一个 assistant 消息
+		var lastAssistantMsgIndex = -1
+		for i := len(messages) - 1; i >= 0; i-- {
+			if msgMap, ok := messages[i].(map[string]interface{}); ok {
+				if role, hasRole := msgMap["role"].(string); hasRole && role == "assistant" {
+					lastAssistantMsgIndex = i
+					break
+				}
+			}
+		}
 
-                        if contentModifiedInMessage {
-                            msgMap["content"] = newContentArr
-                            modified = true
-                        }
-                    }
-                }
-            }
-        }
-    }
+		if lastAssistantMsgIndex != -1 {
+			lastAssistantMsg := messages[lastAssistantMsgIndex].(map[string]interface{})
+			content, exists := lastAssistantMsg["content"]
+			if !exists {
+				content = []interface{}{} // 如果 content 不存在，则创建它
+			}
 
-    // 总是检查并移除顶层的 thinking 参数
-    // if _, hasTopLevelThinking := reqMap["thinking"]; hasTopLevelThinking {
-    //     delete(reqMap, "thinking")
-    //     modified = true
-    //     log.Printf("🔧 移除顶层 thinking 参数")
-    // }
+			contentArr, isArray := content.([]interface{})
+			if !isArray {
+				log.Printf("⚠️ 修复 thinking 参数时发现 content 不是数组，跳过添加 thinking 块")
+			} else {
+				// 检查第一个块是否是 thinking 或 redacted_thinking
+				hasThinkingBlock := false
+				if len(contentArr) > 0 {
+					if firstBlock, ok := contentArr[0].(map[string]interface{}); ok {
+						if blockType, ok := firstBlock["type"].(string); ok && (blockType == "thinking" || blockType == "redacted_thinking") {
+							hasThinkingBlock = true
+						}
+					}
+				}
 
-    if !modified {
-        return originalBody, nil
-    }
+				if !hasThinkingBlock {
+					log.Printf("🔧 检测到最终 assistant 消息缺少 thinking 块，正在自动添加...")
+					thinkingBlock := map[string]interface{}{
+						"type": "thinking",
+						"thinking": map[string]string{
+							"type": "claude_thinking_v1",
+						},
+						"signature": generateThinkingSignature(),
+					}
+					// 将 thinking 块前置
+					newContentArr := append([]interface{}{thinkingBlock}, contentArr...)
+					lastAssistantMsg["content"] = newContentArr
+					modified = true
+				}
+			}
+		}
+	}
 
-    if fixedCount > 0 {
-        log.Printf("✅ 共移除 %d 个不完整的 thinking 块", fixedCount)
-    }
+	if !modified {
+		return originalBody, nil
+	}
 
-    // 重新序列化
-    newBody, err := json.Marshal(reqMap)
-    if err != nil {
-        return nil, fmt.Errorf("failed to marshal modified request: %w", err)
-    }
+	if fixedCount > 0 {
+		log.Printf("✅ 共移除 %d 个不完整的 thinking 块", fixedCount)
+	}
 
-    return newBody, nil
+	// 重新序列化
+	newBody, err := json.Marshal(reqMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal modified request: %w", err)
+	}
+
+	return newBody, nil
 }
 
 // maskAPIKey 掩码API密钥（与 TS 版本保持一致）
