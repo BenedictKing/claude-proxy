@@ -9,7 +9,6 @@ type ClaudeRequest struct {
 	Temperature float64         `json:"temperature,omitempty"`
 	Stream      bool            `json:"stream,omitempty"`
 	Tools       []ClaudeTool    `json:"tools,omitempty"`
-	Thinking    interface{}     `json:"thinking,omitempty"` // 扩展思考参数
 }
 
 // ClaudeMessage Claude 消息

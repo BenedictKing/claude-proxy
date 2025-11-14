@@ -8,6 +8,50 @@
 
 ### ✨ 新功能
 
+#### Responses API 透明转发支持
+
+- **Codex Responses API 端点** (`/v1/responses`)
+  - 完整支持 Codex Responses API 格式
+  - 透明转发到上游 Responses API 服务
+  - 支持流式和非流式响应
+  - 自动协议转换和错误处理
+  - 与 Messages API 相同的负载均衡和故障转移机制
+
+- **会话管理系统** (`internal/session/`)
+  - 自动会话创建和多轮对话跟踪
+  - 基于 `previous_response_id` 的会话关联
+  - 消息历史自动管理（默认限制 100 条消息）
+  - Token 使用统计（默认限制 100k tokens）
+  - 自动过期清理机制（默认 24 小时）
+  - 线程安全的并发访问支持
+
+- **Responses Provider** (`internal/providers/responses.go`)
+  - 实现 Responses API 协议转换
+  - 支持 `input` 字段（字符串或数组格式）
+  - 响应包含 `id` 和 `previous_id` 链接
+  - 自动处理 `store` 参数控制会话存储
+  - 完整的流式响应支持
+
+- **独立渠道管理**
+  - Responses 渠道与 Messages 渠道完全独立
+  - 独立的渠道配置和 API 密钥管理
+  - 支持通过 Web UI 和管理 API 配置
+  - 独立的负载均衡策略
+
+#### Messages API 协议转换增强
+
+- **多上游协议支持**
+  - Claude API (Anthropic) - 原生支持，直接透传
+  - OpenAI API - 自动双向转换 (Claude ↔ OpenAI 格式)
+  - OpenAI 兼容 API - 支持所有 OpenAI 格式兼容服务
+  - Gemini API (Google) - 自动双向转换 (Claude ↔ Gemini 格式)
+
+- **统一客户端接口**
+  - 客户端只需使用 Claude Messages API 格式
+  - 代理自动识别上游类型并转换协议
+  - 无需修改客户端代码即可切换不同 AI 服务
+  - 支持灵活的成本优化和服务切换
+
 #### Web UI 标题栏 API 类型切换
 
 - **集成式 API 类型切换器**
@@ -41,6 +85,12 @@
 
 ### 📝 技术改进
 
+- **架构增强**
+  - 新增 Session Manager 模块支持有状态会话
+  - Responses Handler 实现完整的请求/响应生命周期
+  - ResponsesProvider 遵循统一的 Provider 接口规范
+  - 所有 Responses 相关功能均支持故障转移和密钥降级
+
 - **代码简化**
   - 移除多余的 Tab 组件代码
   - 简化 CSS 样式，仅保留必要的下划线高亮风格
@@ -50,6 +100,12 @@
   - 支持移动端和桌面端自适应
   - 字体大小根据屏幕尺寸调整（text-h6/text-h5）
   - 保持在不同设备上的良好体验
+
+- **API 端点扩展**
+  - `/v1/responses` - Responses API 主端点
+  - `/api/responses/channels` - Responses 渠道管理
+  - `/api/responses/channels/:id/keys` - Responses 密钥管理
+  - `/api/responses/channels/:id/current` - 设置当前 Responses 渠道
 
 ### 🔧 其他改进
 

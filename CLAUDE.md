@@ -51,7 +51,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 本项目是一个现代化的AI API代理服务器，核心目标：
 
-- 🔄 **协议转换**: Claude格式 ↔ 各上游服务格式
+- 🔄 **协议转换**: Claude Messages API 格式 ↔ OpenAI/Gemini/Claude 上游格式
+- 🎯 **双API支持**: 同时支持 Messages API 和 Responses API（Codex格式）
+- 🔌 **OpenAI兼容**: Messages API 支持通过 OpenAI 兼容接口转接到各类 AI 服务
 - ⚖️ **负载均衡**: 多API密钥智能分配和故障转移
 - 🖥️ **可视化管理**: 现代化Web管理界面
 - 🛡️ **高可用性**: 健康检查、错误处理、优雅降级
@@ -155,11 +157,23 @@ GET /health
 # Web管理界面 (需要密钥)
 GET /
 
-# Claude API代理 (需要密钥)
+# Claude Messages API 代理 (需要密钥)
 POST /v1/messages
 
-# 管理API (需要密钥)
+# Codex Responses API 代理 (需要密钥)
+POST /v1/responses
+
+# Messages 渠道管理API (需要密钥)
 GET /api/channels
+POST /api/channels
+PUT /api/channels/:id
+DELETE /api/channels/:id
+
+# Responses 渠道管理API (需要密钥)
+GET /api/responses/channels
+POST /api/responses/channels
+PUT /api/responses/channels/:id
+DELETE /api/responses/channels/:id
 ```
 
 ### 环境变量核心配置

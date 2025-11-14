@@ -84,6 +84,7 @@ import { ConfigManager } from '@backend/config/config-manager'
 | **配置系统**   | `backend-go/internal/config/`     | 配置文件管理和热重载        |
 | **HTTP 处理**  | `backend-go/internal/handlers/`   | REST API 路由和业务逻辑     |
 | **中间件**     | `backend-go/internal/middleware/` | 认证、日志、CORS            |
+| **会话管理**   | `backend-go/internal/session/`    | Responses API 会话跟踪      |
 
 ## 设计模式
 
@@ -108,6 +109,7 @@ type Provider interface {
 - `OpenAI`: 支持 OpenAI API 和兼容 API
 - `Gemini`: Google Gemini API
 - `Claude`: Anthropic Claude API (直接透传)
+- `Responses`: Codex Responses API (支持会话管理)
 - `OpenAI Old`: 旧版 OpenAI API 兼容
 
 ### 2. 配置管理器模式
@@ -135,7 +137,42 @@ func (cm *ConfigManager) GetNextAPIKey(channelID string) (string, error)
 - 线程安全的读写操作
 - API 密钥轮询策略
 
-### 3. 中间件模式
+### 3. 会话管理模式 (Session Manager)
+
+为 Responses API 提供有状态的多轮对话支持：
+
+```go
+type SessionManager struct {
+    sessions       map[string]*Session
+    responseMap    map[string]string  // responseID -> sessionID
+    mu             sync.RWMutex
+    expiration     time.Duration
+    maxMessages    int
+    maxTokens      int
+}
+
+// 核心功能
+func (sm *SessionManager) GetOrCreateSession(previousResponseID string) (*Session, error)
+func (sm *SessionManager) AppendMessage(sessionID string, item ResponsesItem, tokens int)
+func (sm *SessionManager) UpdateLastResponseID(sessionID, responseID string)
+func (sm *SessionManager) RecordResponseMapping(responseID, sessionID string)
+```
+
+**特性**:
+- 自动会话创建和关联
+- 基于 `previous_response_id` 的会话追踪
+- 限制消息数量（默认 100 条）
+- 限制 Token 总数（默认 100k）
+- 自动过期清理（默认 24 小时）
+- 线程安全的并发访问
+
+**会话流程**:
+1. 首次请求：创建新会话，返回 `response_id`
+2. 后续请求：通过 `previous_response_id` 查找会话
+3. 自动追加用户输入和模型输出
+4. 响应中包含 `previous_id` 链接历史
+
+### 4. 中间件模式
 
 Express/Gin 使用中间件架构处理横切关注点：
 
@@ -174,7 +211,7 @@ graph TD
     O[File Watcher] --> N
 ```
 
-**流程说明**:
+**Messages API 流程说明**:
 1. 客户端请求到达 Gin 路由器
 2. 通过认证和日志中间件
 3. 路由处理器获取配置
@@ -183,6 +220,34 @@ graph TD
 6. 转换请求格式并发送到上游 API
 7. 接收上游响应并转换回 Claude 格式
 8. 记录日志并返回给客户端
+
+**Responses API 特殊流程**:
+```mermaid
+graph TD
+    A[Client Request] --> B[Responses Handler]
+    B --> C[Session Manager]
+    C --> D{检查 previous_response_id}
+    D -->|存在| E[获取现有会话]
+    D -->|不存在| F[创建新会话]
+    E --> G[Responses Provider]
+    F --> G
+    G --> H[上游 API]
+    H --> I[响应转换]
+    I --> J[更新会话历史]
+    J --> K[记录 Response Mapping]
+    K --> L[返回带 response_id 的响应]
+```
+
+**Responses API 会话管理**:
+1. 检查请求中的 `previous_response_id`
+2. 如存在，通过 `responseMap` 查找对应的会话
+3. 如不存在，创建新的会话 ID
+4. 将用户输入追加到会话历史
+5. 发送请求到上游 Responses API
+6. 将模型输出追加到会话历史
+7. 更新会话的 `last_response_id`
+8. 记录 `response_id` → `session_id` 映射
+9. 返回响应，包含 `id` (当前) 和 `previous_id` (上一轮)
 
 ## 技术选型决策
 
@@ -319,7 +384,8 @@ func AuthMiddleware() gin.HandlerFunc {
 **受保护的入口**:
 1. 前端管理界面 (`/`)
 2. 管理 API (`/api/*`)
-3. 代理 API (`/v1/messages`)
+3. Messages API (`/v1/messages`)
+4. Responses API (`/v1/responses`)
 
 **公开入口**:
 - 健康检查 (`/health`)

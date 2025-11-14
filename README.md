@@ -7,8 +7,10 @@
 - **🖥️ 一体化架构**: 后端集成前端，单容器部署，完全替代 Nginx
 - **🔐 统一认证**: 一个密钥保护所有入口（前端界面、管理API、代理API）
 - **📱 Web 管理面板**: 现代化可视化界面，支持渠道管理、实时监控和配置
-- **统一入口**: 所有请求通过单一端点 `http://localhost:3000/v1/messages` 访问
+- **双 API 支持**: 同时支持 Claude Messages API (`/v1/messages`) 和 Codex Responses API (`/v1/responses`)
+- **统一入口**: 通过统一端点访问不同的 AI 服务
 - **多上游支持**: 支持 OpenAI (及兼容 API)、Gemini 和 Claude 等多种上游服务
+- **🔌 协议转换**: Messages API 支持通过 OpenAI 兼容接口转接到其他 AI 服务
 - **负载均衡**: 支持轮询、随机、故障转移策略
 - **多 API 密钥**: 每个上游可配置多个 API 密钥，自动轮换使用
 - **增强的稳定性**: 内置上游请求超时与重试机制，确保服务在网络波动时依然可靠
@@ -19,6 +21,7 @@
 - **日志系统**: 完整的请求/响应日志记录
 - **📡 支持流式和非流式响应**
 - **🛠️ 支持工具调用**
+- **💬 会话管理**: Responses API 支持多轮对话的会话跟踪和上下文保持
 
 ## 🏗️ 架构设计
 
@@ -28,7 +31,8 @@
 用户 → 后端:3000 →
      ├─ / → 前端界面（需要密钥）
      ├─ /api/* → 管理API（需要密钥）
-     └─ /v1/messages → Claude代理（需要密钥）
+     ├─ /v1/messages → Claude Messages API 代理（需要密钥）
+     └─ /v1/responses → Codex Responses API 代理（需要密钥）
 ```
 
 **核心优势**: 单端口、统一认证、无跨域问题、资源占用低
@@ -68,7 +72,8 @@ docker-compose up -d
 
 访问地址：
 - **Web管理界面**: http://localhost:3000
-- **API代理端点**: http://localhost:3000/v1/messages
+- **Messages API 端点**: http://localhost:3000/v1/messages
+- **Responses API 端点**: http://localhost:3000/v1/responses
 - **健康检查**: http://localhost:3000/health
 
 ---
@@ -167,7 +172,8 @@ bun run start
 
 访问地址：
 - **Web管理界面**: http://localhost:3000
-- **API代理端点**: http://localhost:3000/v1/messages
+- **Messages API 端点**: http://localhost:3000/v1/messages
+- **Responses API 端点**: http://localhost:3000/v1/responses
 - **健康检查**: http://localhost:3000/health
 
 </details>
@@ -330,7 +336,12 @@ docker-compose restart claude-proxy
 
 ## 📖 API 使用
 
-### 标准 Claude API 调用
+本服务支持两种 API 格式：
+
+1. **Messages API** (`/v1/messages`) - 标准的 Claude API 格式
+2. **Responses API** (`/v1/responses`) - Codex 格式，支持会话管理
+
+### Messages API - 标准 Claude API 调用
 
 ```bash
 curl -X POST http://localhost:3000/v1/messages \
@@ -389,6 +400,74 @@ curl -X POST http://localhost:3000/v1/messages \
   }'
 ```
 
+### Responses API - Codex 格式调用
+
+Responses API 支持会话管理和多轮对话，自动跟踪上下文：
+
+#### 基础调用
+
+```bash
+curl -X POST http://localhost:3000/v1/responses \
+  -H "x-api-key: your-proxy-access-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5",
+    "max_tokens": 100,
+    "input": "你好！请介绍一下你自己。"
+  }'
+```
+
+#### 多轮对话（会话跟踪）
+
+```bash
+# 第一轮对话
+RESPONSE_ID=$(curl -s -X POST http://localhost:3000/v1/responses \
+  -H "x-api-key: your-proxy-access-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5",
+    "max_tokens": 100,
+    "input": "我的名字是张三"
+  }' | jq -r '.id')
+
+# 第二轮对话（基于上一轮）
+curl -X POST http://localhost:3000/v1/responses \
+  -H "x-api-key: your-proxy-access-key" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"model\": \"gpt-5\",
+    \"max_tokens\": 100,
+    \"input\": \"你还记得我的名字吗？\",
+    \"previous_response_id\": \"$RESPONSE_ID\"
+  }"
+```
+
+#### 流式响应
+
+```bash
+curl -X POST http://localhost:3000/v1/responses \
+  -H "x-api-key: your-proxy-access-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5",
+    "stream": true,
+    "max_tokens": 200,
+    "input": "从1数到10"
+  }'
+```
+
+#### 会话参数说明
+
+- **`input`**: 用户输入（字符串或数组）
+- **`previous_response_id`**: 上一轮响应的 ID，用于多轮对话
+- **`store`**: 是否存储会话（默认 `true`）
+- **`stream`**: 是否启用流式响应（默认 `false`）
+- **响应字段**:
+  - `id`: 响应 ID（用于下一轮对话）
+  - `previous_id`: 上一轮响应 ID
+  - `output`: 模型输出内容
+  - `usage`: Token 使用统计
+
 ### 管理API
 
 ```bash
@@ -399,6 +478,39 @@ curl -H "x-api-key: your-proxy-access-key" \
 # 测试渠道连通性
 curl -H "x-api-key: your-proxy-access-key" \
   http://localhost:3000/api/ping
+```
+
+## 🔌 协议转换能力
+
+### Messages API 多协议支持
+
+本代理服务器的 Messages API 端点 (`/v1/messages`) 支持多种上游协议转换：
+
+**支持的上游服务**:
+- ✅ **Claude API** (Anthropic) - 原生支持，直接透传
+- ✅ **OpenAI API** - 自动转换 Claude 格式 ↔ OpenAI 格式
+- ✅ **OpenAI 兼容 API** - 支持所有兼容 OpenAI 格式的服务
+- ✅ **Gemini API** (Google) - 自动转换 Claude 格式 ↔ Gemini 格式
+
+**核心优势**:
+- 🔄 **统一接口**: 客户端只需使用 Claude Messages API 格式
+- 🎯 **自动转换**: 代理自动处理不同上游的协议差异
+- 🔌 **即插即用**: 无需修改客户端代码即可切换上游服务
+- 💰 **成本优化**: 灵活切换不同价格的 AI 服务
+
+**示例**: 使用 Claude API 格式调用 OpenAI GPT-4
+```bash
+curl -X POST http://localhost:3000/v1/messages \
+  -H "x-api-key: your-proxy-access-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-3-5-sonnet-20241022",
+    "max_tokens": 100,
+    "messages": [
+      {"role": "user", "content": "Hello!"}
+    ]
+  }'
+# 后端自动转换并发送到配置的 OpenAI 上游
 ```
 
 ## 🧪 测试验证
