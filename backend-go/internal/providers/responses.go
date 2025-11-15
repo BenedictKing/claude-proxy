@@ -45,221 +45,67 @@ func (p *ResponsesProvider) ConvertToProviderRequest(
 	}
 
 	// 3. 模型重定向
-	model := config.RedirectModel(responsesReq.Model, upstream)
+	responsesReq.Model = config.RedirectModel(responsesReq.Model, upstream)
 
-	// 4. 根据上游类型选择转换策略
+	// 4. 使用转换器工厂创建转换器
+	converter := converters.NewConverter(upstream.ServiceType)
+
+	// 5. 转换请求
+	providerReq, err := converter.ToProviderRequest(sess, &responsesReq)
+	if err != nil {
+		return nil, bodyBytes, fmt.Errorf("转换请求失败: %w", err)
+	}
+
+	// 6. 序列化请求体
+	reqBody, err := json.Marshal(providerReq)
+	if err != nil {
+		return nil, bodyBytes, fmt.Errorf("序列化请求失败: %w", err)
+	}
+
+	// 7. 构建 HTTP 请求
+	targetURL := p.buildTargetURL(upstream)
+	req, err := http.NewRequest("POST", targetURL, bytes.NewReader(reqBody))
+	if err != nil {
+		return nil, bodyBytes, err
+	}
+
+	// 8. 设置请求头
+	p.setRequestHeaders(req, upstream, apiKey)
+
+	return req, bodyBytes, nil
+}
+
+// buildTargetURL 根据上游类型构建目标 URL
+func (p *ResponsesProvider) buildTargetURL(upstream *config.UpstreamConfig) string {
+	baseURL := strings.TrimSuffix(upstream.BaseURL, "/")
+
 	switch upstream.ServiceType {
 	case "responses":
-		// 透传（原生 Responses 上游）
-		return p.passthroughRequest(c, upstream, apiKey, responsesReq, model, bodyBytes)
-
+		return fmt.Sprintf("%s/v1/responses", baseURL)
 	case "claude":
-		// 转换为 Claude Messages 格式
-		return p.convertToClaudeRequest(c, upstream, apiKey, sess, responsesReq, model, bodyBytes)
-
+		return fmt.Sprintf("%s/v1/messages", baseURL)
 	case "openai":
-		// 转换为 OpenAI Chat 格式
-		return p.convertToOpenAIChatRequest(c, upstream, apiKey, sess, responsesReq, model, bodyBytes)
-
+		return fmt.Sprintf("%s/v1/chat/completions", baseURL)
 	case "openaiold":
-		// 转换为 OpenAI Completions 格式
-		return p.convertToOpenAICompletionsRequest(c, upstream, apiKey, sess, responsesReq, model, bodyBytes)
-
+		return fmt.Sprintf("%s/v1/completions", baseURL)
 	default:
-		return nil, bodyBytes, fmt.Errorf("不支持的上游类型: %s", upstream.ServiceType)
+		return fmt.Sprintf("%s/v1/chat/completions", baseURL)
 	}
 }
 
-// passthroughRequest 透传请求（原生 Responses 上游）
-func (p *ResponsesProvider) passthroughRequest(
-	c *gin.Context,
-	upstream *config.UpstreamConfig,
-	apiKey string,
-	responsesReq types.ResponsesRequest,
-	model string,
-	originalBody []byte,
-) (*http.Request, []byte, error) {
-	// 仅修改 model 字段（如果有重定向）
-	if model != responsesReq.Model {
-		responsesReq.Model = model
-		modifiedBody, err := json.Marshal(responsesReq)
-		if err == nil {
-			originalBody = modifiedBody
-		}
-	}
-
-	targetURL := fmt.Sprintf("%s/v1/responses", strings.TrimSuffix(upstream.BaseURL, "/"))
-	req, err := http.NewRequest("POST", targetURL, bytes.NewReader(originalBody))
-	if err != nil {
-		return nil, originalBody, err
-	}
-
+// setRequestHeaders 设置请求头
+func (p *ResponsesProvider) setRequestHeaders(req *http.Request, upstream *config.UpstreamConfig, apiKey string) {
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
 
-	return req, originalBody, nil
+	switch upstream.ServiceType {
+	case "claude":
+		req.Header.Set("x-api-key", apiKey)
+		req.Header.Set("anthropic-version", "2023-06-01")
+	default:
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	}
 }
 
-// convertToClaudeRequest 转换为 Claude 请求
-func (p *ResponsesProvider) convertToClaudeRequest(
-	c *gin.Context,
-	upstream *config.UpstreamConfig,
-	apiKey string,
-	sess *session.Session,
-	responsesReq types.ResponsesRequest,
-	model string,
-	originalBody []byte,
-) (*http.Request, []byte, error) {
-	// 将 Responses 转换为 Claude Messages
-	messages, err := converters.ResponsesToClaudeMessages(sess, responsesReq.Input)
-	if err != nil {
-		return nil, originalBody, fmt.Errorf("转换为 Claude Messages 失败: %w", err)
-	}
-
-	// 构建 Claude 请求
-	claudeReq := map[string]interface{}{
-		"model":      model,
-		"messages":   messages,
-		"max_tokens": 4096,
-	}
-
-	if responsesReq.MaxTokens > 0 {
-		claudeReq["max_tokens"] = responsesReq.MaxTokens
-	}
-	if responsesReq.Temperature > 0 {
-		claudeReq["temperature"] = responsesReq.Temperature
-	}
-	if responsesReq.TopP > 0 {
-		claudeReq["top_p"] = responsesReq.TopP
-	}
-	if responsesReq.Stream {
-		claudeReq["stream"] = true
-	}
-
-	reqBody, err := json.Marshal(claudeReq)
-	if err != nil {
-		return nil, originalBody, err
-	}
-
-	targetURL := fmt.Sprintf("%s/v1/messages", strings.TrimSuffix(upstream.BaseURL, "/"))
-	req, err := http.NewRequest("POST", targetURL, bytes.NewReader(reqBody))
-	if err != nil {
-		return nil, originalBody, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", apiKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
-
-	return req, originalBody, nil
-}
-
-// convertToOpenAIChatRequest 转换为 OpenAI Chat 请求
-func (p *ResponsesProvider) convertToOpenAIChatRequest(
-	c *gin.Context,
-	upstream *config.UpstreamConfig,
-	apiKey string,
-	sess *session.Session,
-	responsesReq types.ResponsesRequest,
-	model string,
-	originalBody []byte,
-) (*http.Request, []byte, error) {
-	// 将 Responses 转换为 OpenAI Messages
-	messages, err := converters.ResponsesToOpenAIChatMessages(sess, responsesReq.Input)
-	if err != nil {
-		return nil, originalBody, fmt.Errorf("转换为 OpenAI Messages 失败: %w", err)
-	}
-
-	// 构建 OpenAI 请求
-	openaiReq := map[string]interface{}{
-		"model":    model,
-		"messages": messages,
-	}
-
-	if responsesReq.MaxTokens > 0 {
-		openaiReq["max_tokens"] = responsesReq.MaxTokens
-	}
-	if responsesReq.Temperature > 0 {
-		openaiReq["temperature"] = responsesReq.Temperature
-	}
-	if responsesReq.TopP > 0 {
-		openaiReq["top_p"] = responsesReq.TopP
-	}
-	if responsesReq.FrequencyPenalty > 0 {
-		openaiReq["frequency_penalty"] = responsesReq.FrequencyPenalty
-	}
-	if responsesReq.PresencePenalty > 0 {
-		openaiReq["presence_penalty"] = responsesReq.PresencePenalty
-	}
-	if responsesReq.Stream {
-		openaiReq["stream"] = true
-	}
-
-	reqBody, err := json.Marshal(openaiReq)
-	if err != nil {
-		return nil, originalBody, err
-	}
-
-	targetURL := fmt.Sprintf("%s/v1/chat/completions", strings.TrimSuffix(upstream.BaseURL, "/"))
-	req, err := http.NewRequest("POST", targetURL, bytes.NewReader(reqBody))
-	if err != nil {
-		return nil, originalBody, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
-
-	return req, originalBody, nil
-}
-
-// convertToOpenAICompletionsRequest 转换为 OpenAI Completions 请求
-func (p *ResponsesProvider) convertToOpenAICompletionsRequest(
-	c *gin.Context,
-	upstream *config.UpstreamConfig,
-	apiKey string,
-	sess *session.Session,
-	responsesReq types.ResponsesRequest,
-	model string,
-	originalBody []byte,
-) (*http.Request, []byte, error) {
-	// 提取纯文本 prompt
-	prompt, err := converters.ExtractTextFromResponses(sess, responsesReq.Input)
-	if err != nil {
-		return nil, originalBody, fmt.Errorf("提取文本失败: %w", err)
-	}
-
-	// 构建 OpenAI Completions 请求
-	completionsReq := map[string]interface{}{
-		"model":  model,
-		"prompt": prompt,
-	}
-
-	if responsesReq.MaxTokens > 0 {
-		completionsReq["max_tokens"] = responsesReq.MaxTokens
-	}
-	if responsesReq.Temperature > 0 {
-		completionsReq["temperature"] = responsesReq.Temperature
-	}
-	if responsesReq.Stream {
-		completionsReq["stream"] = true
-	}
-
-	reqBody, err := json.Marshal(completionsReq)
-	if err != nil {
-		return nil, originalBody, err
-	}
-
-	targetURL := fmt.Sprintf("%s/v1/completions", strings.TrimSuffix(upstream.BaseURL, "/"))
-	req, err := http.NewRequest("POST", targetURL, bytes.NewReader(reqBody))
-	if err != nil {
-		return nil, originalBody, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
-
-	return req, originalBody, nil
-}
 
 // ConvertToClaudeResponse 将上游响应转换为 Responses 格式（实际上不再需要 Claude 格式）
 func (p *ResponsesProvider) ConvertToClaudeResponse(providerResp *types.ProviderResponse) (*types.ClaudeResponse, error) {
@@ -279,27 +125,9 @@ func (p *ResponsesProvider) ConvertToResponsesResponse(
 		return nil, fmt.Errorf("解析响应失败: %w", err)
 	}
 
-	switch upstreamType {
-	case "responses":
-		// 透传（已经是 Responses 格式）
-		var responsesResp types.ResponsesResponse
-		if err := json.Unmarshal(providerResp.Body, &responsesResp); err != nil {
-			return nil, err
-		}
-		return &responsesResp, nil
-
-	case "claude":
-		return converters.ClaudeResponseToResponses(respMap, sessionID)
-
-	case "openai":
-		return converters.OpenAIChatResponseToResponses(respMap, sessionID)
-
-	case "openaiold":
-		return converters.OpenAICompletionsResponseToResponses(respMap, sessionID)
-
-	default:
-		return nil, fmt.Errorf("不支持的上游类型: %s", upstreamType)
-	}
+	// 使用转换器工厂
+	converter := converters.NewConverter(upstreamType)
+	return converter.FromProviderResponse(respMap, sessionID)
 }
 
 // HandleStreamResponse 处理流式响应（暂不实现）

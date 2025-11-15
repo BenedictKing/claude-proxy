@@ -5,7 +5,8 @@ package types
 // ResponsesRequest Responses API 请求
 type ResponsesRequest struct {
 	Model              string      `json:"model"`
-	Input              interface{} `json:"input"` // string 或 []ResponsesItem
+	Instructions       string      `json:"instructions,omitempty"`       // 系统指令（映射为 system message）
+	Input              interface{} `json:"input"`                        // string 或 []ResponsesItem
 	PreviousResponseID string      `json:"previous_response_id,omitempty"`
 	Store              *bool       `json:"store,omitempty"`              // 默认 true
 	MaxTokens          int         `json:"max_tokens,omitempty"`         // 最大 tokens
@@ -21,9 +22,16 @@ type ResponsesRequest struct {
 
 // ResponsesItem Responses API 消息项
 type ResponsesItem struct {
-	Type    string      `json:"type"`    // text, tool_call, tool_result
-	Content interface{} `json:"content"` // 根据 type 不同而变化
+	Type    string      `json:"type"`               // message, text, tool_call, tool_result
+	Role    string      `json:"role,omitempty"`     // user, assistant (用于 type=message)
+	Content interface{} `json:"content"`            // string 或 []ContentBlock
 	ToolUse *ToolUse    `json:"tool_use,omitempty"`
+}
+
+// ContentBlock 内容块（用于嵌套 content 数组）
+type ContentBlock struct {
+	Type string `json:"type"` // input_text, output_text
+	Text string `json:"text"`
 }
 
 // ToolUse 工具使用定义

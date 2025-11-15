@@ -4,6 +4,78 @@
 
 ---
 
+## [v2.0.5-go] - 2025-11-15
+
+### 🚀 重大重构
+
+#### Responses API 转换器架构重构
+
+- **新增转换器接口** (`internal/converters/converter.go`)
+  - 定义统一的 `ResponsesConverter` 接口
+  - 支持双向转换：Responses ↔ 上游格式
+  - 清晰的职责分离和扩展性
+
+- **策略模式 + 工厂模式实现**
+  - `OpenAIChatConverter` - Responses → OpenAI Chat Completions
+  - `OpenAICompletionsConverter` - Responses → OpenAI Completions
+  - `ClaudeConverter` - Responses → Claude Messages API
+  - `ResponsesPassthroughConverter` - Responses → Responses (透传)
+  - `ConverterFactory` - 根据上游类型自动选择转换器
+
+- **完整支持 Responses API 标准格式**
+  - ✅ `instructions` 字段 - 映射为 system message
+  - ✅ 嵌套 `content` 数组 - 支持 `input_text`/`output_text` 类型
+  - ✅ `type: "message"` 格式 - 区分 message 和 text 类型
+  - ✅ `role` 字段 - 直接从 item.role 获取角色
+  - ❌ 移除 `[ASSISTANT]` 前缀 hack - 使用标准 role 字段
+
+### ✨ 新功能
+
+- **内容提取函数** (`extractTextFromContent`)
+  - 支持三种格式：string、[]ContentBlock、[]interface{}
+  - 自动提取 input_text 和 output_text 类型
+  - 智能拼接多个文本块
+
+- **类型定义增强**
+  - `ResponsesRequest.Instructions` - 系统指令字段
+  - `ResponsesItem.Role` - 角色字段（user/assistant）
+  - `ContentBlock` - 内容块结构体（type + text）
+
+### 🔧 代码改进
+
+- **ResponsesProvider 简化**
+  - 使用工厂模式替代 switch-case
+  - 统一的请求转换流程
+  - 减少代码重复（从 ~260 行减少到 ~130 行）
+
+- **测试覆盖**
+  - 10 个单元测试全部通过
+  - 覆盖核心转换逻辑
+  - 测试 instructions、message type、会话历史等场景
+
+### 📚 架构优势
+
+- **易于扩展** - 新增上游只需实现 ResponsesConverter 接口
+- **职责清晰** - 转换逻辑与 Provider 解耦
+- **可测试性** - 每个转换器可独立测试
+- **代码复用** - 公共逻辑提取到基础函数
+
+### ⚠️ 破坏性变更
+
+- **移除向后兼容** - 不再支持 `[ASSISTANT]` 前缀
+- **函数签名变更**
+  - `ResponsesToClaudeMessages` 新增 `instructions` 参数
+  - `ResponsesToOpenAIChatMessages` 新增 `instructions` 参数
+
+### 📖 参考
+
+本次重构参考了 [AIClient-2-API](https://github.com/example/AIClient-2-API) 项目的转换策略设计，特别是：
+- Responses API 格式的完整实现
+- 策略模式 + 工厂模式的架构设计
+- instructions → system message 的映射逻辑
+
+---
+
 ## [v2.0.4-go] - 2025-11-14
 
 ### ✨ 新功能

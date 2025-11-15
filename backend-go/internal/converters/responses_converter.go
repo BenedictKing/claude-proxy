@@ -12,14 +12,15 @@ import (
 // ============== Responses → Claude Messages ==============
 
 // ResponsesToClaudeMessages 将 Responses 格式转换为 Claude Messages 格式
-func ResponsesToClaudeMessages(sess *session.Session, newInput interface{}) ([]types.ClaudeMessage, error) {
+// instructions 参数会被转换为 Claude API 的 system 参数（不在 messages 中）
+func ResponsesToClaudeMessages(sess *session.Session, newInput interface{}, instructions string) ([]types.ClaudeMessage, string, error) {
 	messages := []types.ClaudeMessage{}
 
 	// 1. 处理历史消息
 	for _, item := range sess.Messages {
 		msg, err := responsesItemToClaudeMessage(item)
 		if err != nil {
-			return nil, fmt.Errorf("转换历史消息失败: %w", err)
+			return nil, "", fmt.Errorf("转换历史消息失败: %w", err)
 		}
 		if msg != nil {
 			messages = append(messages, *msg)
@@ -29,37 +30,58 @@ func ResponsesToClaudeMessages(sess *session.Session, newInput interface{}) ([]t
 	// 2. 处理新输入
 	newItems, err := parseResponsesInput(newInput)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	for _, item := range newItems {
 		msg, err := responsesItemToClaudeMessage(item)
 		if err != nil {
-			return nil, fmt.Errorf("转换新消息失败: %w", err)
+			return nil, "", fmt.Errorf("转换新消息失败: %w", err)
 		}
 		if msg != nil {
 			messages = append(messages, *msg)
 		}
 	}
 
-	return messages, nil
+	return messages, instructions, nil
 }
 
 // responsesItemToClaudeMessage 单个 ResponsesItem 转换为 Claude Message
 func responsesItemToClaudeMessage(item types.ResponsesItem) (*types.ClaudeMessage, error) {
 	switch item.Type {
-	case "text":
-		// 文本消息
-		contentStr, ok := item.Content.(string)
-		if !ok {
-			return nil, fmt.Errorf("text 类型的 content 必须是 string")
+	case "message":
+		// 新格式：嵌套结构（type=message, role=user/assistant, content=[]ContentBlock）
+		role := item.Role
+		if role == "" {
+			role = "user" // 默认为 user
 		}
 
-		// 判断角色：如果是用户输入，角色为 user，否则为 assistant
+		contentText := extractTextFromContent(item.Content)
+		if contentText == "" {
+			return nil, nil // 空内容，跳过
+		}
+
+		return &types.ClaudeMessage{
+			Role: role,
+			Content: []types.ClaudeContent{
+				{
+					Type: "text",
+					Text: contentText,
+				},
+			},
+		}, nil
+
+	case "text":
+		// 旧格式：简单 string（向后兼容）
+		contentStr := extractTextFromContent(item.Content)
+		if contentStr == "" {
+			return nil, fmt.Errorf("text 类型的 content 不能为空")
+		}
+
+		// 使用 item.Role（如果存在），否则默认为 user
 		role := "user"
-		if strings.HasPrefix(contentStr, "[ASSISTANT]") {
-			role = "assistant"
-			contentStr = strings.TrimPrefix(contentStr, "[ASSISTANT]")
+		if item.Role != "" {
+			role = item.Role
 		}
 
 		return &types.ClaudeMessage{
@@ -136,10 +158,18 @@ func ClaudeResponseToResponses(claudeResp map[string]interface{}, sessionID stri
 // ============== Responses → OpenAI Chat ==============
 
 // ResponsesToOpenAIChatMessages 将 Responses 格式转换为 OpenAI Chat 格式
-func ResponsesToOpenAIChatMessages(sess *session.Session, newInput interface{}) ([]map[string]interface{}, error) {
+func ResponsesToOpenAIChatMessages(sess *session.Session, newInput interface{}, instructions string) ([]map[string]interface{}, error) {
 	messages := []map[string]interface{}{}
 
-	// 1. 处理历史消息
+	// 1. 处理 instructions（如果存在）
+	if instructions != "" {
+		messages = append(messages, map[string]interface{}{
+			"role":    "system",
+			"content": instructions,
+		})
+	}
+
+	// 2. 处理历史消息
 	for _, item := range sess.Messages {
 		msg := responsesItemToOpenAIMessage(item)
 		if msg != nil {
@@ -147,7 +177,7 @@ func ResponsesToOpenAIChatMessages(sess *session.Session, newInput interface{}) 
 		}
 	}
 
-	// 2. 处理新输入
+	// 3. 处理新输入
 	newItems, err := parseResponsesInput(newInput)
 	if err != nil {
 		return nil, err
@@ -165,16 +195,34 @@ func ResponsesToOpenAIChatMessages(sess *session.Session, newInput interface{}) 
 
 // responsesItemToOpenAIMessage 单个 ResponsesItem 转换为 OpenAI Message
 func responsesItemToOpenAIMessage(item types.ResponsesItem) map[string]interface{} {
-	if item.Type == "text" {
-		contentStr, ok := item.Content.(string)
-		if !ok {
+	switch item.Type {
+	case "message":
+		// 新格式：嵌套结构
+		role := item.Role
+		if role == "" {
+			role = "user"
+		}
+
+		contentText := extractTextFromContent(item.Content)
+		if contentText == "" {
+			return nil
+		}
+
+		return map[string]interface{}{
+			"role":    role,
+			"content": contentText,
+		}
+
+	case "text":
+		// 旧格式：简单 string
+		contentStr := extractTextFromContent(item.Content)
+		if contentStr == "" {
 			return nil
 		}
 
 		role := "user"
-		if strings.HasPrefix(contentStr, "[ASSISTANT]") {
-			role = "assistant"
-			contentStr = strings.TrimPrefix(contentStr, "[ASSISTANT]")
+		if item.Role != "" {
+			role = item.Role
 		}
 
 		return map[string]interface{}{
@@ -235,6 +283,47 @@ func OpenAIChatResponseToResponses(openaiResp map[string]interface{}, sessionID 
 }
 
 // ============== 工具函数 ==============
+
+// extractTextFromContent 从 content 中提取文本内容
+// 支持三种格式：
+// 1. string - 直接返回
+// 2. []ContentBlock - 提取 input_text/output_text 类型的 text 字段
+// 3. []interface{} - 动态解析为 ContentBlock
+func extractTextFromContent(content interface{}) string {
+	// 1. 如果是 string，直接返回
+	if str, ok := content.(string); ok {
+		return str
+	}
+
+	// 2. 如果是 []ContentBlock（已解析类型）
+	if blocks, ok := content.([]types.ContentBlock); ok {
+		texts := []string{}
+		for _, block := range blocks {
+			if block.Type == "input_text" || block.Type == "output_text" {
+				texts = append(texts, block.Text)
+			}
+		}
+		return strings.Join(texts, "\n")
+	}
+
+	// 3. 如果是 []interface{}（未解析类型）
+	if arr, ok := content.([]interface{}); ok {
+		texts := []string{}
+		for _, c := range arr {
+			if block, ok := c.(map[string]interface{}); ok {
+				blockType, _ := block["type"].(string)
+				if blockType == "input_text" || blockType == "output_text" {
+					if text, ok := block["text"].(string); ok {
+						texts = append(texts, text)
+					}
+				}
+			}
+		}
+		return strings.Join(texts, "\n")
+	}
+
+	return ""
+}
 
 // parseResponsesInput 解析 input 字段（可能是 string 或 []ResponsesItem）
 func parseResponsesInput(input interface{}) ([]types.ResponsesItem, error) {

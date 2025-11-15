@@ -172,7 +172,170 @@ func (sm *SessionManager) RecordResponseMapping(responseID, sessionID string)
 3. 自动追加用户输入和模型输出
 4. 响应中包含 `previous_id` 链接历史
 
-### 4. 中间件模式
+### 4. 转换器模式 (Converter Pattern) 🆕
+
+**v2.0.5 新增**：为 Responses API 提供统一的协议转换架构。
+
+#### 转换器接口
+
+```go
+type ResponsesConverter interface {
+    // 将 Responses 请求转换为上游服务格式
+    ToProviderRequest(sess *session.Session, req *types.ResponsesRequest) (interface{}, error)
+
+    // 将上游响应转换为 Responses 格式
+    FromProviderResponse(resp map[string]interface{}, sessionID string) (*types.ResponsesResponse, error)
+
+    // 获取上游服务名称
+    GetProviderName() string
+}
+```
+
+#### 已实现的转换器
+
+| 转换器 | 文件 | 转换方向 |
+|--------|------|----------|
+| `OpenAIChatConverter` | `openai_converter.go` | Responses ↔ OpenAI Chat Completions |
+| `OpenAICompletionsConverter` | `openai_converter.go` | Responses ↔ OpenAI Completions |
+| `ClaudeConverter` | `claude_converter.go` | Responses ↔ Claude Messages API |
+| `ResponsesPassthroughConverter` | `responses_passthrough.go` | Responses ↔ Responses (透传) |
+
+#### 工厂模式
+
+```go
+func NewConverter(serviceType string) ResponsesConverter {
+    switch serviceType {
+    case "openai":
+        return &OpenAIChatConverter{}
+    case "openaiold":
+        return &OpenAICompletionsConverter{}
+    case "claude":
+        return &ClaudeConverter{}
+    case "responses":
+        return &ResponsesPassthroughConverter{}
+    default:
+        return &OpenAIChatConverter{}
+    }
+}
+```
+
+#### 核心转换逻辑
+
+**1. Instructions 字段处理**
+
+```go
+// OpenAI: instructions → messages[0] (role: system)
+if req.Instructions != "" {
+    messages = append(messages, map[string]interface{}{
+        "role": "system",
+        "content": req.Instructions,
+    })
+}
+
+// Claude: instructions → system 参数（独立字段）
+if req.Instructions != "" {
+    claudeReq["system"] = req.Instructions
+}
+```
+
+**2. 嵌套 Content 数组提取**
+
+```go
+func extractTextFromContent(content interface{}) string {
+    // 1. 如果是 string，直接返回
+    if str, ok := content.(string); ok {
+        return str
+    }
+
+    // 2. 如果是 []ContentBlock，提取 input_text/output_text
+    if arr, ok := content.([]interface{}); ok {
+        texts := []string{}
+        for _, c := range arr {
+            if block["type"] == "input_text" || block["type"] == "output_text" {
+                texts = append(texts, block["text"])
+            }
+        }
+        return strings.Join(texts, "\n")
+    }
+
+    return ""
+}
+```
+
+**3. Message Type 区分**
+
+```go
+switch item.Type {
+case "message":
+    // 新格式：嵌套结构（type=message, role=user/assistant, content=[]ContentBlock）
+    role := item.Role  // 直接从 item.role 获取
+    contentText := extractTextFromContent(item.Content)
+
+case "text":
+    // 旧格式：简单 string（向后兼容）
+    contentStr := extractTextFromContent(item.Content)
+    role := item.Role  // 使用 role 字段，不再依赖 [ASSISTANT] 前缀
+}
+```
+
+#### 架构优势
+
+- **易于扩展** - 新增上游只需实现 `ResponsesConverter` 接口
+- **职责清晰** - 转换逻辑与 Provider 解耦
+- **可测试性** - 每个转换器可独立测试
+- **代码复用** - 公共逻辑提取到 `extractTextFromContent` 等基础函数
+- **统一流程** - 所有上游使用相同的转换流程
+
+#### 使用示例
+
+```go
+// 在 ResponsesProvider 中使用
+converter := converters.NewConverter(upstream.ServiceType)
+providerReq, err := converter.ToProviderRequest(sess, &responsesReq)
+```
+
+#### 支持的 Responses API 格式
+
+```json
+{
+  "model": "gpt-4",
+  "instructions": "You are a helpful assistant.",  // ✅ 新增
+  "input": [
+    {
+      "type": "message",  // ✅ 新增
+      "role": "user",     // ✅ 新增
+      "content": [
+        {
+          "type": "input_text",  // ✅ 新增
+          "text": "Hello!"
+        }
+      ]
+    }
+  ],
+  "previous_response_id": "resp_xxxxx",
+  "max_tokens": 1000
+}
+```
+
+**对比旧格式**：
+
+```json
+{
+  "model": "gpt-4",
+  "input": [
+    {
+      "type": "text",
+      "content": "Hello!"  // 简单 string
+    },
+    {
+      "type": "text",
+      "content": "[ASSISTANT]Hi there!"  // ❌ 使用前缀 hack
+    }
+  ]
+}
+```
+
+### 5. 中间件模式
 
 Express/Gin 使用中间件架构处理横切关注点：
 
