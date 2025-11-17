@@ -109,6 +109,15 @@ func compactContentArray(contents []interface{}) []interface{} {
 							compact["text"] = text
 						}
 					}
+				case "input_text", "output_text":
+					// Responses API 的 input/output 类型
+					if text, ok := contentMap["text"].(string); ok {
+						if len(text) > 200 {
+							compact["text"] = text[:200] + "..."
+						} else {
+							compact["text"] = text
+						}
+					}
 				case "tool_use":
 					if id, ok := contentMap["id"].(string); ok {
 						compact["id"] = id
@@ -357,7 +366,8 @@ func formatJSONWithCompactArrays(data interface{}, indent string, depth int) str
 			if firstItem, ok := v[0].(map[string]interface{}); ok {
 				if typeVal, ok := firstItem["type"].(string); ok {
 					// 如果第一个元素有type字段,且看起来是content项,使用紧凑格式
-					if typeVal == "text" || typeVal == "tool_use" || typeVal == "tool_result" || typeVal == "image" {
+					if typeVal == "text" || typeVal == "tool_use" || typeVal == "tool_result" || typeVal == "image" ||
+						typeVal == "input_text" || typeVal == "output_text" {
 						isCompactContent = true
 					}
 				}
