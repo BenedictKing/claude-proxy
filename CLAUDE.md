@@ -25,23 +25,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 变更记录 (最近3次)
 
+### 2025-11-18 (v2.0.6-go)
+
+- **Bug修复**: 修复 Responses API 透传模式字段丢失和零值字段污染问题
+- **日志优化**: 修复日志中 input_text/output_text 类型内容不显示的问题
+- **代码改进**: 使用 map 实现真正的 JSON 透传，符合 KISS 原则
+
+### 2025-11-15 (v2.0.5-go)
+
+- **重大重构**: Responses API 转换器架构重构（策略模式 + 工厂模式）
+- **新增功能**: 完整支持 Responses API 标准格式（instructions、嵌套 content 等）
+- **代码优化**: ResponsesProvider 代码从 ~260 行减少到 ~130 行
+
 ### 2025-11-14 (v2.0.4-go)
 
 - **新增功能**: Web UI 标题栏集成 API 类型切换（Claude/Codex）
 - **UI优化**: 移除独立 Tab 卡片，标题栏下划线高亮设计
 - **交互提升**: 平滑动画、悬停反馈、自动数据同步
-
-### 2025-10-13 (v2.0.3-go)
-
-- **功能增强**: 故障转移与降级、上游请求超时与重试、健康检查优化
-- **Bug修复**: 流式响应优化、代理逻辑改进
-- **代码重构**: JSON处理性能优化
-
-### 2025-10-12 (v2.0.2-go)
-
-- **添加API密钥复制功能**：渠道卡片和编辑弹框支持一键复制
-- **实现自动登录功能**：页面刷新时自动验证访问密钥
-- **修复双重登录框问题**：移除Go后端HTML登录页面
 
 > 📚 完整变更历史请参考 [CHANGELOG.md](CHANGELOG.md)
 
