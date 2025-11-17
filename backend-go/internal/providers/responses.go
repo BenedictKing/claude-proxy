@@ -14,6 +14,7 @@ import (
 	"github.com/BenedictKing/claude-proxy/internal/converters"
 	"github.com/BenedictKing/claude-proxy/internal/session"
 	"github.com/BenedictKing/claude-proxy/internal/types"
+	"github.com/BenedictKing/claude-proxy/internal/utils"
 )
 
 // ResponsesProvider Responses API 提供商
@@ -27,37 +28,57 @@ func (p *ResponsesProvider) ConvertToProviderRequest(
 	upstream *config.UpstreamConfig,
 	apiKey string,
 ) (*http.Request, []byte, error) {
-	// 1. 解析 Responses 请求
+	// 1. 读取原始请求体
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		return nil, nil, fmt.Errorf("读取请求体失败: %w", err)
 	}
 	c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
-	var responsesReq types.ResponsesRequest
-	if err := json.Unmarshal(bodyBytes, &responsesReq); err != nil {
-		return nil, bodyBytes, fmt.Errorf("解析 Responses 请求失败: %w", err)
-	}
+	var providerReq interface{}
 
-	// 2. 获取或创建会话
-	sess, err := p.SessionManager.GetOrCreateSession(responsesReq.PreviousResponseID)
-	if err != nil {
-		return nil, bodyBytes, fmt.Errorf("获取会话失败: %w", err)
-	}
-
-	// 3. 模型重定向
-	responsesReq.Model = config.RedirectModel(responsesReq.Model, upstream)
-
-	// 4. 使用转换器工厂创建转换器
+	// 2. 使用转换器工厂创建转换器
 	converter := converters.NewConverter(upstream.ServiceType)
 
-	// 5. 转换请求
-	providerReq, err := converter.ToProviderRequest(sess, &responsesReq)
-	if err != nil {
-		return nil, bodyBytes, fmt.Errorf("转换请求失败: %w", err)
+	// 3. 判断是否为透传模式
+	if _, ok := converter.(*converters.ResponsesPassthroughConverter); ok {
+		// ✅ 透传模式：使用 map 保留所有字段
+		var reqMap map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &reqMap); err != nil {
+			return nil, bodyBytes, fmt.Errorf("透传模式下解析请求失败: %w", err)
+		}
+
+		// 只做模型重定向
+		if model, ok := reqMap["model"].(string); ok {
+			reqMap["model"] = config.RedirectModel(model, upstream)
+		}
+
+		providerReq = reqMap
+	} else {
+		// ✅ 非透传模式：保持原有逻辑
+		var responsesReq types.ResponsesRequest
+		if err := json.Unmarshal(bodyBytes, &responsesReq); err != nil {
+			return nil, bodyBytes, fmt.Errorf("解析 Responses 请求失败: %w", err)
+		}
+
+		// 获取或创建会话
+		sess, err := p.SessionManager.GetOrCreateSession(responsesReq.PreviousResponseID)
+		if err != nil {
+			return nil, bodyBytes, fmt.Errorf("获取会话失败: %w", err)
+		}
+
+		// 模型重定向
+		responsesReq.Model = config.RedirectModel(responsesReq.Model, upstream)
+
+		// 转换请求
+		convertedReq, err := converter.ToProviderRequest(sess, &responsesReq)
+		if err != nil {
+			return nil, bodyBytes, fmt.Errorf("转换请求失败: %w", err)
+		}
+		providerReq = convertedReq
 	}
 
-	// 6. 序列化请求体
+	// 4. 序列化请求体
 	reqBody, err := json.Marshal(providerReq)
 	if err != nil {
 		return nil, bodyBytes, fmt.Errorf("序列化请求失败: %w", err)
@@ -70,8 +91,27 @@ func (p *ResponsesProvider) ConvertToProviderRequest(
 		return nil, bodyBytes, err
 	}
 
-	// 8. 设置请求头
-	p.setRequestHeaders(req, upstream, apiKey)
+	// 8. 设置请求头（透明代理）
+	// 使用统一的头部处理逻辑，保留客户端的大部分 headers
+	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
+
+	// 删除客户端的所有认证头，避免冲突
+	req.Header.Del("authorization")
+	req.Header.Del("x-api-key")
+	req.Header.Del("x-goog-api-key")
+
+	// 根据 ServiceType 设置对应的认证头
+	switch upstream.ServiceType {
+	case "gemini":
+		// 只有 Gemini 使用特殊的认证头
+		utils.SetGeminiAuthenticationHeader(req.Header, apiKey)
+	default:
+		// claude, responses, openai 等都使用 Authorization: Bearer
+		utils.SetAuthenticationHeader(req.Header, apiKey)
+	}
+
+	// 确保 Content-Type 正确
+	req.Header.Set("Content-Type", "application/json")
 
 	return req, bodyBytes, nil
 }
@@ -105,20 +145,6 @@ func (p *ResponsesProvider) buildTargetURL(upstream *config.UpstreamConfig) stri
 	}
 	return baseURL + "/v1" + endpoint
 }
-
-// setRequestHeaders 设置请求头
-func (p *ResponsesProvider) setRequestHeaders(req *http.Request, upstream *config.UpstreamConfig, apiKey string) {
-	req.Header.Set("Content-Type", "application/json")
-
-	switch upstream.ServiceType {
-	case "claude":
-		req.Header.Set("x-api-key", apiKey)
-		req.Header.Set("anthropic-version", "2023-06-01")
-	default:
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
-	}
-}
-
 
 // ConvertToClaudeResponse 将上游响应转换为 Responses 格式（实际上不再需要 Claude 格式）
 func (p *ResponsesProvider) ConvertToClaudeResponse(providerResp *types.ProviderResponse) (*types.ClaudeResponse, error) {

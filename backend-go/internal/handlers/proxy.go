@@ -164,7 +164,16 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gi
 					lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)
 					failedKeys[apiKey] = true
 					cfgManager.MarkKeyAsFailed(apiKey)
-					log.Printf("⚠️ API密钥失败，原因: %s", string(bodyBytes))
+
+					// 增强的日志输出
+					log.Printf("⚠️ API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
+					if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
+						formattedBody := utils.FormatJSONBytesForLog(bodyBytes, 500)
+						log.Printf("📦 失败原因:\n%s", formattedBody)
+					} else if envCfg.EnableResponseLogs {
+						// 生产环境打印简短信息
+						log.Printf("失败原因: %s", string(bodyBytes))
+					}
 
 					// 记录最后一次failover错误（用于所有密钥失败时返回）
 					lastFailoverError = &struct {
@@ -183,7 +192,25 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gi
 					continue
 				}
 
-				// 非 failover 错误，直接返回
+				// 非 failover 错误，记录日志后返回
+				if envCfg.EnableResponseLogs {
+					log.Printf("⚠️ 上游返回错误: %d", resp.StatusCode)
+					if envCfg.IsDevelopment() {
+						// 格式化错误响应体
+						formattedBody := utils.FormatJSONBytesForLog(bodyBytes, 500)
+						log.Printf("📦 错误响应体:\n%s", formattedBody)
+
+						// 打印错误响应头
+						respHeaders := make(map[string]string)
+						for key, values := range resp.Header {
+							if len(values) > 0 {
+								respHeaders[key] = values[0]
+							}
+						}
+						respHeadersJSON, _ := json.MarshalIndent(respHeaders, "", "  ")
+						log.Printf("📋 错误响应头:\n%s", string(respHeadersJSON))
+					}
+				}
 				c.Data(resp.StatusCode, "application/json", bodyBytes)
 				return
 			}
@@ -349,6 +376,9 @@ func handleNormalResponse(c *gin.Context, resp *http.Response, provider provider
 		}
 	}()
 
+	// 转发上游响应头到客户端（透明代理）
+	utils.ForwardResponseHeaders(resp.Header, c.Writer)
+
 	c.JSON(200, claudeResp)
 
 	// 响应完成后记录
@@ -368,7 +398,10 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 		return
 	}
 
-	// 设置 SSE 响应头
+	// 先转发上游响应头（透明代理）
+	utils.ForwardResponseHeaders(resp.Header, c.Writer)
+
+	// 设置 SSE 响应头（可能覆盖上游的 Content-Type）
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")

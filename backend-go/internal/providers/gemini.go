@@ -55,9 +55,9 @@ func (p *GeminiProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		return nil, originalBodyBytes, fmt.Errorf("创建Gemini请求失败: %w", err)
 	}
 
-	// 对于Gemini类型的渠道,使用最小化头部(只包含必要的头部)
-	// 避免转发Anthropic特定的头部导致上游拒绝请求
-	req.Header = utils.PrepareMinimalHeaders(req.URL.Host)
+	// 使用统一的头部处理逻辑（透明代理）
+	// 保留客户端的大部分 headers，只移除/替换必要的认证和代理相关 headers
+	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
 	utils.SetGeminiAuthenticationHeader(req.Header, apiKey)
 
 	return req, originalBodyBytes, nil

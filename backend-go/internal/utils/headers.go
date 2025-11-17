@@ -42,21 +42,16 @@ func PrepareMinimalHeaders(targetHost string) http.Header {
 	return headers
 }
 
-// SetAuthenticationHeader 设置认证头部（支持Claude和通用Bearer格式）
+// SetAuthenticationHeader 设置认证头部（统一使用Bearer格式）
 func SetAuthenticationHeader(headers http.Header, apiKey string) {
 	// 移除旧的认证头
 	headers.Del("authorization")
 	headers.Del("x-api-key")
 	headers.Del("x-goog-api-key")
 
-	// 根据密钥格式设置对应的认证头
-	if strings.HasPrefix(apiKey, "sk-ant-") {
-		// Claude官方格式
-		headers.Set("x-api-key", apiKey)
-	} else {
-		// 通用Bearer格式（适用于OpenAI等）
-		headers.Set("Authorization", "Bearer "+apiKey)
-	}
+	// 统一使用 Authorization: Bearer 格式
+	// 所有上游服务（claude, responses, openai 等）都使用此格式
+	headers.Set("Authorization", "Bearer "+apiKey)
 }
 
 // SetGeminiAuthenticationHeader 设置Gemini认证头部
@@ -74,6 +69,33 @@ func EnsureCompatibleUserAgent(headers http.Header, serviceType string) {
 	if serviceType == "claude" {
 		if userAgent == "" || !strings.HasPrefix(strings.ToLower(userAgent), "claude-cli") {
 			headers.Set("User-Agent", "claude-cli/1.0.58 (external, cli)")
+		}
+	}
+}
+
+// ForwardResponseHeaders 转发上游响应头到客户端
+// 作为透明代理，应该转发所有响应头，只过滤框架自动处理的头部
+func ForwardResponseHeaders(upstreamHeaders http.Header, clientWriter http.ResponseWriter) {
+	// 不应转发的头部列表（由框架或代理层自动处理）
+	skipHeaders := map[string]bool{
+		"transfer-encoding": true, // 由框架自动处理
+		"content-length":    true, // 由框架自动处理
+		"connection":        true, // 代理层控制
+		"content-encoding":  true, // 如果已解压则不应转发
+	}
+
+	// 复制所有上游响应头到客户端
+	for key, values := range upstreamHeaders {
+		lowerKey := strings.ToLower(key)
+
+		// 跳过不应转发的头部
+		if skipHeaders[lowerKey] {
+			continue
+		}
+
+		// 转发头部（可能有多个值）
+		for _, value := range values {
+			clientWriter.Header().Add(key, value)
 		}
 	}
 }
