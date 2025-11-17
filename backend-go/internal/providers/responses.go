@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -76,21 +77,33 @@ func (p *ResponsesProvider) ConvertToProviderRequest(
 }
 
 // buildTargetURL 根据上游类型构建目标 URL
+// 智能拼接逻辑：
+// 1. 如果 baseURL 已包含版本号后缀（如 /v1, /v2, /v8, /v1beta），直接拼接端点路径
+// 2. 如果 baseURL 不包含版本号后缀，自动添加 /v1 再拼接端点路径
 func (p *ResponsesProvider) buildTargetURL(upstream *config.UpstreamConfig) string {
 	baseURL := strings.TrimSuffix(upstream.BaseURL, "/")
 
+	// 使用正则表达式检测 baseURL 是否以版本号结尾（/v1, /v2, /v1beta, /v2alpha等）
+	versionPattern := regexp.MustCompile(`/v\d+[a-z]*$`)
+	hasVersionSuffix := versionPattern.MatchString(baseURL)
+
+	// 根据 ServiceType 确定端点路径
+	var endpoint string
 	switch upstream.ServiceType {
 	case "responses":
-		return fmt.Sprintf("%s/v1/responses", baseURL)
+		endpoint = "/responses"
 	case "claude":
-		return fmt.Sprintf("%s/v1/messages", baseURL)
-	case "openai":
-		return fmt.Sprintf("%s/v1/chat/completions", baseURL)
-	case "openaiold":
-		return fmt.Sprintf("%s/v1/completions", baseURL)
+		endpoint = "/messages"
 	default:
-		return fmt.Sprintf("%s/v1/chat/completions", baseURL)
+		endpoint = "/chat/completions"
 	}
+
+	// 如果 baseURL 已包含版本号，直接拼接端点
+	// 否则添加 /v1 再拼接端点
+	if hasVersionSuffix {
+		return baseURL + endpoint
+	}
+	return baseURL + "/v1" + endpoint
 }
 
 // setRequestHeaders 设置请求头
