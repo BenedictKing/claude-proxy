@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -113,6 +115,17 @@ func ResponsesHandler(
 				if envCfg.IsDevelopment() {
 					formattedBody := utils.FormatJSONBytesForLog(lastOriginalBodyBytes, 500)
 					log.Printf("📄 原始请求体:\n%s", formattedBody)
+
+					// 对请求头做敏感信息脱敏
+					sanitizedHeaders := make(map[string]string)
+					for key, values := range c.Request.Header {
+						if len(values) > 0 {
+							sanitizedHeaders[key] = values[0]
+						}
+					}
+					maskedHeaders := utils.MaskSensitiveHeaders(sanitizedHeaders)
+					headersJSON, _ := json.MarshalIndent(maskedHeaders, "", "  ")
+					log.Printf("📥 原始请求头:\n%s", string(headersJSON))
 				}
 			}
 
@@ -214,6 +227,32 @@ func sendResponsesRequest(req *http.Request, upstream *config.UpstreamConfig, en
 
 	if envCfg.EnableRequestLogs {
 		log.Printf("🌐 实际请求URL: %s", req.URL.String())
+		log.Printf("📤 请求方法: %s", req.Method)
+		if envCfg.IsDevelopment() {
+			// 对请求头做敏感信息脱敏
+			reqHeaders := make(map[string]string)
+			for key, values := range req.Header {
+				if len(values) > 0 {
+					reqHeaders[key] = values[0]
+				}
+			}
+			maskedReqHeaders := utils.MaskSensitiveHeaders(reqHeaders)
+			reqHeadersJSON, _ := json.MarshalIndent(maskedReqHeaders, "", "  ")
+			log.Printf("📋 实际请求头:\n%s", string(reqHeadersJSON))
+
+			if req.Body != nil {
+				// 读取请求体用于日志
+				bodyBytes, err := io.ReadAll(req.Body)
+				if err == nil {
+					// 恢复请求体
+					req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+					// 使用智能截断和简化函数（与TS版本对齐）
+					formattedBody := utils.FormatJSONBytesForLog(bodyBytes, 500)
+					log.Printf("📦 实际请求体:\n%s", formattedBody)
+				}
+			}
+		}
 	}
 
 	return client.Do(req)
@@ -248,16 +287,64 @@ func handleResponsesSuccess(
 		c.Header("Connection", "keep-alive")
 		c.Header("X-Accel-Buffering", "no")
 
-		// 直接转发流式响应
+		// 创建流式内容合成器（仅在开发模式下）
+		var synthesizer *utils.StreamSynthesizer
+		var logBuffer bytes.Buffer
+		if envCfg.IsDevelopment() {
+			synthesizer = utils.NewStreamSynthesizer("responses")
+		}
+
+		// 转发流式响应并记录内容
 		c.Status(resp.StatusCode)
-		_, err := io.Copy(c.Writer, resp.Body)
-		if err != nil {
-			log.Printf("⚠️ 流式响应传输错误: %v", err)
+		flusher, _ := c.Writer.(http.Flusher)
+
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			// 写入客户端
+			_, err := c.Writer.Write([]byte(line + "\n"))
+			if err != nil {
+				log.Printf("⚠️ 流式响应传输错误: %v", err)
+				break
+			}
+
+			if flusher != nil {
+				flusher.Flush()
+			}
+
+			// 记录日志（仅在开发模式下）
+			if envCfg.IsDevelopment() {
+				logBuffer.WriteString(line + "\n")
+				if synthesizer != nil {
+					synthesizer.ProcessLine(line)
+				}
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			log.Printf("⚠️ 流式响应读取错误: %v", err)
 		}
 
 		if envCfg.EnableResponseLogs {
 			responseTime := time.Since(startTime).Milliseconds()
 			log.Printf("✅ Responses 流式响应完成: %dms", responseTime)
+
+			// 打印完整的响应内容
+			if envCfg.IsDevelopment() {
+				if synthesizer != nil {
+					synthesizedContent := synthesizer.GetSynthesizedContent()
+					parseFailed := synthesizer.IsParseFailed()
+					if synthesizedContent != "" && !parseFailed {
+						log.Printf("🛰️  上游流式响应合成内容:\n%s", strings.TrimSpace(synthesizedContent))
+					} else if logBuffer.Len() > 0 {
+						log.Printf("🛰️  上游流式响应原始内容:\n%s", logBuffer.String())
+					}
+				} else if logBuffer.Len() > 0 {
+					// synthesizer为nil时，直接打印原始内容
+					log.Printf("🛰️  上游流式响应原始内容:\n%s", logBuffer.String())
+				}
+			}
 		}
 		return
 	}
@@ -273,6 +360,16 @@ func handleResponsesSuccess(
 		responseTime := time.Since(startTime).Milliseconds()
 		log.Printf("⏱️ Responses 响应完成: %dms, 状态: %d", responseTime, resp.StatusCode)
 		if envCfg.IsDevelopment() {
+			// 响应头(不需要脱敏)
+			respHeaders := make(map[string]string)
+			for key, values := range resp.Header {
+				if len(values) > 0 {
+					respHeaders[key] = values[0]
+				}
+			}
+			respHeadersJSON, _ := json.MarshalIndent(respHeaders, "", "  ")
+			log.Printf("📋 响应头:\n%s", string(respHeadersJSON))
+
 			formattedBody := utils.FormatJSONBytesForLog(bodyBytes, 500)
 			log.Printf("📦 响应体:\n%s", formattedBody)
 		}
