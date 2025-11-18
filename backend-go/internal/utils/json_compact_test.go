@@ -239,3 +239,91 @@ func TestFormatJSONBytesForLog(t *testing.T) {
 
 	t.Logf("格式化结果:\n%s", result)
 }
+
+// TestCodexResponsesFormat 测试 Codex Responses API 格式的压缩显示
+func TestCodexResponsesFormat(t *testing.T) {
+	// 模拟 Codex Responses API 的请求体
+	input := map[string]interface{}{
+		"input": []interface{}{
+			map[string]interface{}{
+				"role": "assistant",
+				"content": []interface{}{
+					map[string]interface{}{
+						"type": "output_text",
+						"text": "- This repo is a desktop 文档智能评分系统 built with Wails v3: Go backend + Vue 3 frontend; it parallel-scores DOCX/PDF/PPTX/TXT docs via multiple AI models (Kimi, MiniMax, DeepSeek), su...",
+					},
+				},
+			},
+			map[string]interface{}{
+				"role": "user",
+				"content": []interface{}{
+					map[string]interface{}{
+						"type": "input_text",
+						"text": "[截屏2025-11-18 12.09.22.png 3022x2022] 失败的时候正在评分这个消息一直消不掉",
+					},
+					map[string]interface{}{
+						"type": "input_image",
+					},
+				},
+			},
+			map[string]interface{}{
+				"type": "reasoning",
+				"content": nil,
+				"encrypted_content": "gAAAAABpG_GLKdJFoKhQfJKcN5k9efb8cQRy3md40ZemIZlJMlmuGgxhTjUtFPwmTAToAwIDtPsPMoOxV8SwDDLohrOqLqUMNEBgFV3ZBNgbNamdzu_jRW7JiFFpB8supDB4lIWyIhvh6HwuHP-8it62DBcdKp9U_V1GuSsP96C8GacKBEEyUmmcHbAcgXj341PxsVpiLx3y5xS18kXTXafmVK_EATeun9vLZ-A9m2BbbEfXoC4zb1AfUGQ_46sZyYXZNWr-v3gbbRkPug4Hq8j4d8vHMmDqNHGDuuScL5r63obEnrrhdTl9dbpOeSgIm7ag-fzmdofyP4I4XKx_SUxaEbTbWbHxunTYpA4lZy04Qw0b85TTvY62G6hcik5i-l5b6LgU0LTycR9lp_LE8OnAswvjLT3HQz6tFzZM288H1vWykftDb-eCyOX4pXn7WP4HFFNp_GvoVy1RPGJh_QbVxKAZCYiv0_7AaSjpv1_RS8EYbssy...",
+				"summary": []interface{}{
+					map[string]interface{}{
+						"type": "summary_text",
+						"text": "**Investigating status toast bug**",
+					},
+				},
+			},
+			map[string]interface{}{
+				"call_id":   "call_FIgewLLjtlkutO7mK5scikpN",
+				"name":      "shell",
+				"type":      "function_call",
+				"arguments": `{"command":["bash","-lc","ls frontend/src"],"workdir":"/Users/petaflops/projects/doc-scorer-wails"}`,
+			},
+		},
+	}
+
+	result := FormatJSONForLog(input, 500)
+
+	// 验证 input 数组被压缩成单行
+	lines := strings.Split(result, "\n")
+	var inputArrayLines []string
+	inInputArray := false
+	for _, line := range lines {
+		if strings.Contains(line, `"input":`) {
+			inInputArray = true
+		}
+		if inInputArray {
+			inputArrayLines = append(inputArrayLines, line)
+			if strings.Contains(line, "]") && !strings.Contains(line, "[") {
+				break
+			}
+		}
+	}
+
+	// 验证每个 message 对象都在单行
+	inputArrayStr := strings.Join(inputArrayLines, "\n")
+	if !strings.Contains(inputArrayStr, `{"role": "assistant"`) {
+		t.Error("input 数组中的 message 对象应该被压缩成单行")
+	}
+
+	// 验证 reasoning 类型被压缩
+	if !strings.Contains(result, `"type": "reasoning"`) {
+		t.Error("应该包含 reasoning 类型")
+	}
+
+	// 验证 function_call 类型被压缩
+	if !strings.Contains(result, `"type": "function_call"`) {
+		t.Error("应该包含 function_call 类型")
+	}
+
+	// 验证 encrypted_content 被截断
+	if strings.Contains(result, "gAAAAABpG_GLKdJFoKhQfJKcN5k9efb8cQRy3md40ZemIZlJMlmuGgxhTjUtFPwmTAToAwIDtPsPMoOxV8SwDDLohrOqLqUMNEBgFV3ZBNgbNamdzu_jRW7JiFFpB8supDB4lIWyIhvh6HwuHP-8it62DBcdKp9U_V1GuSsP96C8GacKBEEyUmmcHbAcgXj341PxsVpiLx3y5xS18kXTXafmVK_EATeun9vLZ-A9m2BbbEfXoC4zb1AfUGQ_46sZyYXZNWr-v3gbbRkPug4Hq8j4d8vHMmDqNHGDuuScL5r63obEnrrhdTl9dbpOeSgIm7ag-fzmdofyP4I4XKx_SUxaEbTbWbHxunTYpA4lZy04Qw0b85TTvY62G6hcik5i-l5b6LgU0LTycR9lp_LE8OnAswvjLT3HQz6tFzZM288H1vWykftDb-eCyOX4pXn7WP4HFFNp_GvoVy1RPGJh_QbVxKAZCYiv0_7AaSjpv1_RS8EYbssy...") {
+		t.Error("encrypted_content 应该被截断")
+	}
+
+	t.Logf("Codex Responses 格式化结果:\n%s", result)
+}

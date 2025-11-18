@@ -42,16 +42,22 @@ func PrepareMinimalHeaders(targetHost string) http.Header {
 	return headers
 }
 
-// SetAuthenticationHeader 设置认证头部（统一使用Bearer格式）
+// SetAuthenticationHeader 设置认证头部（根据密钥格式智能选择）
 func SetAuthenticationHeader(headers http.Header, apiKey string) {
 	// 移除旧的认证头
 	headers.Del("authorization")
 	headers.Del("x-api-key")
 	headers.Del("x-goog-api-key")
 
-	// 统一使用 Authorization: Bearer 格式
-	// 所有上游服务（claude, responses, openai 等）都使用此格式
-	headers.Set("Authorization", "Bearer "+apiKey)
+	// Claude 官方密钥格式（sk-ant-api03-xxx）使用 x-api-key
+	// 符合 Claude API 官方推荐的认证方式
+	if strings.HasPrefix(apiKey, "sk-ant-") {
+		headers.Set("x-api-key", apiKey)
+	} else {
+		// 其他格式密钥使用 Authorization: Bearer
+		// 适用于 OpenAI、自定义密钥等
+		headers.Set("Authorization", "Bearer "+apiKey)
+	}
 }
 
 // SetGeminiAuthenticationHeader 设置Gemini认证头部

@@ -151,6 +151,52 @@ func compactContentArray(contents []interface{}) []interface{} {
 							"type": source["type"],
 						}
 					}
+				case "reasoning":
+					// Codex Responses API 的 reasoning 类型
+					// 保留 summary，截断 encrypted_content
+					if summary, ok := contentMap["summary"]; ok {
+						compact["summary"] = summary
+					}
+					if encryptedContent, ok := contentMap["encrypted_content"].(string); ok {
+						if len(encryptedContent) > 100 {
+							compact["encrypted_content"] = encryptedContent[:100] + "..."
+						} else {
+							compact["encrypted_content"] = encryptedContent
+						}
+					}
+					// 保留其他可能的字段（如 content）
+					if content, ok := contentMap["content"]; ok {
+						compact["content"] = content
+					}
+				case "function_call":
+					// Codex Responses API 的 function_call 类型
+					if callID, ok := contentMap["call_id"].(string); ok {
+						compact["call_id"] = callID
+					}
+					if name, ok := contentMap["name"].(string); ok {
+						compact["name"] = name
+					}
+					// arguments 字段截断显示
+					if args, ok := contentMap["arguments"].(string); ok {
+						if len(args) > 200 {
+							compact["arguments"] = args[:200] + "..."
+						} else {
+							compact["arguments"] = args
+						}
+					}
+				case "function_call_output":
+					// Codex Responses API 的 function_call_output 类型
+					if callID, ok := contentMap["call_id"].(string); ok {
+						compact["call_id"] = callID
+					}
+					// output 字段截断显示
+					if output, ok := contentMap["output"].(string); ok {
+						if len(output) > 200 {
+							compact["output"] = output[:200] + "..."
+						} else {
+							compact["output"] = output
+						}
+					}
 				}
 			}
 			result[i] = compact
@@ -274,6 +320,22 @@ func formatMapAsOneLine(m map[string]interface{}) string {
 			}
 		}
 
+		// 对于长字符串字段（如 encrypted_content, arguments, output），进行截断
+		if k == "encrypted_content" || k == "arguments" || k == "output" || k == "text" {
+			if strVal, ok := v.(string); ok {
+				maxLen := 100
+				if k == "arguments" || k == "output" || k == "text" {
+					maxLen = 200
+				}
+				if len(strVal) > maxLen {
+					truncated := strVal[:maxLen] + "..."
+					valueJSON, _ := json.Marshal(truncated)
+					pairs = append(pairs, string(keyJSON)+": "+string(valueJSON))
+					continue
+				}
+			}
+		}
+
 		valueJSON, _ := json.Marshal(v)
 		pairs = append(pairs, string(keyJSON)+": "+string(valueJSON))
 	}
@@ -359,6 +421,7 @@ func formatJSONWithCompactArrays(data interface{}, indent string, depth int) str
 
 		// 检查是否是已经紧凑化的content数组
 		isCompactContent := false
+		isInputArray := false
 		isToolsArray := false
 
 		if len(v) > 0 {
@@ -369,6 +432,21 @@ func formatJSONWithCompactArrays(data interface{}, indent string, depth int) str
 					if typeVal == "text" || typeVal == "tool_use" || typeVal == "tool_result" || typeVal == "image" ||
 						typeVal == "input_text" || typeVal == "output_text" {
 						isCompactContent = true
+					}
+					// 检查是否是 Codex input 数组中的特殊类型对象
+					// 这些对象应该被单独压缩成一行
+					if typeVal == "reasoning" || typeVal == "function_call" || typeVal == "function_call_output" {
+						isCompactContent = true
+					}
+				}
+				// 检查是否是 input 数组（包含 message 对象，有 role 字段）
+				// 或者包含 Codex 特殊类型对象
+				if _, hasRole := firstItem["role"]; hasRole {
+					isInputArray = true
+				} else if typeVal, ok := firstItem["type"].(string); ok {
+					// 如果数组包含 reasoning/function_call 等类型，也当作 input 数组处理
+					if typeVal == "reasoning" || typeVal == "function_call" || typeVal == "function_call_output" {
+						isInputArray = true
 					}
 				}
 			} else if _, ok := v[0].(string); ok {
@@ -392,6 +470,31 @@ func formatJSONWithCompactArrays(data interface{}, indent string, depth int) str
 				if itemMap, ok := item.(map[string]interface{}); ok {
 					compactItem := formatMapAsOneLine(itemMap)
 					items[i] = compactItem
+				} else {
+					items[i] = formatJSONWithCompactArrays(item, "", depth+1)
+				}
+			}
+			return "[\n" + indent + "  " + strings.Join(items, ",\n"+indent+"  ") + "\n" + indent + "]"
+		}
+
+		if isInputArray {
+			// input 数组（包含 message 对象和特殊类型对象）使用紧凑单行显示
+			items := make([]string, len(v))
+			for i, item := range v {
+				if itemMap, ok := item.(map[string]interface{}); ok {
+					// 检查是否是 message 对象（有 role 字段）
+					if _, hasRole := itemMap["role"]; hasRole {
+						items[i] = formatMessageAsOneLine(itemMap)
+					} else if typeVal, hasType := itemMap["type"].(string); hasType {
+						// 检查是否是特殊类型对象（reasoning, function_call 等）
+						if typeVal == "reasoning" || typeVal == "function_call" || typeVal == "function_call_output" {
+							items[i] = formatMapAsOneLine(itemMap)
+						} else {
+							items[i] = formatJSONWithCompactArrays(item, "", depth+1)
+						}
+					} else {
+						items[i] = formatJSONWithCompactArrays(item, "", depth+1)
+					}
 				} else {
 					items[i] = formatJSONWithCompactArrays(item, "", depth+1)
 				}
@@ -427,6 +530,16 @@ func formatJSONWithCompactArrays(data interface{}, indent string, depth int) str
 			if _, hasContent := v["content"]; hasContent {
 				// 这是一个message对象，使用紧凑的单行显示
 				return formatMessageAsOneLine(v)
+			}
+		}
+
+		// 检查是否是包含 type 字段的特殊对象（reasoning, function_call, function_call_output 等）
+		if typeVal, hasType := v["type"].(string); hasType {
+			// 这些类型的对象使用紧凑的单行显示
+			if typeVal == "reasoning" || typeVal == "function_call" || typeVal == "function_call_output" ||
+				typeVal == "text" || typeVal == "tool_use" || typeVal == "tool_result" || typeVal == "image" ||
+				typeVal == "input_text" || typeVal == "output_text" {
+				return formatMapAsOneLine(v)
 			}
 		}
 
