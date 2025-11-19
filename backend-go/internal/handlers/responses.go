@@ -130,7 +130,7 @@ func ResponsesHandler(
 			}
 
 			// 发送请求
-			resp, err := sendResponsesRequest(providerReq, upstream, envCfg)
+			resp, err := sendResponsesRequest(providerReq, upstream, envCfg, responsesReq.Stream)
 			if err != nil {
 				lastError = err
 				failedKeys[apiKey] = true
@@ -241,12 +241,18 @@ func ResponsesHandler(
 }
 
 // sendResponsesRequest 发送 Responses 请求
-func sendResponsesRequest(req *http.Request, upstream *config.UpstreamConfig, envCfg *config.EnvConfig) (*http.Response, error) {
+func sendResponsesRequest(req *http.Request, upstream *config.UpstreamConfig, envCfg *config.EnvConfig, isStream bool) (*http.Response, error) {
 	clientManager := httpclient.GetManager()
 
-	// Responses 请求默认使用标准超时
-	timeout := time.Duration(envCfg.RequestTimeout) * time.Millisecond
-	client := clientManager.GetStandardClient(timeout, upstream.InsecureSkipVerify)
+	var client *http.Client
+	if isStream {
+		// 流式请求：使用无超时的流式客户端
+		client = clientManager.GetStreamClient(upstream.InsecureSkipVerify)
+	} else {
+		// 非流式请求：使用环境变量配置的超时时间
+		timeout := time.Duration(envCfg.RequestTimeout) * time.Millisecond
+		client = clientManager.GetStandardClient(timeout, upstream.InsecureSkipVerify)
+	}
 
 	if upstream.InsecureSkipVerify && envCfg.EnableRequestLogs {
 		log.Printf("⚠️ 正在跳过对 %s 的TLS证书验证", req.URL.String())

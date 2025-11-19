@@ -43,7 +43,7 @@ func NewEnvConfig() *EnvConfig {
 		LogLevel:             getEnv("LOG_LEVEL", "info"),
 		EnableRequestLogs:    getEnv("ENABLE_REQUEST_LOGS", "true") != "false",
 		EnableResponseLogs:   getEnv("ENABLE_RESPONSE_LOGS", "true") != "false",
-		RequestTimeout:       getEnvAsInt("REQUEST_TIMEOUT", 30000),
+		RequestTimeout:       getEnvAsInt("REQUEST_TIMEOUT", 300000),
 		MaxConcurrentReqs:    getEnvAsInt("MAX_CONCURRENT_REQUESTS", 100),
 		EnableCORS:           getEnv("ENABLE_CORS", "true") != "false",
 		CORSOrigin:           getEnv("CORS_ORIGIN", "*"),
