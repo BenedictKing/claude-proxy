@@ -411,8 +411,9 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 
 	var logBuffer bytes.Buffer
 	var synthesizer *utils.StreamSynthesizer
-	if envCfg.IsDevelopment() {
-		synthesizer = utils.NewStreamSynthesizer("claude")
+	streamLoggingEnabled := envCfg.IsDevelopment() && envCfg.EnableResponseLogs
+	if streamLoggingEnabled {
+		synthesizer = utils.NewStreamSynthesizer(upstream.ServiceType)
 	}
 
 	w := c.Writer
@@ -453,7 +454,7 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 			}
 
 			// 缓存事件用于最后的日志输出
-			if envCfg.IsDevelopment() && envCfg.EnableResponseLogs {
+			if streamLoggingEnabled {
 				logBuffer.WriteString(event)
 				if synthesizer != nil {
 					lines := strings.Split(event, "\n")

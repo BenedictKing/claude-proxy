@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/httpclient"
 	"github.com/BenedictKing/claude-proxy/internal/middleware"
@@ -19,6 +18,7 @@ import (
 	"github.com/BenedictKing/claude-proxy/internal/session"
 	"github.com/BenedictKing/claude-proxy/internal/types"
 	"github.com/BenedictKing/claude-proxy/internal/utils"
+	"github.com/gin-gonic/gin"
 )
 
 // ResponsesHandler Responses API 代理处理器
@@ -323,11 +323,12 @@ func handleResponsesSuccess(
 		c.Header("Connection", "keep-alive")
 		c.Header("X-Accel-Buffering", "no")
 
-		// 创建流式内容合成器（仅在开发模式下）
+		// 创建流式内容合成器（仅在开发模式并开启响应日志时）
 		var synthesizer *utils.StreamSynthesizer
 		var logBuffer bytes.Buffer
-		if envCfg.IsDevelopment() {
-			synthesizer = utils.NewStreamSynthesizer("responses")
+		streamLoggingEnabled := envCfg.IsDevelopment() && envCfg.EnableResponseLogs
+		if streamLoggingEnabled {
+			synthesizer = utils.NewStreamSynthesizer(upstreamType)
 		}
 
 		// 转发流式响应并记录内容
@@ -350,7 +351,7 @@ func handleResponsesSuccess(
 			}
 
 			// 记录日志（仅在开发模式下）
-			if envCfg.IsDevelopment() {
+			if streamLoggingEnabled {
 				logBuffer.WriteString(line + "\n")
 				if synthesizer != nil {
 					synthesizer.ProcessLine(line)

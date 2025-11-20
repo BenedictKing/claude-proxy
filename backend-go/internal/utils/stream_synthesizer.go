@@ -3,15 +3,19 @@ package utils
 import (
 	"encoding/json"
 	"regexp"
+	"sort"
 	"strings"
 )
 
 // StreamSynthesizer 流式响应内容合成器
 type StreamSynthesizer struct {
-	serviceType       string
-	synthesizedContent strings.Builder
+	serviceType         string
+	synthesizedContent  strings.Builder
 	toolCallAccumulator map[int]*ToolCall
-	parseFailed       bool
+	parseFailed         bool
+
+	// responses专用累积器
+	responsesText map[int]*strings.Builder
 }
 
 // ToolCall 工具调用累积器
@@ -26,6 +30,7 @@ func NewStreamSynthesizer(serviceType string) *StreamSynthesizer {
 	return &StreamSynthesizer{
 		serviceType:         serviceType,
 		toolCallAccumulator: make(map[int]*ToolCall),
+		responsesText:       make(map[int]*strings.Builder),
 	}
 }
 
@@ -72,6 +77,123 @@ func (s *StreamSynthesizer) ProcessLine(line string) {
 		s.processOpenAI(data)
 	case "claude":
 		s.processClaude(data)
+	case "responses":
+		s.processResponses(data)
+	}
+}
+
+// processResponses 处理OpenAI Responses流
+func (s *StreamSynthesizer) processResponses(data map[string]interface{}) {
+	typeStr, _ := data["type"].(string)
+
+	// 辅助方法：获取对应 output_index 的 builder
+	getBuilder := func(index int) *strings.Builder {
+		if s.responsesText[index] == nil {
+			s.responsesText[index] = &strings.Builder{}
+		}
+		return s.responsesText[index]
+	}
+
+	// 获取 output_index
+	getIndex := func() int {
+		if idx, ok := data["output_index"].(float64); ok {
+			return int(idx)
+		}
+		return 0
+	}
+
+	switch typeStr {
+	case "response.output_text.delta":
+		if delta, ok := data["delta"].(string); ok {
+			builder := getBuilder(getIndex())
+			builder.WriteString(delta)
+		}
+	case "response.output_text.done":
+		builder := getBuilder(getIndex())
+		if text, ok := data["text"].(string); ok && text != "" {
+			builder.Reset()
+			builder.WriteString(text)
+		}
+	case "response.completed":
+		// 兜底：从最终响应提取文本
+		if respObj, ok := data["response"].(map[string]interface{}); ok {
+			if outputArr, ok := respObj["output"].([]interface{}); ok {
+				for i, item := range outputArr {
+					itemMap, ok := item.(map[string]interface{})
+					if !ok {
+						continue
+					}
+					if itemMap["type"] != "message" {
+						continue
+					}
+					contentArr, ok := itemMap["content"].([]interface{})
+					if !ok {
+						continue
+					}
+					for _, c := range contentArr {
+						cm, ok := c.(map[string]interface{})
+						if !ok {
+							continue
+						}
+						if cm["type"] != "output_text" {
+							continue
+						}
+						if text, ok := cm["text"].(string); ok && text != "" {
+							builder := getBuilder(i)
+							builder.Reset()
+							builder.WriteString(text)
+							break
+						}
+					}
+				}
+			}
+		}
+	case "response.output_item.added":
+		// 记录函数调用元数据（用于后续拼接日志）
+		if item, ok := data["item"].(map[string]interface{}); ok {
+			if itemType, _ := item["type"].(string); itemType == "function_call" {
+				index := getIndex()
+				if s.toolCallAccumulator[index] == nil {
+					s.toolCallAccumulator[index] = &ToolCall{}
+				}
+				acc := s.toolCallAccumulator[index]
+				if id, ok := item["id"].(string); ok && id != "" {
+					acc.ID = id
+				}
+				if name, ok := item["name"].(string); ok && name != "" {
+					acc.Name = name
+				}
+			}
+		}
+	case "response.function_call_arguments.delta":
+		index := getIndex()
+		if s.toolCallAccumulator[index] == nil {
+			s.toolCallAccumulator[index] = &ToolCall{}
+		}
+		acc := s.toolCallAccumulator[index]
+		if id, ok := data["item_id"].(string); ok && id != "" {
+			acc.ID = id
+		}
+		if delta, ok := data["delta"].(string); ok {
+			acc.Arguments += delta
+		}
+	case "response.function_call_arguments.done":
+		index := getIndex()
+		if s.toolCallAccumulator[index] == nil {
+			s.toolCallAccumulator[index] = &ToolCall{}
+		}
+		acc := s.toolCallAccumulator[index]
+		if id, ok := data["item_id"].(string); ok && id != "" {
+			acc.ID = id
+		}
+		if args, ok := data["arguments"].(string); ok && args != "" {
+			acc.Arguments = args
+		}
+		if item, ok := data["item"].(map[string]interface{}); ok {
+			if name, ok := item["name"].(string); ok && name != "" {
+				acc.Name = name
+			}
+		}
 	}
 }
 
@@ -243,7 +365,30 @@ func (s *StreamSynthesizer) processClaude(data map[string]interface{}) {
 // GetSynthesizedContent 获取合成的内容
 func (s *StreamSynthesizer) GetSynthesizedContent() string {
 	// 不再完全失败，即使有解析错误也返回部分结果
-	result := s.synthesizedContent.String()
+	var result string
+
+	if s.serviceType == "responses" && len(s.responsesText) > 0 {
+		var builder strings.Builder
+		keys := make([]int, 0, len(s.responsesText))
+		for k := range s.responsesText {
+			keys = append(keys, k)
+		}
+		sort.Ints(keys)
+
+		for i, k := range keys {
+			text := s.responsesText[k].String()
+			if text == "" {
+				continue
+			}
+			if i > 0 && builder.Len() > 0 {
+				builder.WriteString("\n")
+			}
+			builder.WriteString(text)
+		}
+		result = builder.String()
+	} else {
+		result = s.synthesizedContent.String()
+	}
 
 	// 添加工具调用信息
 	if len(s.toolCallAccumulator) > 0 {
