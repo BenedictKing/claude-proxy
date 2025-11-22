@@ -402,29 +402,38 @@ const newApiKey = ref('')
 const isPingingAll = ref(false)
 const currentTheme = ref<'light' | 'dark' | 'auto'>('auto')
 
-// Pin状态管理 (使用localStorage持久化)
-const PINNED_CHANNELS_KEY = 'claude-proxy-pinned-channels'
-const pinnedChannels = ref<Set<number>>(new Set())
+// Pin状态管理 (使用localStorage持久化，Claude/Codex分开存储)
+const PINNED_CHANNELS_KEYS: Record<'messages' | 'responses', string> = {
+  messages: 'claude-proxy-pinned-channels',
+  responses: 'codex-proxy-pinned-channels'
+}
+const pinnedChannels = ref<Record<'messages' | 'responses', Set<number>>>({
+  messages: new Set(),
+  responses: new Set()
+})
+
+const getPinnedSet = (tab: 'messages' | 'responses') => pinnedChannels.value[tab] || new Set<number>()
 
 // 从localStorage加载pin状态
-const loadPinnedChannels = () => {
-  try {
-    const saved = localStorage.getItem(PINNED_CHANNELS_KEY)
-    if (saved) {
-      const pinnedArray = JSON.parse(saved) as number[]
-      pinnedChannels.value = new Set(pinnedArray)
+const loadPinnedChannels = (tab?: 'messages' | 'responses') => {
+  const targets = tab ? [tab] : (['messages', 'responses'] as const)
+  targets.forEach(t => {
+    try {
+      const saved = localStorage.getItem(PINNED_CHANNELS_KEYS[t])
+      const loadedSet = saved ? new Set<number>(JSON.parse(saved) as number[]) : new Set<number>()
+      pinnedChannels.value = { ...pinnedChannels.value, [t]: loadedSet }
+    } catch (error) {
+      console.warn('加载pin状态失败:', error)
+      pinnedChannels.value = { ...pinnedChannels.value, [t]: new Set<number>() }
     }
-  } catch (error) {
-    console.warn('加载pin状态失败:', error)
-    pinnedChannels.value = new Set()
-  }
+  })
 }
 
 // 保存pin状态到localStorage
-const savePinnedChannels = () => {
+const savePinnedChannels = (tab: 'messages' | 'responses') => {
   try {
-    const pinnedArray = Array.from(pinnedChannels.value)
-    localStorage.setItem(PINNED_CHANNELS_KEY, JSON.stringify(pinnedArray))
+    const pinnedArray = Array.from(getPinnedSet(tab))
+    localStorage.setItem(PINNED_CHANNELS_KEYS[tab], JSON.stringify(pinnedArray))
   } catch (error) {
     console.warn('保存pin状态失败:', error)
   }
@@ -461,13 +470,14 @@ const sortedChannels = computed(() => {
   if (!data.channels) return []
 
   const channels = [...data.channels]
+  const pinnedSet = getPinnedSet(activeTab.value)
 
   // 排序逻辑：当前渠道 > pinned渠道 > 其他渠道
   return channels.sort((a, b) => {
     const aIsCurrent = a.index === data.current
     const bIsCurrent = b.index === data.current
-    const aIsPinned = pinnedChannels.value.has(a.index)
-    const bIsPinned = pinnedChannels.value.has(b.index)
+    const aIsPinned = pinnedSet.has(a.index)
+    const bIsPinned = pinnedSet.has(b.index)
     
     // 当前渠道始终排在最前面
     if (aIsCurrent && !bIsCurrent) return -1
@@ -527,34 +537,41 @@ const handleError = (error: unknown, defaultMessage: string) => {
 
 // Pin相关函数
 const toggleChannelPin = (channelId: number) => {
-  if (pinnedChannels.value.has(channelId)) {
-    pinnedChannels.value.delete(channelId)
+  const tab = activeTab.value
+  const next = new Set(getPinnedSet(tab))
+
+  if (next.has(channelId)) {
+    next.delete(channelId)
     showToast('渠道已取消置顶', 'info')
   } else {
-    pinnedChannels.value.add(channelId)
+    next.add(channelId)
     showToast('渠道已置顶', 'success')
   }
-  savePinnedChannels()
+
+  pinnedChannels.value = { ...pinnedChannels.value, [tab]: next }
+  savePinnedChannels(tab)
   updateChannelsPinnedStatus()
 }
 
 const isChannelPinned = (channelId: number): boolean => {
-  return pinnedChannels.value.has(channelId)
+  return getPinnedSet(activeTab.value).has(channelId)
 }
 
 // 更新渠道的pinned状态
 const updateChannelsPinnedStatus = () => {
   // 更新 Messages Tab 的渠道数据
   if (channelsData.value.channels) {
+    const messagesPinned = getPinnedSet('messages')
     channelsData.value.channels.forEach(channel => {
-      channel.pinned = pinnedChannels.value.has(channel.index)
+      channel.pinned = messagesPinned.has(channel.index)
     })
   }
 
   // 更新 Codex Tab 的渠道数据
   if (responsesChannelsData.value.channels) {
+    const responsesPinned = getPinnedSet('responses')
     responsesChannelsData.value.channels.forEach(channel => {
-      channel.pinned = pinnedChannels.value.has(channel.index)
+      channel.pinned = responsesPinned.has(channel.index)
     })
   }
 }
