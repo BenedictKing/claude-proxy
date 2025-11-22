@@ -4,6 +4,19 @@
 
 ---
 
+## [v2.0.7-go] - 2025-11-22
+
+### ✨ 改进
+
+- Codex Responses 负载均衡独立配置：新增 `responsesLoadBalance` 字段和 `/api/responses/loadbalance` 路由，前端在 Codex 标签页单独设置策略，不再影响 Claude 渠道。
+- 置顶状态分离：Codex 管理页置顶改用 `codex-proxy-pinned-channels`，不再与 Claude 共享 localStorage。
+
+### 🔧 兼容性
+
+- 旧配置文件若未包含 `responsesLoadBalance` 将自动回退到现有 `loadBalance`，无需手工迁移。
+
+---
+
 ## [v2.0.6-go] - 2025-11-18
 
 ### 🐛 Bug 修复
