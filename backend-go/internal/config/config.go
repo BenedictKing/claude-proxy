@@ -7,9 +7,9 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
-	"strings"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -47,6 +47,7 @@ type Config struct {
 	// Responses 接口专用配置（独立于 /v1/messages）
 	ResponsesUpstream        []UpstreamConfig `json:"responsesUpstream"`
 	CurrentResponsesUpstream int              `json:"currentResponsesUpstream"`
+	ResponsesLoadBalance     string           `json:"responsesLoadBalance"`
 }
 
 // FailedKey 失败密钥记录
@@ -57,29 +58,30 @@ type FailedKey struct {
 
 // ConfigManager 配置管理器
 type ConfigManager struct {
-	mu                sync.RWMutex
-	config            Config
-	configFile        string
-	requestCount      int
-	watcher           *fsnotify.Watcher
-	failedKeysCache   map[string]*FailedKey
-	keyRecoveryTime   time.Duration
-	maxFailureCount   int
+	mu                    sync.RWMutex
+	config                Config
+	configFile            string
+	requestCount          int
+	responsesRequestCount int
+	watcher               *fsnotify.Watcher
+	failedKeysCache       map[string]*FailedKey
+	keyRecoveryTime       time.Duration
+	maxFailureCount       int
 }
 
 const (
-	maxBackups        = 10
-	keyRecoveryTime   = 5 * time.Minute
-	maxFailureCount   = 3
+	maxBackups      = 10
+	keyRecoveryTime = 5 * time.Minute
+	maxFailureCount = 3
 )
 
 // NewConfigManager 创建配置管理器
 func NewConfigManager(configFile string) (*ConfigManager, error) {
 	cm := &ConfigManager{
-		configFile:       configFile,
-		failedKeysCache:  make(map[string]*FailedKey),
-		keyRecoveryTime:  keyRecoveryTime,
-		maxFailureCount:  maxFailureCount,
+		configFile:      configFile,
+		failedKeysCache: make(map[string]*FailedKey),
+		keyRecoveryTime: keyRecoveryTime,
+		maxFailureCount: maxFailureCount,
 	}
 
 	// 加载配置
@@ -118,6 +120,7 @@ func (cm *ConfigManager) loadConfig() error {
 			LoadBalance:              "failover",
 			ResponsesUpstream:        []UpstreamConfig{},
 			CurrentResponsesUpstream: 0,
+			ResponsesLoadBalance:     "failover",
 		}
 
 		// 确保目录存在
@@ -136,6 +139,14 @@ func (cm *ConfigManager) loadConfig() error {
 
 	if err := json.Unmarshal(data, &cm.config); err != nil {
 		return err
+	}
+
+	// 兼容旧配置：如果 ResponsesLoadBalance 为空则回退到主配置
+	if cm.config.LoadBalance == "" {
+		cm.config.LoadBalance = "failover"
+	}
+	if cm.config.ResponsesLoadBalance == "" {
+		cm.config.ResponsesLoadBalance = cm.config.LoadBalance
 	}
 
 	return nil
@@ -270,8 +281,17 @@ func (cm *ConfigManager) GetCurrentUpstream() (*UpstreamConfig, error) {
 	return &upstream, nil
 }
 
-// GetNextAPIKey 获取下一个 API 密钥
+// GetNextAPIKey 获取下一个 API 密钥（Messages 负载均衡）
 func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[string]bool) (string, error) {
+	return cm.getNextAPIKeyWithStrategy(upstream, failedKeys, cm.config.LoadBalance, &cm.requestCount)
+}
+
+// GetNextResponsesAPIKey 获取下一个 API 密钥（Responses 负载均衡）
+func (cm *ConfigManager) GetNextResponsesAPIKey(upstream *UpstreamConfig, failedKeys map[string]bool) (string, error) {
+	return cm.getNextAPIKeyWithStrategy(upstream, failedKeys, cm.config.ResponsesLoadBalance, &cm.responsesRequestCount)
+}
+
+func (cm *ConfigManager) getNextAPIKeyWithStrategy(upstream *UpstreamConfig, failedKeys map[string]bool, strategy string, requestCounter *int) (string, error) {
 	if len(upstream.APIKeys) == 0 {
 		return "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)
 	}
@@ -321,11 +341,11 @@ func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[
 	}
 
 	// 根据负载均衡策略选择密钥
-	switch cm.config.LoadBalance {
+	switch strategy {
 	case "round-robin":
 		cm.mu.Lock()
-		cm.requestCount++
-		index := (cm.requestCount - 1) % len(availableKeys)
+		*requestCounter++
+		index := (*requestCounter - 1) % len(availableKeys)
 		selectedKey := availableKeys[index]
 		cm.mu.Unlock()
 		log.Printf("轮询选择密钥 %s (%d/%d)", maskAPIKey(selectedKey), index+1, len(availableKeys))
@@ -597,14 +617,13 @@ func (cm *ConfigManager) RemoveAPIKey(index int, apiKey string) error {
 	return nil
 }
 
-// SetLoadBalance 设置负载均衡策略
+// SetLoadBalance 设置 Messages 负载均衡策略
 func (cm *ConfigManager) SetLoadBalance(strategy string) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	// 验证策略
-	if strategy != "round-robin" && strategy != "random" && strategy != "failover" {
-		return fmt.Errorf("无效的负载均衡策略: %s", strategy)
+	if err := validateLoadBalanceStrategy(strategy); err != nil {
+		return err
 	}
 
 	cm.config.LoadBalance = strategy
@@ -614,6 +633,32 @@ func (cm *ConfigManager) SetLoadBalance(strategy string) error {
 	}
 
 	log.Printf("已设置负载均衡策略: %s", strategy)
+	return nil
+}
+
+// SetResponsesLoadBalance 设置 Responses 负载均衡策略
+func (cm *ConfigManager) SetResponsesLoadBalance(strategy string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if err := validateLoadBalanceStrategy(strategy); err != nil {
+		return err
+	}
+
+	cm.config.ResponsesLoadBalance = strategy
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("已设置 Responses 负载均衡策略: %s", strategy)
+	return nil
+}
+
+func validateLoadBalanceStrategy(strategy string) error {
+	if strategy != "round-robin" && strategy != "random" && strategy != "failover" {
+		return fmt.Errorf("无效的负载均衡策略: %s", strategy)
+	}
 	return nil
 }
 

@@ -735,11 +735,11 @@ const pingAllChannels = async () => {
 
 const updateLoadBalance = async (strategy: string) => {
   try {
-    await api.updateLoadBalance(strategy)
-    // 根据当前 Tab 更新对应的 loadBalance
     if (activeTab.value === 'messages') {
+      await api.updateLoadBalance(strategy)
       channelsData.value.loadBalance = strategy
     } else {
+      await api.updateResponsesLoadBalance(strategy)
       responsesChannelsData.value.loadBalance = strategy
     }
     showToast(`负载均衡策略已更新为: ${strategy}`, 'success')

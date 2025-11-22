@@ -86,7 +86,7 @@ func ResponsesHandler(
 		deprioritizeCandidates := make(map[string]bool)
 
 		for attempt := 0; attempt < maxRetries; attempt++ {
-			apiKey, err := cfgManager.GetNextAPIKey(upstream, failedKeys)
+			apiKey, err := cfgManager.GetNextResponsesAPIKey(upstream, failedKeys)
 			if err != nil {
 				lastError = err
 				break

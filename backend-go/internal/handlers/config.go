@@ -7,9 +7,9 @@ import (
 	"sync" // 新增
 	"time" // 新增
 
-	"github.com/gin-gonic/gin"
 	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/httpclient" // 新增
+	"github.com/gin-gonic/gin"
 )
 
 // GetUpstreams 获取上游列表 (兼容前端 channels 字段名)
@@ -221,7 +221,6 @@ func SetCurrentUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
 	}
 }
 
-
 // UpdateLoadBalance 更新负载均衡策略
 func UpdateLoadBalance(cfgManager *config.ConfigManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -244,6 +243,33 @@ func UpdateLoadBalance(cfgManager *config.ConfigManager) gin.HandlerFunc {
 
 		c.JSON(200, gin.H{
 			"message":  "负载均衡策略已更新",
+			"strategy": req.Strategy,
+		})
+	}
+}
+
+// UpdateResponsesLoadBalance 更新 Responses 负载均衡策略
+func UpdateResponsesLoadBalance(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Strategy string `json:"strategy"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid request body"})
+			return
+		}
+
+		if err := cfgManager.SetResponsesLoadBalance(req.Strategy); err != nil {
+			if strings.Contains(err.Error(), "无效的负载均衡策略") {
+				c.JSON(400, gin.H{"error": err.Error()})
+			} else {
+				c.JSON(500, gin.H{"error": "Failed to save config"})
+			}
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"message":  "Responses 负载均衡策略已更新",
 			"strategy": req.Strategy,
 		})
 	}
@@ -381,7 +407,7 @@ func GetResponsesUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		c.JSON(200, gin.H{
 			"channels":    upstreams,
 			"current":     cfg.CurrentResponsesUpstream,
-			"loadBalance": cfg.LoadBalance,
+			"loadBalance": cfg.ResponsesLoadBalance,
 		})
 	}
 }
@@ -535,4 +561,3 @@ func DeleteResponsesApiKey(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		})
 	}
 }
-

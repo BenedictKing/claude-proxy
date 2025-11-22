@@ -3,8 +3,8 @@ package handlers
 import (
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/BenedictKing/claude-proxy/internal/config"
+	"github.com/gin-gonic/gin"
 )
 
 // HealthCheck 健康检查处理器
@@ -19,9 +19,10 @@ func HealthCheck(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gin
 			"mode":      envCfg.Env,
 			"version":   getVersion(),
 			"config": gin.H{
-				"upstreamCount":   len(config.Upstream),
-				"currentUpstream": config.CurrentUpstream,
-				"loadBalance":     config.LoadBalance,
+				"upstreamCount":        len(config.Upstream),
+				"currentUpstream":      config.CurrentUpstream,
+				"loadBalance":          config.LoadBalance,
+				"responsesLoadBalance": config.ResponsesLoadBalance,
 			},
 		}
 
@@ -78,9 +79,10 @@ func ReloadConfig(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			"message":   "配置已重载",
 			"timestamp": time.Now().Format(time.RFC3339),
 			"config": gin.H{
-				"upstreamCount":   len(config.Upstream),
-				"currentUpstream": config.CurrentUpstream,
-				"loadBalance":     config.LoadBalance,
+				"upstreamCount":        len(config.Upstream),
+				"currentUpstream":      config.CurrentUpstream,
+				"loadBalance":          config.LoadBalance,
+				"responsesLoadBalance": config.ResponsesLoadBalance,
 			},
 		})
 	}

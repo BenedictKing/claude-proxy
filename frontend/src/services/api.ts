@@ -200,6 +200,13 @@ class ApiService {
     })
   }
 
+  async updateResponsesLoadBalance(strategy: string): Promise<void> {
+    await this.request('/responses/loadbalance', {
+      method: 'PUT',
+      body: JSON.stringify({ strategy })
+    })
+  }
+
   // ============== Responses 渠道管理 API ==============
 
   async getResponsesChannels(): Promise<ChannelsResponse> {
