@@ -336,6 +336,10 @@ func handleResponsesSuccess(
 		flusher, _ := c.Writer.(http.Flusher)
 
 		scanner := bufio.NewScanner(resp.Body)
+		// 增加缓冲区大小：初始64KB，最大1MB
+		const maxCapacity = 1024 * 1024 // 1MB
+		buf := make([]byte, 0, 64*1024) // 初始64KB
+		scanner.Buffer(buf, maxCapacity)
 		for scanner.Scan() {
 			line := scanner.Text()
 
