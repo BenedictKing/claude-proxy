@@ -6,15 +6,15 @@ const getApiBase = () => {
   if (import.meta.env.PROD) {
     return '/api'
   }
-  
+
   // 在开发环境中，支持从环境变量配置后端地址
   const backendUrl = import.meta.env.VITE_BACKEND_URL
   const apiBasePath = import.meta.env.VITE_API_BASE_PATH || '/api'
-  
+
   if (backendUrl) {
     return `${backendUrl}${apiBasePath}`
   }
-  
+
   // fallback到默认配置
   return '/api'
 }
@@ -86,22 +86,22 @@ class ApiService {
       this.setApiKey(urlKey)
       // 保存到localStorage以便下次使用
       localStorage.setItem('proxyAccessKey', urlKey)
-      
+
       // 清理URL中的key参数以提高安全性
       const url = new URL(window.location.href)
       url.searchParams.delete('key')
       window.history.replaceState({}, '', url.toString())
-      
+
       return urlKey
     }
-    
+
     // 从localStorage获取保存的密钥
     const savedKey = localStorage.getItem('proxyAccessKey')
     if (savedKey) {
       this.setApiKey(savedKey)
       return savedKey
     }
-    
+
     return null
   }
 
@@ -114,7 +114,7 @@ class ApiService {
   private async request(url: string, options: RequestInit = {}): Promise<any> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...options.headers as Record<string, string>
+      ...(options.headers as Record<string, string>)
     }
 
     // 添加API密钥到请求头
@@ -129,13 +129,15 @@ class ApiService {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Unknown error' }))
-      
+
       // 如果是401错误，清除本地认证信息并提示用户重新登录
       if (response.status === 401) {
         this.clearAuth()
+        // 记录认证失败(前端日志)
+        console.warn('🔒 认证失败 - 时间:', new Date().toISOString())
         throw new Error('认证失败，请重新输入访问密钥')
       }
-      
+
       throw new Error(error.error || error.message || 'Request failed')
     }
 

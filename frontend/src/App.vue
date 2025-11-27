@@ -57,12 +57,24 @@
           </v-form>
           
           <v-divider class="my-4" />
-          
-          <div class="text-body-2 text-center text-medium-emphasis">
-            <p>💡 <strong>提示：</strong></p>
-            <p>• 访问密钥在服务器的 <code>PROXY_ACCESS_KEY</code> 环境变量中设置</p>
-            <p>• 密钥将安全保存在本地，下次访问将自动验证登录</p>
-          </div>
+
+          <v-alert
+            type="info"
+            variant="tonal"
+            density="compact"
+            class="mb-0"
+          >
+            <div class="text-body-2">
+              <p class="mb-2"><strong>🔒 安全提示：</strong></p>
+              <ul class="ml-4 mb-0">
+                <li>访问密钥在服务器的 <code>PROXY_ACCESS_KEY</code> 环境变量中设置</li>
+                <li>密钥将安全保存在本地，下次访问将自动验证登录</li>
+                <li>请勿与他人分享您的访问密钥</li>
+                <li>如果怀疑密钥泄露，请立即更改服务器配置</li>
+                <li>连续 {{ MAX_AUTH_ATTEMPTS }} 次认证失败将锁定 5 分钟</li>
+              </ul>
+            </div>
+          </v-alert>
         </v-card-text>
       </v-card>
     </v-dialog>
@@ -782,6 +794,11 @@ const authLoading = ref(false)
 const isAutoAuthenticating = ref(true) // 初始化为true，防止登录框闪现
 const isInitialized = ref(false) // 添加初始化完成标志
 
+// 认证尝试限制
+const authAttempts = ref(0)
+const MAX_AUTH_ATTEMPTS = 5
+const authLockoutTime = ref<Date | null>(null)
+
 // 控制认证对话框显示
 const showAuthDialog = computed({
   get: () => {
@@ -852,26 +869,52 @@ const handleAuthSubmit = async () => {
     authError.value = '请输入访问密钥'
     return
   }
-  
+
+  // 检查是否被锁定
+  if (authLockoutTime.value && new Date() < authLockoutTime.value) {
+    const remainingSeconds = Math.ceil((authLockoutTime.value.getTime() - Date.now()) / 1000)
+    authError.value = `认证尝试次数过多，请在 ${remainingSeconds} 秒后重试`
+    return
+  }
+
   authLoading.value = true
   authError.value = ''
-  
+
   try {
     // 设置密钥
     setAuthKey(authKeyInput.value.trim())
-    
+
     // 测试API调用以验证密钥
     await api.getChannels()
-    
+
+    // 认证成功，重置计数器
+    authAttempts.value = 0
+    authLockoutTime.value = null
+
     // 如果成功，加载数据
     loadPinnedChannels()
     await refreshChannels()
-    
+
     authKeyInput.value = ''
+
+    // 记录认证成功(前端日志)
+    console.info('✅ 认证成功 - 时间:', new Date().toISOString())
   } catch (error: any) {
     // 认证失败
+    authAttempts.value++
+
+    // 记录认证失败(前端日志)
+    console.warn('🔒 认证失败 - 尝试次数:', authAttempts.value, '时间:', new Date().toISOString())
+
+    // 如果尝试次数过多，锁定5分钟
+    if (authAttempts.value >= MAX_AUTH_ATTEMPTS) {
+      authLockoutTime.value = new Date(Date.now() + 5 * 60 * 1000)
+      authError.value = '认证尝试次数过多，请在5分钟后重试'
+    } else {
+      authError.value = `访问密钥验证失败 (剩余尝试次数: ${MAX_AUTH_ATTEMPTS - authAttempts.value})`
+    }
+
     isAuthenticated.value = false
-    authError.value = error.message || '访问密钥验证失败'
     api.clearAuth()
   } finally {
     authLoading.value = false

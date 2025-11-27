@@ -3,9 +3,10 @@ package middleware
 import (
 	"log"
 	"strings"
+	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/BenedictKing/claude-proxy/internal/config"
+	"github.com/gin-gonic/gin"
 )
 
 // WebAuthMiddleware Web 访问控制中间件
@@ -43,28 +44,42 @@ func WebAuthMiddleware(envCfg *config.EnvConfig, cfgManager *config.ConfigManage
 			return
 		}
 
-		// 对于根路径和页面请求，直接服务前端应用，让前端处理认证
-		// 前端会自动处理认证流程
-		if path == "/" || path == "/index.html" || !strings.Contains(path, ".") {
-			// 直接让请求通过，由静态文件服务器处理
+		// SPA 页面路由直接交给前端处理，但需要排除 /api* 路径
+		if path == "/" || path == "/index.html" || (!strings.Contains(path, ".") && !strings.HasPrefix(path, "/api")) {
 			c.Next()
 			return
 		}
 
-		// 检查访问密钥（仅对API请求）
-		providedKey := getAPIKey(c)
-		expectedKey := envCfg.ProxyAccessKey
+		// 检查访问密钥（仅对管理 API 请求）
+		if strings.HasPrefix(path, "/api") {
+			providedKey := getAPIKey(c)
+			expectedKey := envCfg.ProxyAccessKey
 
-		if providedKey == "" || providedKey != expectedKey {
-			log.Printf("🔒 访问被拒绝 - IP: %s, Path: %s", c.ClientIP(), path)
+			// 记录认证尝试
+			clientIP := c.ClientIP()
+			timestamp := time.Now().Format(time.RFC3339)
 
-			// 对于API请求返回401
-			c.JSON(401, gin.H{
-				"error": "Unauthorized",
-				"message": "Invalid or missing access key",
-			})
-			c.Abort()
-			return
+			if providedKey == "" || providedKey != expectedKey {
+				// 认证失败 - 记录详细日志
+				reason := "密钥无效"
+				if providedKey == "" {
+					reason = "密钥缺失"
+				}
+				log.Printf("🔒 [认证失败] IP: %s | Path: %s | Time: %s | Reason: %s",
+					clientIP, path, timestamp, reason)
+
+				c.JSON(401, gin.H{
+					"error":   "Unauthorized",
+					"message": "Invalid or missing access key",
+				})
+				c.Abort()
+				return
+			}
+
+			// 认证成功 - 记录日志(可选，根据日志级别)
+			if envCfg.ShouldLog("info") {
+				log.Printf("✅ [认证成功] IP: %s | Path: %s | Time: %s", clientIP, path, timestamp)
+			}
 		}
 
 		c.Next()
@@ -106,7 +121,6 @@ func getAPIKey(c *gin.Context) string {
 
 	return ""
 }
-
 
 // ProxyAuthMiddleware 代理访问控制中间件
 func ProxyAuthMiddleware(envCfg *config.EnvConfig) gin.HandlerFunc {

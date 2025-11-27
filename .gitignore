@@ -216,3 +216,4 @@ docs/
 test-*.sh
 test-*.js
 test-*.ts
+.gocache/
