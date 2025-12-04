@@ -517,6 +517,11 @@ func shouldRetryWithNextKey(statusCode int, bodyBytes []byte) (bool, bool) {
 		return true, false
 	}
 
+	// 429 速率限制，切换下一个密钥
+	if statusCode == 429 {
+		return true, true
+	}
+
 	isQuotaRelated := false
 
 	// 检查错误消息
@@ -530,6 +535,7 @@ func shouldRetryWithNextKey(statusCode int, bodyBytes []byte) (bool, bool) {
 					strings.Contains(msgLower, "unauthorized") ||
 					strings.Contains(msgLower, "quota") ||
 					strings.Contains(msgLower, "rate limit") ||
+					strings.Contains(msg, "请求数限制") ||
 					strings.Contains(msgLower, "credit") ||
 					strings.Contains(msgLower, "balance") {
 
@@ -538,7 +544,8 @@ func shouldRetryWithNextKey(statusCode int, bodyBytes []byte) (bool, bool) {
 						strings.Contains(msgLower, "insufficient") ||
 						strings.Contains(msgLower, "credit") ||
 						strings.Contains(msgLower, "balance") ||
-						strings.Contains(msgLower, "quota") {
+						strings.Contains(msgLower, "quota") ||
+						strings.Contains(msg, "请求数限制") {
 						isQuotaRelated = true
 					}
 					return true, isQuotaRelated
