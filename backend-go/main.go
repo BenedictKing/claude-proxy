@@ -76,6 +76,8 @@ func main() {
 		apiGroup.DELETE("/channels/:id", handlers.DeleteUpstream(cfgManager))
 		apiGroup.POST("/channels/:id/keys", handlers.AddApiKey(cfgManager))
 		apiGroup.DELETE("/channels/:id/keys/:apiKey", handlers.DeleteApiKey(cfgManager))
+		apiGroup.POST("/channels/:id/keys/:apiKey/top", handlers.MoveApiKeyToTop(cfgManager))
+		apiGroup.POST("/channels/:id/keys/:apiKey/bottom", handlers.MoveApiKeyToBottom(cfgManager))
 		apiGroup.POST("/channels/:id/current", handlers.SetCurrentUpstream(cfgManager))
 
 		// Responses 渠道管理
@@ -85,6 +87,8 @@ func main() {
 		apiGroup.DELETE("/responses/channels/:id", handlers.DeleteResponsesUpstream(cfgManager))
 		apiGroup.POST("/responses/channels/:id/keys", handlers.AddResponsesApiKey(cfgManager))
 		apiGroup.DELETE("/responses/channels/:id/keys/:apiKey", handlers.DeleteResponsesApiKey(cfgManager))
+		apiGroup.POST("/responses/channels/:id/keys/:apiKey/top", handlers.MoveResponsesApiKeyToTop(cfgManager))
+		apiGroup.POST("/responses/channels/:id/keys/:apiKey/bottom", handlers.MoveResponsesApiKeyToBottom(cfgManager))
 		apiGroup.POST("/responses/channels/:id/current", handlers.SetCurrentResponsesUpstream(cfgManager))
 		apiGroup.PUT("/responses/loadbalance", handlers.UpdateResponsesLoadBalance(cfgManager))
 

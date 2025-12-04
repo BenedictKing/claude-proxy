@@ -253,6 +253,30 @@ class ApiService {
       method: 'DELETE'
     })
   }
+
+  async moveApiKeyToTop(channelId: number, apiKey: string): Promise<void> {
+    await this.request(`/channels/${channelId}/keys/${encodeURIComponent(apiKey)}/top`, {
+      method: 'POST'
+    })
+  }
+
+  async moveApiKeyToBottom(channelId: number, apiKey: string): Promise<void> {
+    await this.request(`/channels/${channelId}/keys/${encodeURIComponent(apiKey)}/bottom`, {
+      method: 'POST'
+    })
+  }
+
+  async moveResponsesApiKeyToTop(channelId: number, apiKey: string): Promise<void> {
+    await this.request(`/responses/channels/${channelId}/keys/${encodeURIComponent(apiKey)}/top`, {
+      method: 'POST'
+    })
+  }
+
+  async moveResponsesApiKeyToBottom(channelId: number, apiKey: string): Promise<void> {
+    await this.request(`/responses/channels/${channelId}/keys/${encodeURIComponent(apiKey)}/bottom`, {
+      method: 'POST'
+    })
+  }
 }
 
 export const api = new ApiService()

@@ -561,3 +561,59 @@ func DeleteResponsesApiKey(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		})
 	}
 }
+
+// MoveApiKeyToTop 将 API 密钥移到最前面
+func MoveApiKeyToTop(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, _ := strconv.Atoi(c.Param("id"))
+		apiKey := c.Param("apiKey")
+
+		if err := cfgManager.MoveAPIKeyToTop(id, apiKey); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"message": "API密钥已置顶"})
+	}
+}
+
+// MoveApiKeyToBottom 将 API 密钥移到最后面
+func MoveApiKeyToBottom(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, _ := strconv.Atoi(c.Param("id"))
+		apiKey := c.Param("apiKey")
+
+		if err := cfgManager.MoveAPIKeyToBottom(id, apiKey); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"message": "API密钥已置底"})
+	}
+}
+
+// MoveResponsesApiKeyToTop 将 Responses 渠道 API 密钥移到最前面
+func MoveResponsesApiKeyToTop(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, _ := strconv.Atoi(c.Param("id"))
+		apiKey := c.Param("apiKey")
+
+		if err := cfgManager.MoveResponsesAPIKeyToTop(id, apiKey); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"message": "API密钥已置顶"})
+	}
+}
+
+// MoveResponsesApiKeyToBottom 将 Responses 渠道 API 密钥移到最后面
+func MoveResponsesApiKeyToBottom(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, _ := strconv.Atoi(c.Param("id"))
+		apiKey := c.Param("apiKey")
+
+		if err := cfgManager.MoveResponsesAPIKeyToBottom(id, apiKey); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"message": "API密钥已置底"})
+	}
+}

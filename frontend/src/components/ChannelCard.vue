@@ -174,6 +174,22 @@
               >
                 <code class="text-caption flex-1-1 text-truncate mr-2">{{ maskApiKey(key) }}</code>
                 <div class="d-flex align-center ga-1">
+                  <!-- 置顶按钮：仅最后一个 key 显示 -->
+                  <v-tooltip v-if="index === channel.apiKeys.length - 1 && channel.apiKeys.length > 1" text="置顶" location="top" :open-delay="150">
+                    <template #activator="{ props }">
+                      <v-btn v-bind="props" size="x-small" color="warning" icon variant="text" rounded="md" @click="$emit('moveKeyToTop', channel.index, key)">
+                        <v-icon size="small">mdi-arrow-up-bold</v-icon>
+                      </v-btn>
+                    </template>
+                  </v-tooltip>
+                  <!-- 置底按钮：仅第一个 key 显示 -->
+                  <v-tooltip v-if="index === 0 && channel.apiKeys.length > 1" text="置底" location="top" :open-delay="150">
+                    <template #activator="{ props }">
+                      <v-btn v-bind="props" size="x-small" color="warning" icon variant="text" rounded="md" @click="$emit('moveKeyToBottom', channel.index, key)">
+                        <v-icon size="small">mdi-arrow-down-bold</v-icon>
+                      </v-btn>
+                    </template>
+                  </v-tooltip>
                   <v-tooltip :text="copiedKeyIndex === index ? '已复制!' : '复制密钥'" location="top" :open-delay="150">
                     <template #activator="{ props }">
                       <v-btn
@@ -285,6 +301,8 @@ defineEmits<{
   setCurrent: [channelId: number]
   addKey: [channelId: number]
   removeKey: [channelId: number, apiKey: string]
+  moveKeyToTop: [channelId: number, apiKey: string]
+  moveKeyToBottom: [channelId: number, apiKey: string]
   ping: [channelId: number]
   togglePin: [channelId: number]
 }>()

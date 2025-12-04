@@ -690,6 +690,114 @@ func (cm *ConfigManager) DeprioritizeAPIKey(apiKey string) error {
 	return cm.saveConfigLocked(cm.config)
 }
 
+// MoveAPIKeyToTop 将指定渠道的 API 密钥移到最前面
+func (cm *ConfigManager) MoveAPIKeyToTop(upstreamIndex int, apiKey string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if upstreamIndex < 0 || upstreamIndex >= len(cm.config.Upstream) {
+		return fmt.Errorf("无效的上游索引: %d", upstreamIndex)
+	}
+
+	upstream := &cm.config.Upstream[upstreamIndex]
+	index := -1
+	for i, key := range upstream.APIKeys {
+		if key == apiKey {
+			index = i
+			break
+		}
+	}
+
+	if index <= 0 {
+		return nil // 已经在最前面或未找到
+	}
+
+	// 移动到开头
+	upstream.APIKeys = append([]string{apiKey}, append(upstream.APIKeys[:index], upstream.APIKeys[index+1:]...)...)
+	return cm.saveConfigLocked(cm.config)
+}
+
+// MoveAPIKeyToBottom 将指定渠道的 API 密钥移到最后面
+func (cm *ConfigManager) MoveAPIKeyToBottom(upstreamIndex int, apiKey string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if upstreamIndex < 0 || upstreamIndex >= len(cm.config.Upstream) {
+		return fmt.Errorf("无效的上游索引: %d", upstreamIndex)
+	}
+
+	upstream := &cm.config.Upstream[upstreamIndex]
+	index := -1
+	for i, key := range upstream.APIKeys {
+		if key == apiKey {
+			index = i
+			break
+		}
+	}
+
+	if index == -1 || index == len(upstream.APIKeys)-1 {
+		return nil // 已经在最后面或未找到
+	}
+
+	// 移动到末尾
+	upstream.APIKeys = append(upstream.APIKeys[:index], upstream.APIKeys[index+1:]...)
+	upstream.APIKeys = append(upstream.APIKeys, apiKey)
+	return cm.saveConfigLocked(cm.config)
+}
+
+// MoveResponsesAPIKeyToTop 将指定 Responses 渠道的 API 密钥移到最前面
+func (cm *ConfigManager) MoveResponsesAPIKeyToTop(upstreamIndex int, apiKey string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if upstreamIndex < 0 || upstreamIndex >= len(cm.config.ResponsesUpstream) {
+		return fmt.Errorf("无效的上游索引: %d", upstreamIndex)
+	}
+
+	upstream := &cm.config.ResponsesUpstream[upstreamIndex]
+	index := -1
+	for i, key := range upstream.APIKeys {
+		if key == apiKey {
+			index = i
+			break
+		}
+	}
+
+	if index <= 0 {
+		return nil
+	}
+
+	upstream.APIKeys = append([]string{apiKey}, append(upstream.APIKeys[:index], upstream.APIKeys[index+1:]...)...)
+	return cm.saveConfigLocked(cm.config)
+}
+
+// MoveResponsesAPIKeyToBottom 将指定 Responses 渠道的 API 密钥移到最后面
+func (cm *ConfigManager) MoveResponsesAPIKeyToBottom(upstreamIndex int, apiKey string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if upstreamIndex < 0 || upstreamIndex >= len(cm.config.ResponsesUpstream) {
+		return fmt.Errorf("无效的上游索引: %d", upstreamIndex)
+	}
+
+	upstream := &cm.config.ResponsesUpstream[upstreamIndex]
+	index := -1
+	for i, key := range upstream.APIKeys {
+		if key == apiKey {
+			index = i
+			break
+		}
+	}
+
+	if index == -1 || index == len(upstream.APIKeys)-1 {
+		return nil
+	}
+
+	upstream.APIKeys = append(upstream.APIKeys[:index], upstream.APIKeys[index+1:]...)
+	upstream.APIKeys = append(upstream.APIKeys, apiKey)
+	return cm.saveConfigLocked(cm.config)
+}
+
 // RedirectModel 模型重定向
 func RedirectModel(model string, upstream *UpstreamConfig) string {
 	if upstream.ModelMapping == nil {

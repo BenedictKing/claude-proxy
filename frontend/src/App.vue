@@ -313,6 +313,8 @@
               @set-current="setCurrentChannel"
               @add-key="openAddKeyModal"
               @remove-key="removeApiKey"
+              @move-key-to-top="moveApiKeyToTop"
+              @move-key-to-bottom="moveApiKeyToBottom"
               @ping="pingChannel"
               @toggle-pin="toggleChannelPin"
             />
@@ -705,6 +707,32 @@ const removeApiKey = async (channelId: number, apiKey: string) => {
     await refreshChannels()
   } catch (error) {
     handleError(error, '删除API密钥失败')
+  }
+}
+
+const moveApiKeyToTop = async (channelId: number, apiKey: string) => {
+  try {
+    if (activeTab.value === 'responses') {
+      await api.moveResponsesApiKeyToTop(channelId, apiKey)
+    } else {
+      await api.moveApiKeyToTop(channelId, apiKey)
+    }
+    await refreshChannels()
+  } catch (error) {
+    handleError(error, '置顶失败')
+  }
+}
+
+const moveApiKeyToBottom = async (channelId: number, apiKey: string) => {
+  try {
+    if (activeTab.value === 'responses') {
+      await api.moveResponsesApiKeyToBottom(channelId, apiKey)
+    } else {
+      await api.moveApiKeyToBottom(channelId, apiKey)
+    }
+    await refreshChannels()
+  } catch (error) {
+    handleError(error, '置底失败')
   }
 }
 
