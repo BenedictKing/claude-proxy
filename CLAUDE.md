@@ -20,30 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | **ENVIRONMENT.md** | 环境变量配置 | [ENVIRONMENT.md](ENVIRONMENT.md) |
 | **CONTRIBUTING.md** | 贡献规范、提交标准 | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | **CHANGELOG.md** | 版本历史、升级指南 | [CHANGELOG.md](CHANGELOG.md) |
-
----
-
-## 变更记录 (最近3次)
-
-### 2025-11-18 (v2.0.6-go)
-
-- **Bug修复**: 修复 Responses API 透传模式字段丢失和零值字段污染问题
-- **日志优化**: 修复日志中 input_text/output_text 类型内容不显示的问题
-- **代码改进**: 使用 map 实现真正的 JSON 透传，符合 KISS 原则
-
-### 2025-11-15 (v2.0.5-go)
-
-- **重大重构**: Responses API 转换器架构重构（策略模式 + 工厂模式）
-- **新增功能**: 完整支持 Responses API 标准格式（instructions、嵌套 content 等）
-- **代码优化**: ResponsesProvider 代码从 ~260 行减少到 ~130 行
-
-### 2025-11-14 (v2.0.4-go)
-
-- **新增功能**: Web UI 标题栏集成 API 类型切换（Claude/Codex）
-- **UI优化**: 移除独立 Tab 卡片，标题栏下划线高亮设计
-- **交互提升**: 平滑动画、悬停反馈、自动数据同步
-
-> 📚 完整变更历史请参考 [CHANGELOG.md](CHANGELOG.md)
+| **VERSION** | 主版本号 (`v2.0.x-go`) | 根目录文件 |
 
 ---
 

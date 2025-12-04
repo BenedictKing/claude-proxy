@@ -5,6 +5,10 @@ BINARY_NAME=claude-proxy-go
 MAIN_PATH=.
 BUILD_DIR=../dist
 AIR_VERSION=v1.52.0
+VERSION=$(shell cat ../VERSION 2>/dev/null || echo "v0.0.0-dev")
+BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
+GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+LDFLAGS=-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)
 
 # 颜色输出
 GREEN=\033[0;32m
@@ -57,7 +61,7 @@ dev-with-env:
 # 构建生产版本
 build:
 	@echo "$(GREEN)📦 构建生产版本...$(NC)"
-	@go build -ldflags="-s -w" -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
+	@go build -ldflags="$(LDFLAGS) -s -w" -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 	@echo "$(GREEN)✅ 构建完成: $(BUILD_DIR)/$(BINARY_NAME)$(NC)"
 
 # 构建当前平台版本
@@ -66,10 +70,10 @@ build-local:
 	@go build -o $(BINARY_NAME) $(MAIN_PATH)
 	@echo "$(GREEN)✅ 构建完成: ./$(BINARY_NAME)$(NC)"
 
-# 直接运行 (不编译)
+# 直接运行 (带版本信息)
 run:
 	@echo "$(GREEN)▶️  直接运行...$(NC)"
-	@go run $(MAIN_PATH)
+	@go run -ldflags="$(LDFLAGS)" $(MAIN_PATH)
 
 # 运行测试
 test:

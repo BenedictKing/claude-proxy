@@ -49,7 +49,6 @@
 |---------|---------|---------|---------|
 | **🐳 Docker** | ~2s | ~25MB | 生产环境、一键部署 |
 | **🚀 Go 版本** | <100ms | ~20MB | 高性能、原生部署 |
-| 🔧 Node.js/Bun | ~1s | ~50MB | 开发调试（备用） |
 
 ---
 
@@ -109,91 +108,7 @@ make build-run     # 构建并运行
 
 ---
 
-### 方式三：🔧 Node.js/Bun 部署（备用）
-
-**仅推荐用于开发调试，生产环境请使用 Docker 或 Go 版本**
-
-<details>
-<summary>点击展开 Node.js/Bun 部署说明</summary>
-
-#### 前置要求
-
-- Node.js 18+ 或 Bun
-- 包管理器：支持 pnpm、npm 或 bun
-
-#### 安装步骤
-
-1. 克隆项目
-
-```bash
-git clone https://github.com/BenedictKing/claude-proxy
-cd claude-proxy
-```
-
-2. 安装依赖
-
-```bash
-bun install
-```
-
-3. 配置环境变量
-
-```bash
-cp backend/.env.example backend/.env
-# 编辑 backend/.env 文件，设置你的配置
-```
-
-**重要**: 修改 `PROXY_ACCESS_KEY` 为强密钥！
-
-4. 启动服务器
-
-#### 开发模式
-
-```bash
-# 前后端同时启动，支持热重载
-bun run dev
-```
-
-#### 生产模式
-
-```bash
-# 构建项目（会同时构建前后端）
-bun run build
-
-# 启动服务器（必须在项目根目录执行）
-bun run start
-```
-
-**重要提示**：
-- ✅ 构建命令会自动验证前后端构建产物
-- ✅ 启动命令必须在项目根目录（claude-proxy/）执行
-- ✅ 前端资源会自动从 `frontend/dist` 加载
-- ⚠️  如果遇到 "前端资源未找到" 错误，请重新运行 `bun run build`
-
-访问地址：
-- **Web管理界面**: http://localhost:3000
-- **Messages API 端点**: http://localhost:3000/v1/messages
-- **Responses API 端点**: http://localhost:3000/v1/responses
-- **健康检查**: http://localhost:3000/health
-
-</details>
-
-## 🐳 Docker 部署 (推荐)
-
-### 一键部署
-
-```bash
-# 克隆项目
-git clone https://github.com/BenedictKing/claude-proxy
-cd claude-proxy
-
-# 修改配置（重要！）
-cp backend/.env.example backend/.env
-# 编辑 .env 设置强密钥：PROXY_ACCESS_KEY=your-super-strong-secret-key
-
-# 启动服务
-docker-compose up -d
-```
+## 🐳 Docker 部署详细配置
 
 ### 自定义部署
 
@@ -208,7 +123,7 @@ services:
     ports:
       - "3000:3000"  # 统一端口
     environment:
-      - NODE_ENV=production
+      - ENV=production
       - ENABLE_WEB_UI=true  # true=一体化, false=纯API
       - PROXY_ACCESS_KEY=your-super-strong-secret-key
       - LOG_LEVEL=info
@@ -226,7 +141,7 @@ services:
 # 2. 设置环境变量
 PROXY_ACCESS_KEY=your-super-strong-secret-key
 ENABLE_WEB_UI=true
-NODE_ENV=production
+ENV=production
 PORT=3000
 
 # 3. 自动部署完成
@@ -240,7 +155,7 @@ PORT=3000
 # 3. 设置环境变量：
 #    PROXY_ACCESS_KEY=your-super-strong-secret-key
 #    ENABLE_WEB_UI=true
-#    NODE_ENV=production
+#    ENV=production
 # 4. 自动构建和部署
 ```
 
@@ -269,7 +184,7 @@ fly logs
 
 **两种配置方式**:
 1. **Web界面** (推荐): 访问 `http://localhost:3000` → 输入密钥 → 可视化管理
-2. **命令行工具**: `cd backend && bun run config --help`
+2. **命令行工具**: `cd backend-go && make help`
 
 > 📚 环境变量配置详见 [ENVIRONMENT.md](ENVIRONMENT.md)
 
@@ -307,7 +222,7 @@ PROXY_ACCESS_KEY=$(openssl rand -base64 32)
 echo "生成的密钥: $PROXY_ACCESS_KEY"
 
 # 2. 生产环境配置
-NODE_ENV=production
+ENV=production
 ENABLE_REQUEST_LOGS=false
 ENABLE_RESPONSE_LOGS=false
 LOG_LEVEL=warn
@@ -643,23 +558,14 @@ ENABLE_RESPONSE_LOGS=true  # 记录响应日志
 
    ```bash
    # 方案1: 重新构建（推荐）
-   bun run build
-   bun run start
+   make build-current
+   cd backend-go && ./dist/claude-proxy
 
    # 方案2: 验证构建产物是否存在
-   # Windows
-   dir frontend\dist\index.html
-
-   # Linux/Mac
    ls -la frontend/dist/index.html
 
-   # 方案3: 检查工作目录
-   # 确保在项目根目录（claude-proxy/）执行启动命令
-   pwd  # 应该显示 .../claude-proxy
-   bun run start
-
-   # 方案4: 临时禁用Web UI
-   # 编辑 backend/.env 文件
+   # 方案3: 临时禁用Web UI
+   # 编辑 backend-go/.env 文件
    ENABLE_WEB_UI=false
    # 然后只使用API端点: /v1/messages
    ```
@@ -724,4 +630,3 @@ cd backend-go && make help
 - [Anthropic](https://www.anthropic.com/) - Claude API
 - [OpenAI](https://openai.com/) - GPT API
 - [Google](https://cloud.google.com/vertex-ai) - Gemini API
-- [Bun](https://bun.sh/) - 高性能 JavaScript 运行时
