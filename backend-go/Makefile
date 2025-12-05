@@ -15,7 +15,7 @@ GREEN=\033[0;32m
 YELLOW=\033[0;33m
 NC=\033[0m # No Color
 
-.PHONY: help dev build run clean install-air test
+.PHONY: help dev build run clean install-air test copy-frontend
 
 # 默认目标 - 显示帮助
 help:
@@ -27,7 +27,8 @@ help:
 	@echo ""
 	@echo "$(YELLOW)构建命令:$(NC)"
 	@echo "  make build        - 构建生产版本"
-	@echo "  make run          - 直接运行 (不编译)"
+	@echo "  make run          - 直接运行 (自动复制前端)"
+	@echo "  make copy-frontend- 复制前端资源"
 	@echo "  make clean        - 清理构建文件"
 	@echo ""
 	@echo "$(YELLOW)测试命令:$(NC)"
@@ -71,7 +72,7 @@ build-local:
 	@echo "$(GREEN)✅ 构建完成: ./$(BINARY_NAME)$(NC)"
 
 # 直接运行 (带版本信息)
-run:
+run: copy-frontend
 	@echo "$(GREEN)▶️  直接运行...$(NC)"
 	@go run -ldflags="$(LDFLAGS)" $(MAIN_PATH)
 
@@ -91,11 +92,24 @@ test-cover:
 clean:
 	@echo "$(YELLOW)🧹 清理构建文件...$(NC)"
 	@rm -rf tmp/
+	@rm -rf frontend/dist/
 	@rm -f $(BINARY_NAME)
 	@rm -f $(BUILD_DIR)/$(BINARY_NAME)
 	@rm -f coverage.out coverage.html
 	@rm -f build-errors.log
 	@echo "$(GREEN)✅ 清理完成$(NC)"
+
+# 复制前端资源
+copy-frontend:
+	@echo "$(GREEN)📦 复制前端资源...$(NC)"
+	@rm -rf frontend/dist
+	@mkdir -p frontend/dist
+	@if [ -d "../frontend/dist" ]; then \
+		cp -r ../frontend/dist/* frontend/dist/; \
+		echo "$(GREEN)✅ 前端资源复制完成$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠️  前端构建产物不存在，请先构建前端: cd ../frontend && bun run build$(NC)"; \
+	fi
 
 # 代码格式化
 fmt:
