@@ -20,6 +20,10 @@ func GetUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		// 为每个upstream添加index字段
 		upstreams := make([]gin.H, len(cfg.Upstream))
 		for i, up := range cfg.Upstream {
+			// 获取带默认值的 status 和 priority
+			status := config.GetChannelStatus(&up)
+			priority := config.GetChannelPriority(&up, i)
+
 			upstreams[i] = gin.H{
 				"index":              i,
 				"name":               up.Name,
@@ -31,7 +35,8 @@ func GetUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				"insecureSkipVerify": up.InsecureSkipVerify,
 				"modelMapping":       up.ModelMapping,
 				"latency":            nil,
-				"status":             "unknown",
+				"status":             status,
+				"priority":           priority,
 			}
 		}
 
@@ -389,6 +394,10 @@ func GetResponsesUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 
 		upstreams := make([]gin.H, len(cfg.ResponsesUpstream))
 		for i, up := range cfg.ResponsesUpstream {
+			// 获取带默认值的 status 和 priority
+			status := config.GetChannelStatus(&up)
+			priority := config.GetChannelPriority(&up, i)
+
 			upstreams[i] = gin.H{
 				"index":              i,
 				"name":               up.Name,
@@ -400,7 +409,8 @@ func GetResponsesUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				"insecureSkipVerify": up.InsecureSkipVerify,
 				"modelMapping":       up.ModelMapping,
 				"latency":            nil,
-				"status":             "unknown",
+				"status":             status,
+				"priority":           priority,
 			}
 		}
 
@@ -615,5 +625,123 @@ func MoveResponsesApiKeyToBottom(cfgManager *config.ConfigManager) gin.HandlerFu
 			return
 		}
 		c.JSON(200, gin.H{"message": "API密钥已置底"})
+	}
+}
+
+// ============== 多渠道调度 API ==============
+
+// ReorderChannels 重新排序渠道优先级
+func ReorderChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Order []int `json:"order"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid request body"})
+			return
+		}
+
+		if err := cfgManager.ReorderUpstreams(req.Order); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"success": true,
+			"message": "渠道优先级已更新",
+		})
+	}
+}
+
+// ReorderResponsesChannels 重新排序 Responses 渠道优先级
+func ReorderResponsesChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Order []int `json:"order"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid request body"})
+			return
+		}
+
+		if err := cfgManager.ReorderResponsesUpstreams(req.Order); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"success": true,
+			"message": "Responses 渠道优先级已更新",
+		})
+	}
+}
+
+// SetChannelStatus 设置渠道状态
+func SetChannelStatus(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		idStr := c.Param("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid channel ID"})
+			return
+		}
+
+		var req struct {
+			Status string `json:"status"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid request body"})
+			return
+		}
+
+		if err := cfgManager.SetChannelStatus(id, req.Status); err != nil {
+			if strings.Contains(err.Error(), "无效的上游索引") {
+				c.JSON(404, gin.H{"error": "Channel not found"})
+			} else {
+				c.JSON(400, gin.H{"error": err.Error()})
+			}
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"success": true,
+			"message": "渠道状态已更新",
+			"status":  req.Status,
+		})
+	}
+}
+
+// SetResponsesChannelStatus 设置 Responses 渠道状态
+func SetResponsesChannelStatus(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		idStr := c.Param("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid channel ID"})
+			return
+		}
+
+		var req struct {
+			Status string `json:"status"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid request body"})
+			return
+		}
+
+		if err := cfgManager.SetResponsesChannelStatus(id, req.Status); err != nil {
+			if strings.Contains(err.Error(), "无效的上游索引") {
+				c.JSON(404, gin.H{"error": "Channel not found"})
+			} else {
+				c.JSON(400, gin.H{"error": err.Error()})
+			}
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"success": true,
+			"message": "Responses 渠道状态已更新",
+			"status":  req.Status,
+		})
 	}
 }
