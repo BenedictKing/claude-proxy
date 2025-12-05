@@ -24,6 +24,9 @@ type UpstreamConfig struct {
 	Website            string            `json:"website,omitempty"`
 	InsecureSkipVerify bool              `json:"insecureSkipVerify,omitempty"`
 	ModelMapping       map[string]string `json:"modelMapping,omitempty"`
+	// 多渠道调度相关字段
+	Priority int    `json:"priority"` // 渠道优先级（数字越小优先级越高，默认按索引）
+	Status   string `json:"status"`   // 渠道状态：active（正常）, suspended（暂停）, disabled（备用池）
 }
 
 // UpstreamUpdate 用于部分更新 UpstreamConfig
@@ -36,17 +39,20 @@ type UpstreamUpdate struct {
 	Website            *string           `json:"website"`
 	InsecureSkipVerify *bool             `json:"insecureSkipVerify"`
 	ModelMapping       map[string]string `json:"modelMapping"`
+	// 多渠道调度相关字段
+	Priority *int    `json:"priority"`
+	Status   *string `json:"status"`
 }
 
 // Config 配置结构
 type Config struct {
 	Upstream        []UpstreamConfig `json:"upstream"`
-	CurrentUpstream int              `json:"currentUpstream"`
-	LoadBalance     string           `json:"loadBalance"` // round-robin, random, failover
+	CurrentUpstream int              `json:"currentUpstream,omitempty"` // 已废弃：旧格式兼容用
+	LoadBalance     string           `json:"loadBalance"`               // round-robin, random, failover
 
 	// Responses 接口专用配置（独立于 /v1/messages）
 	ResponsesUpstream        []UpstreamConfig `json:"responsesUpstream"`
-	CurrentResponsesUpstream int              `json:"currentResponsesUpstream"`
+	CurrentResponsesUpstream int              `json:"currentResponsesUpstream,omitempty"` // 已废弃：旧格式兼容用
 	ResponsesLoadBalance     string           `json:"responsesLoadBalance"`
 }
 
@@ -114,6 +120,7 @@ func (cm *ConfigManager) loadConfig() error {
 					BaseURL:     "https://generativelanguage.googleapis.com/v1beta",
 					APIKeys:     []string{},
 					ServiceType: "gemini",
+					Status:      "active",
 				},
 			},
 			CurrentUpstream:          0,
@@ -149,6 +156,85 @@ func (cm *ConfigManager) loadConfig() error {
 		cm.config.ResponsesLoadBalance = cm.config.LoadBalance
 	}
 
+	// 兼容旧格式：检测是否需要迁移（旧格式无 status 字段或 status 为空）
+	needMigrationUpstream := false
+	needMigrationResponses := false
+
+	// 检查 Messages 渠道是否需要迁移
+	if len(cm.config.Upstream) > 0 {
+		hasStatusField := false
+		for _, up := range cm.config.Upstream {
+			if up.Status != "" {
+				hasStatusField = true
+				break
+			}
+		}
+		if !hasStatusField {
+			needMigrationUpstream = true
+		}
+	}
+
+	// 检查 Responses 渠道是否需要迁移
+	if len(cm.config.ResponsesUpstream) > 0 {
+		hasStatusField := false
+		for _, up := range cm.config.ResponsesUpstream {
+			if up.Status != "" {
+				hasStatusField = true
+				break
+			}
+		}
+		if !hasStatusField {
+			needMigrationResponses = true
+		}
+	}
+
+	if needMigrationUpstream || needMigrationResponses {
+		log.Printf("检测到旧格式配置，正在迁移到新格式...")
+
+		// Messages 渠道迁移
+		if needMigrationUpstream && len(cm.config.Upstream) > 0 {
+			currentIdx := cm.config.CurrentUpstream
+			if currentIdx < 0 || currentIdx >= len(cm.config.Upstream) {
+				currentIdx = 0
+			}
+			// 设置所有渠道的 status 状态
+			for i := range cm.config.Upstream {
+				if i == currentIdx {
+					cm.config.Upstream[i].Status = "active"
+				} else {
+					cm.config.Upstream[i].Status = "disabled"
+				}
+			}
+			log.Printf("Messages 渠道 [%d] %s 已设置为 active，其他 %d 个渠道已设为 disabled",
+				currentIdx, cm.config.Upstream[currentIdx].Name, len(cm.config.Upstream)-1)
+		}
+
+		// Responses 渠道迁移
+		if needMigrationResponses && len(cm.config.ResponsesUpstream) > 0 {
+			currentIdx := cm.config.CurrentResponsesUpstream
+			if currentIdx < 0 || currentIdx >= len(cm.config.ResponsesUpstream) {
+				currentIdx = 0
+			}
+			// 设置所有渠道的 status 状态
+			for i := range cm.config.ResponsesUpstream {
+				if i == currentIdx {
+					cm.config.ResponsesUpstream[i].Status = "active"
+				} else {
+					cm.config.ResponsesUpstream[i].Status = "disabled"
+				}
+			}
+			log.Printf("Responses 渠道 [%d] %s 已设置为 active，其他 %d 个渠道已设为 disabled",
+				currentIdx, cm.config.ResponsesUpstream[currentIdx].Name, len(cm.config.ResponsesUpstream)-1)
+		}
+
+		// 保存迁移后的配置（saveConfigLocked 会自动清理废弃字段）
+		if err := cm.saveConfigLocked(cm.config); err != nil {
+			log.Printf("保存迁移后的配置失败: %v", err)
+			return err
+		}
+		log.Printf("配置迁移完成")
+	}
+
 	return nil
 }
 
@@ -156,6 +242,10 @@ func (cm *ConfigManager) loadConfig() error {
 func (cm *ConfigManager) saveConfigLocked(config Config) error {
 	// 备份当前配置
 	cm.backupConfig()
+
+	// 清理已废弃字段，确保不会被序列化到 JSON
+	config.CurrentUpstream = 0
+	config.CurrentResponsesUpstream = 0
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
@@ -514,6 +604,12 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) error
 	}
 	if updates.InsecureSkipVerify != nil {
 		upstream.InsecureSkipVerify = *updates.InsecureSkipVerify
+	}
+	if updates.Priority != nil {
+		upstream.Priority = *updates.Priority
+	}
+	if updates.Status != nil {
+		upstream.Status = *updates.Status
 	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -940,6 +1036,12 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 	if updates.InsecureSkipVerify != nil {
 		upstream.InsecureSkipVerify = *updates.InsecureSkipVerify
 	}
+	if updates.Priority != nil {
+		upstream.Priority = *updates.Priority
+	}
+	if updates.Status != nil {
+		upstream.Status = *updates.Status
+	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return err
@@ -1040,4 +1142,143 @@ func (cm *ConfigManager) RemoveResponsesAPIKey(index int, apiKey string) error {
 
 	log.Printf("已从 Responses 上游 [%d] %s 删除API密钥", index, cm.config.ResponsesUpstream[index].Name)
 	return nil
+}
+
+// ============== 多渠道调度相关方法 ==============
+
+// ReorderUpstreams 重新排序 Messages 渠道优先级
+// order 是渠道索引数组，按新的优先级顺序排列（只更新传入的渠道，支持部分排序）
+func (cm *ConfigManager) ReorderUpstreams(order []int) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if len(order) == 0 {
+		return fmt.Errorf("排序数组不能为空")
+	}
+
+	// 验证所有索引都有效且不重复
+	seen := make(map[int]bool)
+	for _, idx := range order {
+		if idx < 0 || idx >= len(cm.config.Upstream) {
+			return fmt.Errorf("无效的渠道索引: %d", idx)
+		}
+		if seen[idx] {
+			return fmt.Errorf("重复的渠道索引: %d", idx)
+		}
+		seen[idx] = true
+	}
+
+	// 更新传入渠道的优先级（未传入的渠道保持原优先级不变）
+	// 注意：priority 从 1 开始，避免 omitempty 吞掉 0 值
+	for i, idx := range order {
+		cm.config.Upstream[idx].Priority = i + 1
+	}
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("已更新 Messages 渠道优先级顺序 (%d 个渠道)", len(order))
+	return nil
+}
+
+// ReorderResponsesUpstreams 重新排序 Responses 渠道优先级
+// order 是渠道索引数组，按新的优先级顺序排列（只更新传入的渠道，支持部分排序）
+func (cm *ConfigManager) ReorderResponsesUpstreams(order []int) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if len(order) == 0 {
+		return fmt.Errorf("排序数组不能为空")
+	}
+
+	seen := make(map[int]bool)
+	for _, idx := range order {
+		if idx < 0 || idx >= len(cm.config.ResponsesUpstream) {
+			return fmt.Errorf("无效的渠道索引: %d", idx)
+		}
+		if seen[idx] {
+			return fmt.Errorf("重复的渠道索引: %d", idx)
+		}
+		seen[idx] = true
+	}
+
+	// 更新传入渠道的优先级（未传入的渠道保持原优先级不变）
+	// 注意：priority 从 1 开始，避免 omitempty 吞掉 0 值
+	for i, idx := range order {
+		cm.config.ResponsesUpstream[idx].Priority = i + 1
+	}
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("已更新 Responses 渠道优先级顺序 (%d 个渠道)", len(order))
+	return nil
+}
+
+// SetChannelStatus 设置 Messages 渠道状态
+func (cm *ConfigManager) SetChannelStatus(index int, status string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if index < 0 || index >= len(cm.config.Upstream) {
+		return fmt.Errorf("无效的上游索引: %d", index)
+	}
+
+	// 状态值转为小写，支持大小写不敏感
+	status = strings.ToLower(status)
+	if status != "active" && status != "suspended" && status != "disabled" {
+		return fmt.Errorf("无效的状态: %s (允许值: active, suspended, disabled)", status)
+	}
+
+	cm.config.Upstream[index].Status = status
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("已设置渠道 [%d] %s 状态为: %s", index, cm.config.Upstream[index].Name, status)
+	return nil
+}
+
+// SetResponsesChannelStatus 设置 Responses 渠道状态
+func (cm *ConfigManager) SetResponsesChannelStatus(index int, status string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if index < 0 || index >= len(cm.config.ResponsesUpstream) {
+		return fmt.Errorf("无效的上游索引: %d", index)
+	}
+
+	// 状态值转为小写，支持大小写不敏感
+	status = strings.ToLower(status)
+	if status != "active" && status != "suspended" && status != "disabled" {
+		return fmt.Errorf("无效的状态: %s (允许值: active, suspended, disabled)", status)
+	}
+
+	cm.config.ResponsesUpstream[index].Status = status
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("已设置 Responses 渠道 [%d] %s 状态为: %s", index, cm.config.ResponsesUpstream[index].Name, status)
+	return nil
+}
+
+// GetChannelStatus 获取渠道状态（带默认值处理）
+func GetChannelStatus(upstream *UpstreamConfig) string {
+	if upstream.Status == "" {
+		return "active"
+	}
+	return upstream.Status
+}
+
+// GetChannelPriority 获取渠道优先级（带默认值处理）
+func GetChannelPriority(upstream *UpstreamConfig, index int) int {
+	if upstream.Priority == 0 {
+		return index
+	}
+	return upstream.Priority
 }
