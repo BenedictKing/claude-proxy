@@ -1,7 +1,6 @@
 <template>
   <v-card
     class="channel-card h-100"
-    :class="{ 'current-channel': isCurrent }"
     :style="serviceStyle"
     :data-pinned="channel.pinned"
     elevation="0"
@@ -56,7 +55,6 @@
             </v-icon>
           </v-btn>
 
-
           <v-chip
             :color="getServiceChipColor()"
             size="small"
@@ -67,17 +65,28 @@
           >
             <span class="font-weight-bold">{{ channel.serviceType.toUpperCase() }}</span>
           </v-chip>
+          <!-- 渠道状态芯片 -->
           <v-chip
-            v-if="isCurrent"
-            color="success"
+            v-if="channel.status === 'disabled'"
+            color="grey"
             size="small"
             variant="flat"
             density="comfortable"
             rounded="lg"
-            class="current-chip"
           >
-            <v-icon start size="small">mdi-check-circle</v-icon>
-            当前
+            <v-icon start size="small">mdi-stop-circle</v-icon>
+            停用
+          </v-chip>
+          <v-chip
+            v-else-if="channel.status === 'suspended'"
+            color="warning"
+            size="small"
+            variant="flat"
+            density="comfortable"
+            rounded="lg"
+          >
+            <v-icon start size="small">mdi-pause-circle</v-icon>
+            熔断
           </v-chip>
         </div>
       </v-card-title>
@@ -228,19 +237,6 @@
 
       <!-- 操作按钮 -->
       <div class="action-buttons d-flex flex-wrap ga-2 justify-end w-100">
-        <v-btn 
-          v-if="!isCurrent"
-          size="small"
-          color="success"
-          variant="flat"
-          rounded="lg"
-          class="action-btn primary-action"
-          @click="$emit('setCurrent', channel.index)"
-          prepend-icon="mdi-check-circle"
-        >
-          设为当前
-        </v-btn>
-        
         <v-btn
           size="small"
           color="primary"
@@ -287,7 +283,6 @@ import type { Channel } from '../services/api'
 
 interface Props {
   channel: Channel
-  isCurrent: boolean
 }
 
 const props = defineProps<Props>()
@@ -298,7 +293,6 @@ const copiedKeyIndex = ref<number | null>(null)
 defineEmits<{
   edit: [channel: Channel]
   delete: [channelId: number]
-  setCurrent: [channelId: number]
   addKey: [channelId: number]
   removeKey: [channelId: number, apiKey: string]
   moveKeyToTop: [channelId: number, apiKey: string]
@@ -514,7 +508,11 @@ const serviceStyle = computed(() => {
   );
 }
 
-.channel-card:not(.current-channel):hover {
+.channel-card:not(:hover) {
+  /* default state */
+}
+
+.channel-card:hover {
   transform: translateY(-4px) scale(1.01);
   box-shadow: 
     0 16px 32px rgba(0, 0, 0, 0.08),
@@ -552,34 +550,9 @@ const serviceStyle = computed(() => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
-.service-chip, .current-chip {
+.service-chip {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   border: none;
-}
-
-/* --- CURRENT CHANNEL (LIGHT) --- */
-.channel-card.current-channel {
-  border-width: 2px !important;
-  border-color: rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.5) !important;
-  box-shadow: 
-    0 8px 32px rgba(var(--v-theme-success), 0.15),
-    0 4px 16px rgba(0, 0, 0, 0.08);
-  transform: translateY(-2px) scale(1.01);
-}
-
-.channel-card.current-channel .card-header-gradient {
-  background: linear-gradient(135deg, 
-    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.16) 0%, 
-    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.08) 50%,
-    rgba(139, 195, 74, 0.08) 100%);
-}
-
-.channel-card.current-channel:hover {
-  transform: translateY(-6px) scale(1.02);
-  box-shadow: 
-    0 20px 40px rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.20),
-    0 10px 28px rgba(0, 0, 0, 0.10);
-  border-color: rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.6) !important;
 }
 
 /* --- INDICATORS (LIGHT) --- */
@@ -695,32 +668,8 @@ const serviceStyle = computed(() => {
   border-color: rgba(255, 255, 255, 0.2);
 }
 
-.v-theme--dark .service-chip,
-.v-theme--dark .current-chip {
+.v-theme--dark .service-chip {
   border: none;
-}
-
-/* --- CURRENT CHANNEL (DARK) --- */
-.v-theme--dark .channel-card.current-channel {
-  border-width: 2px !important;
-  border-color: rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.7) !important;
-  box-shadow:
-    0 8px 32px rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.3),
-    0 4px 16px rgba(0, 0, 0, 0.32);
-}
-
-.v-theme--dark .channel-card.current-channel .card-header-gradient {
-  background: linear-gradient(135deg,
-    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.24) 0%,
-    rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.14) 50%,
-    rgba(139, 195, 74, 0.18) 100%);
-}
-
-.v-theme--dark .channel-card.current-channel:hover {
-  box-shadow:
-    0 24px 48px rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.34),
-    0 12px 32px rgba(0, 0, 0, 0.36);
-  border-color: rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.85) !important;
 }
 
 /* --- INDICATORS (DARK) --- */

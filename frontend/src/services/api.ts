@@ -31,6 +31,23 @@ if (import.meta.env.DEV) {
   })
 }
 
+// 渠道状态枚举
+export type ChannelStatus = 'active' | 'suspended' | 'disabled'
+
+// 渠道指标
+export interface ChannelMetrics {
+  channelIndex: number
+  requestCount: number
+  successCount: number
+  failureCount: number
+  successRate: number       // 0-100
+  errorRate: number         // 0-100
+  consecutiveFailures: number
+  latency: number           // ms
+  lastSuccessAt?: string
+  lastFailureAt?: string
+}
+
 export interface Channel {
   name: string
   serviceType: 'openai' | 'openaiold' | 'gemini' | 'claude' | 'responses'
@@ -41,9 +58,13 @@ export interface Channel {
   insecureSkipVerify?: boolean
   modelMapping?: Record<string, string>
   latency?: number
-  status?: 'healthy' | 'error' | 'unknown'
+  status?: ChannelStatus | 'healthy' | 'error' | 'unknown'
   index: number
   pinned?: boolean
+  // 多渠道调度相关字段
+  priority?: number          // 渠道优先级（数字越小优先级越高）
+  metrics?: ChannelMetrics   // 实时指标
+  suspendReason?: string     // 熔断原因
 }
 
 export interface ChannelsResponse {
@@ -276,6 +297,79 @@ class ApiService {
     await this.request(`/responses/channels/${channelId}/keys/${encodeURIComponent(apiKey)}/bottom`, {
       method: 'POST'
     })
+  }
+
+  // ============== 多渠道调度 API ==============
+
+  // 重新排序渠道优先级
+  async reorderChannels(order: number[]): Promise<void> {
+    await this.request('/channels/reorder', {
+      method: 'POST',
+      body: JSON.stringify({ order })
+    })
+  }
+
+  // 设置渠道状态
+  async setChannelStatus(channelId: number, status: ChannelStatus): Promise<void> {
+    await this.request(`/channels/${channelId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status })
+    })
+  }
+
+  // 恢复熔断渠道（重置错误计数）
+  async resumeChannel(channelId: number): Promise<void> {
+    await this.request(`/channels/${channelId}/resume`, {
+      method: 'POST'
+    })
+  }
+
+  // 获取渠道指标
+  async getChannelMetrics(): Promise<ChannelMetrics[]> {
+    return this.request('/channels/metrics')
+  }
+
+  // 获取调度器统计信息
+  async getSchedulerStats(type?: 'messages' | 'responses'): Promise<{
+    multiChannelMode: boolean
+    activeChannelCount: number
+    traceAffinityCount: number
+    traceAffinityTTL: string
+    failureThreshold: number
+    windowSize: number
+  }> {
+    const query = type === 'responses' ? '?type=responses' : ''
+    return this.request(`/channels/scheduler/stats${query}`)
+  }
+
+  // ============== Responses 多渠道调度 API ==============
+
+  // 重新排序 Responses 渠道优先级
+  async reorderResponsesChannels(order: number[]): Promise<void> {
+    await this.request('/responses/channels/reorder', {
+      method: 'POST',
+      body: JSON.stringify({ order })
+    })
+  }
+
+  // 设置 Responses 渠道状态
+  async setResponsesChannelStatus(channelId: number, status: ChannelStatus): Promise<void> {
+    await this.request(`/responses/channels/${channelId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status })
+    })
+  }
+
+  // 恢复 Responses 熔断渠道
+  async resumeResponsesChannel(channelId: number): Promise<void> {
+    await this.request(`/responses/channels/${channelId}/resume`, {
+      method: 'POST'
+    })
+  }
+
+  // 获取 Responses 渠道指标
+  async getResponsesChannelMetrics(): Promise<ChannelMetrics[]> {
+    return this.request('/responses/channels/metrics')
   }
 }
 

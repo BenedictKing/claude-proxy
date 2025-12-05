@@ -17,20 +17,13 @@
     <!-- 认证界面 -->
     <v-dialog v-model="showAuthDialog" persistent max-width="500">
       <v-card class="pa-4">
-        <v-card-title class="text-h5 text-center mb-4">
-          🔐 Claude Proxy 管理界面
-        </v-card-title>
-        
+        <v-card-title class="text-h5 text-center mb-4"> 🔐 Claude Proxy 管理界面 </v-card-title>
+
         <v-card-text>
-          <v-alert
-            v-if="authError"
-            type="error"
-            variant="tonal"
-            class="mb-4"
-          >
+          <v-alert v-if="authError" type="error" variant="tonal" class="mb-4">
             {{ authError }}
           </v-alert>
-          
+
           <v-form @submit.prevent="handleAuthSubmit">
             <v-text-field
               v-model="authKeyInput"
@@ -43,27 +36,15 @@
               autofocus
               @keyup.enter="handleAuthSubmit"
             />
-            
-            <v-btn
-              type="submit"
-              color="primary"
-              block
-              size="large"
-              class="mt-4"
-              :loading="authLoading"
-            >
+
+            <v-btn type="submit" color="primary" block size="large" class="mt-4" :loading="authLoading">
               访问管理界面
             </v-btn>
           </v-form>
-          
+
           <v-divider class="my-4" />
 
-          <v-alert
-            type="info"
-            variant="tonal"
-            density="compact"
-            class="mb-0"
-          >
+          <v-alert type="info" variant="tonal" density="compact" class="mb-0">
             <div class="text-body-2">
               <p class="mb-2"><strong>🔒 安全提示：</strong></p>
               <ul class="ml-4 mb-0">
@@ -78,264 +59,232 @@
         </v-card-text>
       </v-card>
     </v-dialog>
-    <!-- 应用栏 -->
-    <v-app-bar
-      elevation="2"
-      :color="currentTheme === 'dark' ? 'surface' : 'primary'"
-      :height="$vuetify.display.mobile ? 72 : 88"
-      class="app-header px-4"
-    >
+
+    <!-- 应用栏 - 毛玻璃效果 -->
+    <v-app-bar elevation="0" :height="$vuetify.display.mobile ? 64 : 72" class="app-header">
       <template #prepend>
-        <v-icon 
-          :class="$vuetify.display.mobile ? 'mr-3' : 'mr-4'" 
-          :size="$vuetify.display.mobile ? 28 : 36"
-        >
-          mdi-rocket-launch
-        </v-icon>
+        <div class="app-logo">
+          <v-icon :size="$vuetify.display.mobile ? 26 : 32" color="primary"> mdi-rocket-launch </v-icon>
+        </div>
       </template>
-      
+
       <v-app-bar-title class="d-flex flex-column justify-center">
-        <div :class="$vuetify.display.mobile ? 'text-h6' : 'text-h5'" class="font-weight-bold mb-1 d-flex align-center">
-          <span
-            class="api-type-text"
-            :class="{ 'active': activeTab === 'messages' }"
-            @click="activeTab = 'messages'"
-          >
+        <div
+          :class="$vuetify.display.mobile ? 'text-subtitle-1' : 'text-h6'"
+          class="font-weight-bold d-flex align-center"
+        >
+          <span class="api-type-text" :class="{ active: activeTab === 'messages' }" @click="activeTab = 'messages'">
             Claude
           </span>
           <span class="api-type-text separator">/</span>
-          <span
-            class="api-type-text"
-            :class="{ 'active': activeTab === 'responses' }"
-            @click="activeTab = 'responses'"
-          >
+          <span class="api-type-text" :class="{ active: activeTab === 'responses' }" @click="activeTab = 'responses'">
             Codex
           </span>
-          <span style="margin-left: 12px;">API Proxy</span>
-        </div>
-        <div class="text-body-2 opacity-90 d-none d-sm-block">
-          智能API代理管理平台
+          <span class="brand-text">API Proxy</span>
         </div>
       </v-app-bar-title>
 
       <v-spacer></v-spacer>
 
       <!-- 主题切换 -->
-      <v-btn
-        icon
-        variant="text"
-        @click="toggleTheme"
-      >
-        <v-icon>{{ currentTheme === 'dark' ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
+      <v-btn icon variant="text" size="small" class="header-btn" @click="toggleTheme">
+        <v-icon size="20">{{ currentTheme === 'dark' ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
       </v-btn>
-      
+
       <!-- 注销按钮 -->
       <v-btn
         icon
         variant="text"
+        size="small"
+        class="header-btn"
         @click="handleLogout"
         v-if="isAuthenticated"
         title="注销"
       >
-        <v-icon>mdi-logout</v-icon>
+        <v-icon size="20">mdi-logout</v-icon>
       </v-btn>
     </v-app-bar>
 
     <!-- 主要内容 -->
     <v-main>
-      <v-container fluid class="pa-6">
-        <!-- 统计卡片 -->
-        <v-row class="mb-6">
-          <v-col cols="12" sm="6" md="3">
-            <v-card elevation="3" class="h-100 stat-card" hover>
-              <v-card-text class="pb-2">
-                <div class="d-flex align-center justify-space-between">
-                  <div>
-                    <div class="text-h4 text-info font-weight-bold">{{ currentChannelsData.channels?.length || 0 }}</div>
-                    <div class="text-subtitle-1 text-medium-emphasis">总渠道数</div>
-                    <div class="text-caption text-medium-emphasis">已配置的API渠道</div>
-                  </div>
-                  <v-avatar size="60" color="info" variant="tonal">
-                    <v-icon size="30" color="info">mdi-server-network</v-icon>
-                  </v-avatar>
-                </div>
-              </v-card-text>
-            </v-card>
-          </v-col>
-
-          <v-col cols="12" sm="6" md="3">
-            <v-card elevation="3" class="h-100">
-              <v-card-text class="pb-2">
-                <div class="d-flex align-center justify-space-between">
-                  <div>
-                    <div class="text-h6 text-success font-weight-bold text-truncate" style="max-width: 120px;">{{ getCurrentChannelName() }}</div>
-                    <div class="text-subtitle-1 text-medium-emphasis">当前渠道</div>
-                    <div class="text-caption text-success font-weight-medium">{{ currentChannelType }}</div>
-                  </div>
-                  <v-avatar size="60" color="success" variant="tonal">
-                    <v-icon size="30" color="success">mdi-check-circle</v-icon>
-                  </v-avatar>
-                </div>
-              </v-card-text>
-            </v-card>
-          </v-col>
-
-          <v-col cols="12" sm="6" md="3">
-            <v-card elevation="3" class="h-100">
-              <v-card-text class="pb-2">
-                <div class="d-flex align-center justify-space-between">
-                  <div>
-                    <div class="text-h6 text-info font-weight-bold text-capitalize">{{ currentChannelsData.loadBalance || 'none' }}</div>
-                    <div class="text-subtitle-1 text-medium-emphasis">API密钥分配</div>
-                    <div class="text-caption text-medium-emphasis">当前渠道内密钥使用策略</div>
-                  </div>
-                  <v-avatar size="60" color="info" variant="tonal">
-                    <v-icon size="30" color="info">mdi-swap-horizontal</v-icon>
-                  </v-avatar>
-                </div>
-              </v-card-text>
-            </v-card>
-          </v-col>
-
-          <v-col cols="12" sm="6" md="3">
-            <v-card elevation="3" class="h-100">
-              <v-card-text class="pb-2">
-                <div class="d-flex align-center justify-space-between">
-                  <div>
-                    <div class="text-h6 text-success font-weight-bold">运行中</div>
-                    <div class="text-subtitle-1 text-medium-emphasis">系统状态</div>
-                    <div class="text-caption text-medium-emphasis">服务正常运行</div>
-                  </div>
-                  <v-avatar size="60" color="success" variant="tonal">
-                    <v-icon size="30" color="success">mdi-heart-pulse</v-icon>
-                  </v-avatar>
-                </div>
-              </v-card-text>
-            </v-card>
-          </v-col>
-        </v-row>
-
-        <!-- 操作按钮区域 -->
-        <v-card elevation="2" class="mb-6" rounded="lg">
-          <v-card-text>
-            <div class="d-flex flex-column flex-sm-row gap-3 align-center justify-space-between">
-              <div class="d-flex flex-wrap align-center ga-3">
-                <v-btn
-                  color="primary"
-                  size="large"
-                  @click="openAddChannelModal"
-                  prepend-icon="mdi-plus"
-                  variant="elevated"
-                >
-                  添加渠道
-                </v-btn>
-                
-                <v-btn
-                  color="info"
-                  size="large"
-                  @click="pingAllChannels"
-                  prepend-icon="mdi-speedometer"
-                  variant="outlined"
-                  :loading="isPingingAll"
-                >
-                  测试全部延迟
-                </v-btn>
-
-                <v-btn
-                  color="secondary"
-                  size="large"
-                  @click="refreshChannels"
-                  prepend-icon="mdi-refresh"
-                  variant="tonal"
-                >
-                  刷新
-                </v-btn>
+      <v-container fluid class="pa-4 pa-md-6">
+        <!-- 统计卡片 - 现代玻璃拟态风格 -->
+        <v-row class="mb-6 stat-cards-row">
+          <v-col cols="12" sm="6" lg="3">
+            <div class="stat-card stat-card-info">
+              <div class="stat-card-icon">
+                <v-icon size="28">mdi-server-network</v-icon>
               </div>
-
-              <!-- 负载均衡选择 -->
-              <v-menu>
-                <template v-slot:activator="{ props }">
-                  <v-btn
-                    v-bind="props"
-                    color="secondary"
-                    size="large"
-                    append-icon="mdi-chevron-down"
-                    variant="elevated"
-                  >
-                    API密钥分配: {{ currentChannelsData.loadBalance }}
-                  </v-btn>
-                </template>
-                <v-list>
-                  <v-list-item @click="updateLoadBalance('round-robin')">
-                    <template v-slot:prepend>
-                      <v-icon>mdi-rotate-right</v-icon>
-                    </template>
-                    <v-list-item-title>轮询 (Round Robin)</v-list-item-title>
-                    <v-list-item-subtitle>按顺序依次使用当前渠道的API密钥</v-list-item-subtitle>
-                  </v-list-item>
-                  <v-list-item @click="updateLoadBalance('random')">
-                    <template v-slot:prepend>
-                      <v-icon>mdi-dice-6</v-icon>
-                    </template>
-                    <v-list-item-title>随机 (Random)</v-list-item-title>
-                    <v-list-item-subtitle>随机选择当前渠道的API密钥</v-list-item-subtitle>
-                  </v-list-item>
-                  <v-list-item @click="updateLoadBalance('failover')">
-                    <template v-slot:prepend>
-                      <v-icon>mdi-backup-restore</v-icon>
-                    </template>
-                    <v-list-item-title>故障转移 (Failover)</v-list-item-title>
-                    <v-list-item-subtitle>优先使用第一个密钥，失败时自动切换</v-list-item-subtitle>
-                  </v-list-item>
-                </v-list>
-              </v-menu>
+              <div class="stat-card-content">
+                <div class="stat-card-value">{{ currentChannelsData.channels?.length || 0 }}</div>
+                <div class="stat-card-label">总渠道数</div>
+                <div class="stat-card-desc">已配置的API渠道</div>
+              </div>
+              <div class="stat-card-glow"></div>
             </div>
-          </v-card-text>
-        </v-card>
+          </v-col>
 
-        <!-- 渠道列表 -->
-        <v-row v-if="channelsData.channels?.length" justify="start">
-          <transition-group name="channel-list" tag="div" class="d-contents">
-            <v-col
-              v-for="channel in sortedChannels"
-              :key="channel.index"
-              cols="12"
-              md="6"
-              lg="4"
-              xl="4"
-              class="channel-col"
-            >
-            <ChannelCard
-              :channel="channel"
-              :is-current="channel.index === currentChannelsData.current"
-              @edit="editChannel"
-              @delete="deleteChannel"
-              @set-current="setCurrentChannel"
-              @add-key="openAddKeyModal"
-              @remove-key="removeApiKey"
-              @move-key-to-top="moveApiKeyToTop"
-              @move-key-to-bottom="moveApiKeyToBottom"
-              @ping="pingChannel"
-              @toggle-pin="toggleChannelPin"
-            />
-            </v-col>
-          </transition-group>
+          <v-col cols="12" sm="6" lg="3">
+            <div class="stat-card stat-card-success">
+              <div class="stat-card-icon">
+                <v-icon size="28">mdi-check-circle</v-icon>
+              </div>
+              <div class="stat-card-content">
+                <div class="stat-card-value">
+                  {{ activeChannelCount
+                  }}<span class="stat-card-total">/{{ currentChannelsData.channels?.length || 0 }}</span>
+                </div>
+                <div class="stat-card-label">活跃渠道</div>
+                <div class="stat-card-desc">参与故障转移调度</div>
+              </div>
+              <div class="stat-card-glow"></div>
+            </div>
+          </v-col>
+
+          <v-col cols="12" sm="6" lg="3">
+            <div class="stat-card stat-card-primary">
+              <div class="stat-card-icon">
+                <v-icon size="28">mdi-swap-horizontal</v-icon>
+              </div>
+              <div class="stat-card-content">
+                <div class="stat-card-value text-capitalize">{{ currentChannelsData.loadBalance || 'none' }}</div>
+                <div class="stat-card-label">API密钥分配</div>
+                <div class="stat-card-desc">当前渠道内密钥策略</div>
+              </div>
+              <div class="stat-card-glow"></div>
+            </div>
+          </v-col>
+
+          <v-col cols="12" sm="6" lg="3">
+            <div class="stat-card stat-card-emerald">
+              <div class="stat-card-icon pulse-animation">
+                <v-icon size="28">mdi-heart-pulse</v-icon>
+              </div>
+              <div class="stat-card-content">
+                <div class="stat-card-value">运行中</div>
+                <div class="stat-card-label">系统状态</div>
+                <div class="stat-card-desc">服务正常运行</div>
+              </div>
+              <div class="stat-card-glow"></div>
+            </div>
+          </v-col>
         </v-row>
+
+        <!-- 操作按钮区域 - 现代化设计 -->
+        <div class="action-bar mb-6">
+          <div class="action-bar-left">
+            <v-btn
+              color="primary"
+              size="large"
+              @click="openAddChannelModal"
+              prepend-icon="mdi-plus"
+              class="action-btn action-btn-primary"
+            >
+              添加渠道
+            </v-btn>
+
+            <v-btn
+              color="info"
+              size="large"
+              @click="pingAllChannels"
+              prepend-icon="mdi-speedometer"
+              variant="tonal"
+              :loading="isPingingAll"
+              class="action-btn"
+            >
+              测试延迟
+            </v-btn>
+
+            <v-btn size="large" @click="refreshChannels" prepend-icon="mdi-refresh" variant="text" class="action-btn">
+              刷新
+            </v-btn>
+          </div>
+
+          <div class="action-bar-right">
+            <!-- 负载均衡选择 -->
+            <v-menu>
+              <template v-slot:activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  variant="tonal"
+                  size="large"
+                  append-icon="mdi-chevron-down"
+                  class="action-btn load-balance-btn"
+                >
+                  <v-icon start size="20">mdi-tune</v-icon>
+                  {{ currentChannelsData.loadBalance }}
+                </v-btn>
+              </template>
+              <v-list class="load-balance-menu" rounded="lg" elevation="8">
+                <v-list-subheader>API密钥分配策略</v-list-subheader>
+                <v-list-item
+                  @click="updateLoadBalance('round-robin')"
+                  :active="currentChannelsData.loadBalance === 'round-robin'"
+                  rounded="lg"
+                >
+                  <template v-slot:prepend>
+                    <v-avatar color="info" size="36" variant="tonal">
+                      <v-icon size="20">mdi-rotate-right</v-icon>
+                    </v-avatar>
+                  </template>
+                  <v-list-item-title class="font-weight-medium">轮询 (Round Robin)</v-list-item-title>
+                  <v-list-item-subtitle>按顺序依次使用API密钥</v-list-item-subtitle>
+                </v-list-item>
+                <v-list-item
+                  @click="updateLoadBalance('random')"
+                  :active="currentChannelsData.loadBalance === 'random'"
+                  rounded="lg"
+                >
+                  <template v-slot:prepend>
+                    <v-avatar color="secondary" size="36" variant="tonal">
+                      <v-icon size="20">mdi-dice-6</v-icon>
+                    </v-avatar>
+                  </template>
+                  <v-list-item-title class="font-weight-medium">随机 (Random)</v-list-item-title>
+                  <v-list-item-subtitle>随机选择API密钥</v-list-item-subtitle>
+                </v-list-item>
+                <v-list-item
+                  @click="updateLoadBalance('failover')"
+                  :active="currentChannelsData.loadBalance === 'failover'"
+                  rounded="lg"
+                >
+                  <template v-slot:prepend>
+                    <v-avatar color="warning" size="36" variant="tonal">
+                      <v-icon size="20">mdi-backup-restore</v-icon>
+                    </v-avatar>
+                  </template>
+                  <v-list-item-title class="font-weight-medium">故障转移 (Failover)</v-list-item-title>
+                  <v-list-item-subtitle>优先第一个，失败时切换</v-list-item-subtitle>
+                </v-list-item>
+              </v-list>
+            </v-menu>
+          </div>
+        </div>
+
+        <!-- 渠道编排（高密度列表模式） -->
+        <ChannelOrchestration
+          v-if="currentChannelsData.channels?.length"
+          :channels="currentChannelsData.channels"
+          :current-channel-index="currentChannelsData.current"
+          :channel-type="activeTab"
+          @edit="editChannel"
+          @delete="deleteChannel"
+          @ping="pingChannel"
+          @refresh="refreshChannels"
+          @error="showErrorToast"
+          class="mb-6"
+        />
 
         <!-- 空状态 -->
-        <v-card v-else elevation="2" class="text-center pa-12" rounded="lg">
+        <v-card v-if="!currentChannelsData.channels?.length" elevation="2" class="text-center pa-12" rounded="lg">
           <v-avatar size="120" color="primary" class="mb-6">
             <v-icon size="60" color="white">mdi-rocket-launch</v-icon>
           </v-avatar>
           <div class="text-h4 mb-4 font-weight-bold">暂无渠道配置</div>
-          <div class="text-subtitle-1 text-medium-emphasis mb-8">还没有配置任何API渠道，请添加第一个渠道来开始使用代理服务</div>
-          <v-btn
-            color="primary"
-            size="x-large"
-            @click="openAddChannelModal"
-            prepend-icon="mdi-plus"
-            variant="elevated"
-          >
+          <div class="text-subtitle-1 text-medium-emphasis mb-8">
+            还没有配置任何API渠道，请添加第一个渠道来开始使用代理服务
+          </div>
+          <v-btn color="primary" size="x-large" @click="openAddChannelModal" prepend-icon="mdi-plus" variant="elevated">
             添加第一个渠道
           </v-btn>
         </v-card>
@@ -398,8 +347,8 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useTheme } from 'vuetify'
 import { api, type Channel, type ChannelsResponse } from './services/api'
-import ChannelCard from './components/ChannelCard.vue'
 import AddChannelModal from './components/AddChannelModal.vue'
+import ChannelOrchestration from './components/ChannelOrchestration.vue'
 
 // Vuetify主题
 const theme = useTheme()
@@ -416,43 +365,6 @@ const newApiKey = ref('')
 const isPingingAll = ref(false)
 const currentTheme = ref<'light' | 'dark' | 'auto'>('auto')
 
-// Pin状态管理 (使用localStorage持久化，Claude/Codex分开存储)
-const PINNED_CHANNELS_KEYS: Record<'messages' | 'responses', string> = {
-  messages: 'claude-proxy-pinned-channels',
-  responses: 'codex-proxy-pinned-channels'
-}
-const pinnedChannels = ref<Record<'messages' | 'responses', Set<number>>>({
-  messages: new Set(),
-  responses: new Set()
-})
-
-const getPinnedSet = (tab: 'messages' | 'responses') => pinnedChannels.value[tab] || new Set<number>()
-
-// 从localStorage加载pin状态
-const loadPinnedChannels = (tab?: 'messages' | 'responses') => {
-  const targets = tab ? [tab] : (['messages', 'responses'] as const)
-  targets.forEach(t => {
-    try {
-      const saved = localStorage.getItem(PINNED_CHANNELS_KEYS[t])
-      const loadedSet = saved ? new Set<number>(JSON.parse(saved) as number[]) : new Set<number>()
-      pinnedChannels.value = { ...pinnedChannels.value, [t]: loadedSet }
-    } catch (error) {
-      console.warn('加载pin状态失败:', error)
-      pinnedChannels.value = { ...pinnedChannels.value, [t]: new Set<number>() }
-    }
-  })
-}
-
-// 保存pin状态到localStorage
-const savePinnedChannels = (tab: 'messages' | 'responses') => {
-  try {
-    const pinnedArray = Array.from(getPinnedSet(tab))
-    localStorage.setItem(PINNED_CHANNELS_KEYS[tab], JSON.stringify(pinnedArray))
-  } catch (error) {
-    console.warn('保存pin状态失败:', error)
-  }
-}
-
 // Toast通知系统
 interface Toast {
   id: number
@@ -468,67 +380,30 @@ const currentChannelsData = computed(() => {
   return activeTab.value === 'messages' ? channelsData.value : responsesChannelsData.value
 })
 
-const getCurrentChannelName = () => {
-  const current = currentChannelsData.value.channels?.find(c => c.index === currentChannelsData.value.current)
-  return current?.name || current?.serviceType || '未设置'
-}
-
-const currentChannelType = computed(() => {
-  const current = currentChannelsData.value.channels?.find(c => c.index === currentChannelsData.value.current)
-  return current?.serviceType?.toUpperCase() || ''
-})
-
-// 自动排序渠道：当前渠道排在最前面，pinned渠道排在当前渠道后面
-const sortedChannels = computed(() => {
+// 计算属性：活跃渠道数（非 disabled 状态）
+const activeChannelCount = computed(() => {
   const data = currentChannelsData.value
-  if (!data.channels) return []
-
-  const channels = [...data.channels]
-  const pinnedSet = getPinnedSet(activeTab.value)
-
-  // 排序逻辑：当前渠道 > pinned渠道 > 其他渠道
-  return channels.sort((a, b) => {
-    const aIsCurrent = a.index === data.current
-    const bIsCurrent = b.index === data.current
-    const aIsPinned = pinnedSet.has(a.index)
-    const bIsPinned = pinnedSet.has(b.index)
-    
-    // 当前渠道始终排在最前面
-    if (aIsCurrent && !bIsCurrent) return -1
-    if (!aIsCurrent && bIsCurrent) return 1
-    
-    // 如果都不是当前渠道，则比较pin状态
-    if (!aIsCurrent && !bIsCurrent) {
-      // pinned渠道排在非pinned渠道前面
-      if (aIsPinned && !bIsPinned) return -1
-      if (!aIsPinned && bIsPinned) return 1
-      
-      // 同样pin状态下，按index排序
-      return a.index - b.index
-    }
-    
-    // 保持原有顺序
-    return a.index - b.index
-  })
+  if (!data.channels) return 0
+  return data.channels.filter(ch => ch.status !== 'disabled').length
 })
 
 // Toast工具函数
 const getToastColor = (type: string) => {
   const colorMap: Record<string, string> = {
-    'success': 'success',
-    'error': 'error',
-    'warning': 'warning',
-    'info': 'info'
+    success: 'success',
+    error: 'error',
+    warning: 'warning',
+    info: 'info'
   }
   return colorMap[type] || 'info'
 }
 
 const getToastIcon = (type: string) => {
   const iconMap: Record<string, string> = {
-    'success': 'mdi-check-circle',
-    'error': 'mdi-alert-circle',
-    'warning': 'mdi-alert',
-    'info': 'mdi-information'
+    success: 'mdi-check-circle',
+    error: 'mdi-alert-circle',
+    warning: 'mdi-alert',
+    info: 'mdi-information'
   }
   return iconMap[type] || 'mdi-information'
 }
@@ -549,45 +424,9 @@ const handleError = (error: unknown, defaultMessage: string) => {
   console.error(error)
 }
 
-// Pin相关函数
-const toggleChannelPin = (channelId: number) => {
-  const tab = activeTab.value
-  const next = new Set(getPinnedSet(tab))
-
-  if (next.has(channelId)) {
-    next.delete(channelId)
-    showToast('渠道已取消置顶', 'info')
-  } else {
-    next.add(channelId)
-    showToast('渠道已置顶', 'success')
-  }
-
-  pinnedChannels.value = { ...pinnedChannels.value, [tab]: next }
-  savePinnedChannels(tab)
-  updateChannelsPinnedStatus()
-}
-
-const isChannelPinned = (channelId: number): boolean => {
-  return getPinnedSet(activeTab.value).has(channelId)
-}
-
-// 更新渠道的pinned状态
-const updateChannelsPinnedStatus = () => {
-  // 更新 Messages Tab 的渠道数据
-  if (channelsData.value.channels) {
-    const messagesPinned = getPinnedSet('messages')
-    channelsData.value.channels.forEach(channel => {
-      channel.pinned = messagesPinned.has(channel.index)
-    })
-  }
-
-  // 更新 Codex Tab 的渠道数据
-  if (responsesChannelsData.value.channels) {
-    const responsesPinned = getPinnedSet('responses')
-    responsesChannelsData.value.channels.forEach(channel => {
-      channel.pinned = responsesPinned.has(channel.index)
-    })
-  }
+// 直接显示错误消息（供子组件事件使用）
+const showErrorToast = (message: string) => {
+  showToast(message, 'error')
 }
 
 // 主要功能函数
@@ -598,7 +437,6 @@ const refreshChannels = async () => {
     } else {
       responsesChannelsData.value = await api.getResponsesChannels()
     }
-    updateChannelsPinnedStatus()
   } catch (error) {
     handleAuthError(error)
   }
@@ -656,20 +494,6 @@ const openAddChannelModal = () => {
   showAddChannelModal.value = true
 }
 
-const setCurrentChannel = async (channelId: number) => {
-  try {
-    if (activeTab.value === 'responses') {
-      await api.setCurrentResponsesChannel(channelId)
-    } else {
-      await api.setCurrentChannel(channelId)
-    }
-    showToast('当前渠道设置成功', 'success')
-    await refreshChannels()
-  } catch (error) {
-    handleError(error, '设置当前渠道失败')
-  }
-}
-
 const openAddKeyModal = (channelId: number) => {
   selectedChannelForKey.value = channelId
   newApiKey.value = ''
@@ -690,7 +514,7 @@ const addApiKey = async () => {
     newApiKey.value = ''
     await refreshChannels()
   } catch (error) {
-    handleError(error, '添加API密钥失败')
+    showToast(`添加API密钥失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error')
   }
 }
 
@@ -706,33 +530,7 @@ const removeApiKey = async (channelId: number, apiKey: string) => {
     showToast('API密钥删除成功', 'success')
     await refreshChannels()
   } catch (error) {
-    handleError(error, '删除API密钥失败')
-  }
-}
-
-const moveApiKeyToTop = async (channelId: number, apiKey: string) => {
-  try {
-    if (activeTab.value === 'responses') {
-      await api.moveResponsesApiKeyToTop(channelId, apiKey)
-    } else {
-      await api.moveApiKeyToTop(channelId, apiKey)
-    }
-    await refreshChannels()
-  } catch (error) {
-    handleError(error, '置顶失败')
-  }
-}
-
-const moveApiKeyToBottom = async (channelId: number, apiKey: string) => {
-  try {
-    if (activeTab.value === 'responses') {
-      await api.moveResponsesApiKeyToBottom(channelId, apiKey)
-    } else {
-      await api.moveApiKeyToBottom(channelId, apiKey)
-    }
-    await refreshChannels()
-  } catch (error) {
-    handleError(error, '置底失败')
+    showToast(`删除API密钥失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error')
   }
 }
 
@@ -747,7 +545,7 @@ const pingChannel = async (channelId: number) => {
     }
     showToast(`延迟测试完成: ${result.latency}ms`, result.success ? 'success' : 'warning')
   } catch (error) {
-    handleError(error, '延迟测试失败')
+    showToast(`延迟测试失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error')
   }
 }
 
@@ -767,7 +565,7 @@ const pingAllChannels = async () => {
     })
     showToast('全部渠道延迟测试完成', 'success')
   } catch (error) {
-    handleError(error, '批量延迟测试失败')
+    showToast(`批量延迟测试失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error')
   } finally {
     isPingingAll.value = false
   }
@@ -784,7 +582,7 @@ const updateLoadBalance = async (strategy: string) => {
     }
     showToast(`负载均衡策略已更新为: ${strategy}`, 'success')
   } catch (error) {
-    handleError(error, '更新负载均衡策略失败')
+    showToast(`更新负载均衡策略失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error')
   }
 }
 
@@ -920,7 +718,6 @@ const handleAuthSubmit = async () => {
     authLockoutTime.value = null
 
     // 如果成功，加载数据
-    loadPinnedChannels()
     await refreshChannels()
 
     authKeyInput.value = ''
@@ -964,19 +761,21 @@ const handleAuthError = (error: any) => {
     isAuthenticated.value = false
     authError.value = '访问密钥无效或已过期，请重新输入'
   } else {
-    handleError(error, '操作失败')
+    showToast(`操作失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error')
   }
 }
 
 // 初始化
 onMounted(async () => {
   // 加载保存的主题
-  const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'auto' || 'auto'
+  const savedTheme = (localStorage.getItem('theme') as 'light' | 'dark' | 'auto') || 'auto'
   setTheme(savedTheme)
 
   // 监听系统主题变化
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-  const handlePref = () => { if (currentTheme.value === 'auto') setTheme('auto') }
+  const handlePref = () => {
+    if (currentTheme.value === 'auto') setTheme('auto')
+  }
   mediaQuery.addEventListener('change', handlePref)
 
   // 检查是否有保存的密钥
@@ -996,9 +795,6 @@ onMounted(async () => {
   const authenticated = await autoAuthenticate()
 
   if (authenticated) {
-    // 加载pin状态
-    loadPinnedChannels()
-
     // 加载渠道数据
     await refreshChannels()
   }
@@ -1013,10 +809,23 @@ watch(activeTab, async () => {
 </script>
 
 <style scoped>
+/* =====================================================
+   🎨 现代化 UI 样式系统
+   ===================================================== */
+
+/* ----- 应用栏 - 毛玻璃效果 ----- */
 .app-header {
-  transition: height 0.3s ease;
-  padding-left: 16px !important;
-  padding-right: 16px !important;
+  background: rgba(var(--v-theme-surface), 0.8) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  transition: all 0.3s ease;
+  padding: 0 16px !important;
+}
+
+.v-theme--dark .app-header {
+  background: rgba(var(--v-theme-surface), 0.75) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .app-header .v-toolbar-title {
@@ -1024,76 +833,370 @@ watch(activeTab, async () => {
   width: auto !important;
 }
 
-/* API 类型切换文本样式：下划线高亮 */
+.app-logo {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(var(--v-theme-primary), 0.15), rgba(var(--v-theme-secondary), 0.1));
+  border-radius: 12px;
+  margin-right: 12px;
+}
+
+.brand-text {
+  margin-left: 10px;
+  background: linear-gradient(135deg, rgb(var(--v-theme-primary)), rgb(var(--v-theme-secondary)));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.header-btn {
+  border-radius: 10px !important;
+  margin-left: 4px;
+}
+
+.header-btn:hover {
+  background: rgba(var(--v-theme-primary), 0.1);
+}
+
+/* ----- API Tab 切换样式 ----- */
 .api-type-text {
   cursor: pointer;
-  opacity: 0.55;
-  transition:
-    opacity 0.18s ease,
-    transform 0.18s ease;
-  padding: 2px 4px;
-  display: inline-block;
+  opacity: 0.5;
+  transition: all 0.2s ease;
+  padding: 4px 8px;
+  border-radius: 6px;
   position: relative;
 }
 
 .api-type-text:not(.separator):hover {
-  opacity: 0.85;
-  transform: translateY(-0.5px);
+  opacity: 0.8;
+  background: rgba(var(--v-theme-primary), 0.08);
 }
 
 .api-type-text.active {
   opacity: 1;
-  transform: translateY(-0.5px);
-  font-weight: 900;
+  font-weight: 700;
+  color: rgb(var(--v-theme-primary));
 }
 
 .api-type-text.active::after {
   content: '';
   position: absolute;
-  left: 4px;
-  right: 4px;
+  left: 8px;
+  right: 8px;
   bottom: 0;
-  height: 3px;
+  height: 2px;
   border-radius: 999px;
-  background-color: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  background: linear-gradient(90deg, rgb(var(--v-theme-primary)), rgb(var(--v-theme-secondary)));
 }
 
 .separator {
-  opacity: 0.32;
-  margin: 0 6px;
+  opacity: 0.25;
+  margin: 0 2px;
   cursor: default;
   padding: 0;
 }
 
-/* 响应式内边距调整 */
+/* ----- 统计卡片 - 玻璃拟态 ----- */
+.stat-cards-row {
+  margin-top: -8px;
+}
+
+.stat-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 16px;
+  background: rgba(var(--v-theme-surface), 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  min-height: 100px;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+}
+
+.v-theme--dark .stat-card {
+  background: rgba(var(--v-theme-surface), 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.v-theme--dark .stat-card:hover {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.stat-card-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
+}
+
+.stat-card:hover .stat-card-icon {
+  transform: scale(1.1);
+}
+
+.stat-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.stat-card-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.5px;
+}
+
+.stat-card-total {
+  font-size: 1rem;
+  font-weight: 500;
+  opacity: 0.6;
+}
+
+.stat-card-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-top: 2px;
+  opacity: 0.85;
+}
+
+.stat-card-desc {
+  font-size: 0.75rem;
+  opacity: 0.6;
+  margin-top: 2px;
+}
+
+.stat-card-glow {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.4;
+  right: -20px;
+  top: -20px;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.stat-card:hover .stat-card-glow {
+  opacity: 0.6;
+}
+
+/* 统计卡片颜色变体 */
+.stat-card-info .stat-card-icon {
+  background: linear-gradient(135deg, #3b82f6, #60a5fa);
+  color: white;
+}
+.stat-card-info .stat-card-value {
+  color: #3b82f6;
+}
+.stat-card-info .stat-card-glow {
+  background: #3b82f6;
+}
+.v-theme--dark .stat-card-info .stat-card-value {
+  color: #60a5fa;
+}
+
+.stat-card-success .stat-card-icon {
+  background: linear-gradient(135deg, #10b981, #34d399);
+  color: white;
+}
+.stat-card-success .stat-card-value {
+  color: #10b981;
+}
+.stat-card-success .stat-card-glow {
+  background: #10b981;
+}
+.v-theme--dark .stat-card-success .stat-card-value {
+  color: #34d399;
+}
+
+.stat-card-primary .stat-card-icon {
+  background: linear-gradient(135deg, #6366f1, #818cf8);
+  color: white;
+}
+.stat-card-primary .stat-card-value {
+  color: #6366f1;
+}
+.stat-card-primary .stat-card-glow {
+  background: #6366f1;
+}
+.v-theme--dark .stat-card-primary .stat-card-value {
+  color: #818cf8;
+}
+
+.stat-card-emerald .stat-card-icon {
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: white;
+}
+.stat-card-emerald .stat-card-value {
+  color: #059669;
+}
+.stat-card-emerald .stat-card-glow {
+  background: #059669;
+}
+.v-theme--dark .stat-card-emerald .stat-card-value {
+  color: #34d399;
+}
+
+/* ----- 操作按钮区域 ----- */
+.action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  background: rgba(var(--v-theme-surface), 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 16px;
+}
+
+.v-theme--dark .action-bar {
+  background: rgba(var(--v-theme-surface), 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.action-bar-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-bar-right {
+  display: flex;
+  align-items: center;
+}
+
+.action-btn {
+  border-radius: 12px !important;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+  transform: translateY(-1px);
+}
+
+.action-btn-primary {
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35) !important;
+}
+
+.action-btn-primary:hover {
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45) !important;
+}
+
+.load-balance-btn {
+  text-transform: capitalize;
+}
+
+.load-balance-menu {
+  min-width: 300px;
+  padding: 8px;
+}
+
+.load-balance-menu .v-list-item {
+  margin-bottom: 4px;
+  padding: 12px 16px;
+}
+
+.load-balance-menu .v-list-item:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 600px) {
+  .action-bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px 16px;
+  }
+
+  .action-bar-left,
+  .action-bar-right {
+    justify-content: center;
+  }
+
+  .action-btn {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+/* 心跳动画 */
+.pulse-animation {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+/* ----- 响应式调整 ----- */
 @media (min-width: 768px) {
   .app-header {
-    padding-left: 24px !important;
-    padding-right: 24px !important;
+    padding: 0 24px !important;
   }
 }
 
 @media (min-width: 1024px) {
   .app-header {
-    padding-left: 32px !important;
-    padding-right: 32px !important;
+    padding: 0 32px !important;
   }
 }
 
-/* 确保在不同屏幕尺寸下的文本对齐 */
 @media (max-width: 600px) {
-  .app-header .v-toolbar-title .text-h6,
-  .app-header .v-toolbar-title .text-h5 {
-    line-height: 1.2;
-  }
   .app-header {
-    padding-left: 12px !important;
-    padding-right: 12px !important;
+    padding: 0 12px !important;
+  }
+
+  .app-logo {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    margin-right: 8px;
+  }
+
+  .stat-card {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .stat-card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+  }
+
+  .stat-card-value {
+    font-size: 1.5rem;
   }
 }
 
-/* 渠道列表动画效果 */
+/* ----- 渠道列表动画 ----- */
 .d-contents {
   display: contents;
 }
