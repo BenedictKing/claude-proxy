@@ -8,7 +8,9 @@ import (
 
 	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/handlers"
+	"github.com/BenedictKing/claude-proxy/internal/metrics"
 	"github.com/BenedictKing/claude-proxy/internal/middleware"
+	"github.com/BenedictKing/claude-proxy/internal/scheduler"
 	"github.com/BenedictKing/claude-proxy/internal/session"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -40,6 +42,14 @@ func main() {
 		100000,       // 最多100k tokens
 	)
 	log.Printf("✅ 会话管理器已初始化")
+
+	// 初始化多渠道调度器（Messages 和 Responses 使用独立的指标管理器）
+	messagesMetricsManager := metrics.NewMetricsManager()
+	responsesMetricsManager := metrics.NewMetricsManager()
+	traceAffinityManager := session.NewTraceAffinityManager()
+	channelScheduler := scheduler.NewChannelScheduler(cfgManager, messagesMetricsManager, responsesMetricsManager, traceAffinityManager)
+	log.Printf("✅ 多渠道调度器已初始化 (失败率阈值: %.0f%%, 滑动窗口: %d)",
+		messagesMetricsManager.GetFailureThreshold()*100, messagesMetricsManager.GetWindowSize())
 
 	// 设置 Gin 模式
 	if envCfg.IsProduction() {
@@ -80,6 +90,13 @@ func main() {
 		apiGroup.POST("/channels/:id/keys/:apiKey/bottom", handlers.MoveApiKeyToBottom(cfgManager))
 		apiGroup.POST("/channels/:id/current", handlers.SetCurrentUpstream(cfgManager))
 
+		// 多渠道调度 API
+		apiGroup.POST("/channels/reorder", handlers.ReorderChannels(cfgManager))
+		apiGroup.PATCH("/channels/:id/status", handlers.SetChannelStatus(cfgManager))
+		apiGroup.POST("/channels/:id/resume", handlers.ResumeChannel(channelScheduler, false))
+		apiGroup.GET("/channels/metrics", handlers.GetChannelMetrics(messagesMetricsManager))
+		apiGroup.GET("/channels/scheduler/stats", handlers.GetSchedulerStats(channelScheduler))
+
 		// Responses 渠道管理
 		apiGroup.GET("/responses/channels", handlers.GetResponsesUpstreams(cfgManager))
 		apiGroup.POST("/responses/channels", handlers.AddResponsesUpstream(cfgManager))
@@ -92,6 +109,12 @@ func main() {
 		apiGroup.POST("/responses/channels/:id/current", handlers.SetCurrentResponsesUpstream(cfgManager))
 		apiGroup.PUT("/responses/loadbalance", handlers.UpdateResponsesLoadBalance(cfgManager))
 
+		// Responses 多渠道调度 API
+		apiGroup.POST("/responses/channels/reorder", handlers.ReorderResponsesChannels(cfgManager))
+		apiGroup.PATCH("/responses/channels/:id/status", handlers.SetResponsesChannelStatus(cfgManager))
+		apiGroup.POST("/responses/channels/:id/resume", handlers.ResumeChannel(channelScheduler, true))
+		apiGroup.GET("/responses/channels/metrics", handlers.GetResponsesChannelMetrics(responsesMetricsManager))
+
 		// 负载均衡
 		apiGroup.PUT("/loadbalance", handlers.UpdateLoadBalance(cfgManager))
 
@@ -101,10 +124,10 @@ func main() {
 	}
 
 	// 代理端点 - 统一入口
-	r.POST("/v1/messages", handlers.ProxyHandler(envCfg, cfgManager))
+	r.POST("/v1/messages", handlers.ProxyHandler(envCfg, cfgManager, channelScheduler))
 
 	// Responses API 端点
-	r.POST("/v1/responses", handlers.ResponsesHandler(envCfg, cfgManager, sessionManager))
+	r.POST("/v1/responses", handlers.ResponsesHandler(envCfg, cfgManager, sessionManager, channelScheduler))
 
 	// 静态文件服务 (嵌入的前端)
 	if envCfg.EnableWebUI {

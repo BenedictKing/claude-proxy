@@ -10,17 +10,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/httpclient"
 	"github.com/BenedictKing/claude-proxy/internal/middleware"
 	"github.com/BenedictKing/claude-proxy/internal/providers"
+	"github.com/BenedictKing/claude-proxy/internal/scheduler"
 	"github.com/BenedictKing/claude-proxy/internal/types"
 	"github.com/BenedictKing/claude-proxy/internal/utils"
+	"github.com/gin-gonic/gin"
 )
 
 // ProxyHandler 代理处理器
-func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gin.HandlerFunc {
+// 支持多渠道调度：当配置多个渠道时自动启用
+func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager, channelScheduler *scheduler.ChannelScheduler) gin.HandlerFunc {
 	return gin.HandlerFunc(func(c *gin.Context) {
 		// 先进行认证
 		middleware.ProxyAuthMiddleware(envCfg)(c)
@@ -39,228 +41,429 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gi
 		// 恢复请求体供后续使用
 		c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
-		// claudeReq 变量用于判断是否流式请求
+		// claudeReq 变量用于判断是否流式请求和提取 user_id
 		var claudeReq types.ClaudeRequest
-		// 尝试解析，失败也无妨
 		if len(bodyBytes) > 0 {
 			_ = json.Unmarshal(bodyBytes, &claudeReq)
 		}
 
-		// 获取当前上游配置
-		upstream, err := cfgManager.GetCurrentUpstream()
-		if err != nil {
-			c.JSON(503, gin.H{
-				"error": "未配置任何渠道，请先在管理界面添加渠道",
-				"code":  "NO_UPSTREAM",
-			})
-			return
-		}
+		// 提取 user_id 用于 Trace 亲和性
+		userID := extractUserID(bodyBytes)
 
-		if len(upstream.APIKeys) == 0 {
-			c.JSON(503, gin.H{
-				"error": fmt.Sprintf("当前渠道 \"%s\" 未配置API密钥", upstream.Name),
-				"code":  "NO_API_KEYS",
-			})
-			return
-		}
+		// 检查是否为多渠道模式
+		isMultiChannel := channelScheduler.IsMultiChannelMode(false)
 
-		// 获取提供商
-		provider := providers.GetProvider(upstream.ServiceType)
-		if provider == nil {
-			c.JSON(400, gin.H{"error": "Unsupported service type"})
-			return
-		}
-
-		// 实现 failover 重试逻辑
-		maxRetries := len(upstream.APIKeys)
-		failedKeys := make(map[string]bool) // 记录本次请求中已经失败过的 key
-		var lastError error
-		var lastOriginalBodyBytes []byte // 用于记录最后一次尝试的原始请求体，以便日志记录
-		// 记录最后一次需要failover的上游错误，用于所有密钥都失败时回传原始错误
-		var lastFailoverError *struct {
-			Status int
-			Body   []byte
-		}
-		// 候选降级密钥（仅当后续有密钥成功调用时，才将这些密钥移到列表末尾）
-		deprioritizeCandidates := make(map[string]bool)
-
-		for attempt := 0; attempt < maxRetries; attempt++ {
-			apiKey, err := cfgManager.GetNextAPIKey(upstream, failedKeys)
-			if err != nil {
-				lastError = err
-				break
-			}
-
-			if envCfg.ShouldLog("info") {
-				log.Printf("🎯 使用上游: %s - %s (尝试 %d/%d)", upstream.Name, upstream.BaseURL, attempt+1, maxRetries)
-				log.Printf("🔑 使用API密钥: %s", maskAPIKey(apiKey))
-			}
-
-			// 转换请求
-			providerReq, originalBodyBytes, err := provider.ConvertToProviderRequest(c, upstream, apiKey)
-			if err != nil {
-				lastError = err
-				failedKeys[apiKey] = true
-				if originalBodyBytes != nil { // 记录下用于日志的原始 body
-					lastOriginalBodyBytes = originalBodyBytes
-				}
-				continue
-			}
-			lastOriginalBodyBytes = originalBodyBytes // 记录下用于日志的原始 body
-
-			// --- 请求日志记录 ---
-			if envCfg.EnableRequestLogs {
-				log.Printf("📥 收到请求: %s %s", c.Request.Method, c.Request.URL.Path)
-				if envCfg.IsDevelopment() {
-					logBody := lastOriginalBodyBytes
-					// 对于流式透传，如果 bodyBytes 为空，需要从原始请求体中读取
-					if len(logBody) == 0 && c.Request.Body != nil {
-						bodyFromContext, _ := io.ReadAll(c.Request.Body)
-						c.Request.Body = io.NopCloser(bytes.NewReader(bodyFromContext)) // 恢复
-						logBody = bodyFromContext
-					}
-
-					// 使用智能截断和简化函数（与TS版本对齐）
-					formattedBody := utils.FormatJSONBytesForLog(logBody, 500)
-					log.Printf("📄 原始请求体:\n%s", formattedBody)
-
-					// 对请求头做敏感信息脱敏
-					sanitizedHeaders := make(map[string]string)
-					for key, values := range c.Request.Header {
-						if len(values) > 0 {
-							sanitizedHeaders[key] = values[0]
-						}
-					}
-					maskedHeaders := utils.MaskSensitiveHeaders(sanitizedHeaders)
-					headersJSON, _ := json.MarshalIndent(maskedHeaders, "", "  ")
-					log.Printf("📥 原始请求头:\n%s", string(headersJSON))
-				}
-			}
-			// --- 请求日志记录结束 ---
-
-			// 发送请求
-			// claudeReq.Stream 用于判断是否是流式请求
-			resp, err := sendRequest(providerReq, upstream, envCfg, claudeReq.Stream)
-			if err != nil {
-				lastError = err
-				failedKeys[apiKey] = true
-				cfgManager.MarkKeyAsFailed(apiKey)
-				log.Printf("⚠️ API密钥失败: %v", err)
-				continue
-			}
-
-			// 检查响应状态
-			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-				bodyBytes, _ := io.ReadAll(resp.Body)
-				resp.Body.Close()
-
-				// 兜底处理：如果响应体是 gzip 压缩的，尝试解压缩
-				// 这确保错误信息始终可读，用于日志和重试逻辑
-				bodyBytes = utils.DecompressGzipIfNeeded(resp, bodyBytes)
-
-				// 检查是否需要 failover
-				shouldFailover, isQuotaRelated := shouldRetryWithNextKey(resp.StatusCode, bodyBytes)
-				if shouldFailover {
-					lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)
-					failedKeys[apiKey] = true
-					cfgManager.MarkKeyAsFailed(apiKey)
-
-					// 增强的日志输出
-					log.Printf("⚠️ API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
-					if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
-						formattedBody := utils.FormatJSONBytesForLog(bodyBytes, 500)
-						log.Printf("📦 失败原因:\n%s", formattedBody)
-					} else if envCfg.EnableResponseLogs {
-						// 生产环境打印简短信息
-						log.Printf("失败原因: %s", string(bodyBytes))
-					}
-
-					// 记录最后一次failover错误（用于所有密钥失败时返回）
-					lastFailoverError = &struct {
-						Status int
-						Body   []byte
-					}{
-						Status: resp.StatusCode,
-						Body:   bodyBytes,
-					}
-
-					// 仅记录候选降级密钥，待后续任一密钥成功时再移动到末尾
-					if isQuotaRelated {
-						deprioritizeCandidates[apiKey] = true
-					}
-
-					continue
-				}
-
-				// 非 failover 错误，记录日志后返回
-				if envCfg.EnableResponseLogs {
-					log.Printf("⚠️ 上游返回错误: %d", resp.StatusCode)
-					if envCfg.IsDevelopment() {
-						// 格式化错误响应体
-						formattedBody := utils.FormatJSONBytesForLog(bodyBytes, 500)
-						log.Printf("📦 错误响应体:\n%s", formattedBody)
-
-						// 打印错误响应头
-						respHeaders := make(map[string]string)
-						for key, values := range resp.Header {
-							if len(values) > 0 {
-								respHeaders[key] = values[0]
-							}
-						}
-						respHeadersJSON, _ := json.MarshalIndent(respHeaders, "", "  ")
-						log.Printf("📋 错误响应头:\n%s", string(respHeadersJSON))
-					}
-				}
-				c.Data(resp.StatusCode, "application/json", bodyBytes)
-				return
-			}
-
-			// 处理成功响应
-			// 如果本次请求最终成功，执行降级移动（仅对额度/余额相关失败的密钥）
-			if len(deprioritizeCandidates) > 0 {
-				for key := range deprioritizeCandidates {
-					if err := cfgManager.DeprioritizeAPIKey(key); err != nil {
-						log.Printf("⚠️ 密钥降级失败: %v", err)
-					}
-				}
-			}
-
-			if claudeReq.Stream {
-				handleStreamResponse(c, resp, provider, envCfg, startTime, upstream)
-			} else {
-				handleNormalResponse(c, resp, provider, envCfg, startTime)
-			}
-			return
-		}
-
-		// 所有密钥都失败了
-		log.Printf("💥 所有API密钥都失败了")
-
-		// 若有记录的最后一次上游错误，按原状态码和内容返回
-		if lastFailoverError != nil {
-			status := lastFailoverError.Status
-			if status == 0 {
-				status = 500
-			}
-
-			// 尝试解析为JSON返回
-			var errBody map[string]interface{}
-			if err := json.Unmarshal(lastFailoverError.Body, &errBody); err == nil {
-				c.JSON(status, errBody)
-			} else {
-				// 如果不是JSON，返回通用错误
-				c.JSON(status, gin.H{
-					"error": string(lastFailoverError.Body),
-				})
-			}
+		if isMultiChannel {
+			// 多渠道模式：使用调度器
+			handleMultiChannelProxy(c, envCfg, cfgManager, channelScheduler, bodyBytes, claudeReq, userID, startTime)
 		} else {
-			// 没有上游错误记录，返回通用错误
-			c.JSON(500, gin.H{
-				"error":   "所有上游API密钥都不可用",
-				"details": lastError.Error(),
-			})
+			// 单渠道模式：使用现有逻辑
+			handleSingleChannelProxy(c, envCfg, cfgManager, bodyBytes, claudeReq, startTime)
 		}
 	})
+}
+
+// extractUserID 从请求体中提取 user_id
+func extractUserID(bodyBytes []byte) string {
+	var req struct {
+		Metadata struct {
+			UserID string `json:"user_id"`
+		} `json:"metadata"`
+	}
+	if err := json.Unmarshal(bodyBytes, &req); err == nil {
+		return req.Metadata.UserID
+	}
+	return ""
+}
+
+// handleMultiChannelProxy 处理多渠道代理请求
+func handleMultiChannelProxy(
+	c *gin.Context,
+	envCfg *config.EnvConfig,
+	cfgManager *config.ConfigManager,
+	channelScheduler *scheduler.ChannelScheduler,
+	bodyBytes []byte,
+	claudeReq types.ClaudeRequest,
+	userID string,
+	startTime time.Time,
+) {
+	failedChannels := make(map[int]bool)
+	var lastError error
+	var lastFailoverError *struct {
+		Status int
+		Body   []byte
+	}
+
+	// 获取活跃渠道数量作为最大重试次数
+	maxChannelAttempts := channelScheduler.GetActiveChannelCount(false)
+
+	for channelAttempt := 0; channelAttempt < maxChannelAttempts; channelAttempt++ {
+		// 使用调度器选择渠道
+		selection, err := channelScheduler.SelectChannel(c.Request.Context(), userID, failedChannels, false)
+		if err != nil {
+			lastError = err
+			break
+		}
+
+		upstream := selection.Upstream
+		channelIndex := selection.ChannelIndex
+
+		if envCfg.ShouldLog("info") {
+			log.Printf("🎯 [多渠道] 选择渠道: [%d] %s (原因: %s, 尝试 %d/%d)",
+				channelIndex, upstream.Name, selection.Reason, channelAttempt+1, maxChannelAttempts)
+		}
+
+		// 尝试使用该渠道的所有 key
+		success, failoverErr := tryChannelWithAllKeys(c, envCfg, cfgManager, upstream, bodyBytes, claudeReq, startTime)
+
+		if success {
+			// 记录成功，更新 Trace 亲和
+			channelScheduler.RecordSuccess(channelIndex, false)
+			channelScheduler.SetTraceAffinity(userID, channelIndex)
+			return
+		}
+
+		// 渠道失败，记录并尝试下一个
+		channelScheduler.RecordFailure(channelIndex, false)
+		failedChannels[channelIndex] = true
+
+		if failoverErr != nil {
+			lastFailoverError = failoverErr
+			lastError = fmt.Errorf("渠道 [%d] %s 失败", channelIndex, upstream.Name)
+		}
+
+		log.Printf("⚠️ [多渠道] 渠道 [%d] %s 所有密钥都失败，尝试下一个渠道", channelIndex, upstream.Name)
+	}
+
+	// 所有渠道都失败
+	log.Printf("💥 [多渠道] 所有渠道都失败了")
+
+	if lastFailoverError != nil {
+		status := lastFailoverError.Status
+		if status == 0 {
+			status = 503
+		}
+		var errBody map[string]interface{}
+		if err := json.Unmarshal(lastFailoverError.Body, &errBody); err == nil {
+			c.JSON(status, errBody)
+		} else {
+			c.JSON(status, gin.H{"error": string(lastFailoverError.Body)})
+		}
+	} else {
+		errMsg := "所有渠道都不可用"
+		if lastError != nil {
+			errMsg = lastError.Error()
+		}
+		c.JSON(503, gin.H{
+			"error": "所有渠道都不可用",
+			"details": errMsg,
+		})
+	}
+}
+
+// tryChannelWithAllKeys 尝试使用渠道的所有密钥
+// 返回 (success bool, lastFailoverError *struct{Status int; Body []byte})
+func tryChannelWithAllKeys(
+	c *gin.Context,
+	envCfg *config.EnvConfig,
+	cfgManager *config.ConfigManager,
+	upstream *config.UpstreamConfig,
+	bodyBytes []byte,
+	claudeReq types.ClaudeRequest,
+	startTime time.Time,
+) (bool, *struct{ Status int; Body []byte }) {
+	if len(upstream.APIKeys) == 0 {
+		return false, nil
+	}
+
+	provider := providers.GetProvider(upstream.ServiceType)
+	if provider == nil {
+		return false, nil
+	}
+
+	maxRetries := len(upstream.APIKeys)
+	failedKeys := make(map[string]bool)
+	var lastFailoverError *struct{ Status int; Body []byte }
+	deprioritizeCandidates := make(map[string]bool)
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// 恢复请求体
+		c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+		apiKey, err := cfgManager.GetNextAPIKey(upstream, failedKeys)
+		if err != nil {
+			break
+		}
+
+		if envCfg.ShouldLog("info") {
+			log.Printf("🔑 使用API密钥: %s (尝试 %d/%d)", maskAPIKey(apiKey), attempt+1, maxRetries)
+		}
+
+		// 转换请求
+		providerReq, _, err := provider.ConvertToProviderRequest(c, upstream, apiKey)
+		if err != nil {
+			failedKeys[apiKey] = true
+			continue
+		}
+
+		// 发送请求
+		resp, err := sendRequest(providerReq, upstream, envCfg, claudeReq.Stream)
+		if err != nil {
+			failedKeys[apiKey] = true
+			cfgManager.MarkKeyAsFailed(apiKey)
+			log.Printf("⚠️ API密钥失败: %v", err)
+			continue
+		}
+
+		// 检查响应状态
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			respBodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			respBodyBytes = utils.DecompressGzipIfNeeded(resp, respBodyBytes)
+
+			shouldFailover, isQuotaRelated := shouldRetryWithNextKey(resp.StatusCode, respBodyBytes)
+			if shouldFailover {
+				failedKeys[apiKey] = true
+				cfgManager.MarkKeyAsFailed(apiKey)
+				log.Printf("⚠️ API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
+
+				lastFailoverError = &struct{ Status int; Body []byte }{
+					Status: resp.StatusCode,
+					Body:   respBodyBytes,
+				}
+
+				if isQuotaRelated {
+					deprioritizeCandidates[apiKey] = true
+				}
+				continue
+			}
+
+			// 非 failover 错误，直接返回
+			c.Data(resp.StatusCode, "application/json", respBodyBytes)
+			return true, nil // 返回 true 表示请求已处理（虽然是错误响应）
+		}
+
+		// 处理成功响应
+		if len(deprioritizeCandidates) > 0 {
+			for key := range deprioritizeCandidates {
+				_ = cfgManager.DeprioritizeAPIKey(key)
+			}
+		}
+
+		if claudeReq.Stream {
+			handleStreamResponse(c, resp, provider, envCfg, startTime, upstream)
+		} else {
+			handleNormalResponse(c, resp, provider, envCfg, startTime)
+		}
+		return true, nil
+	}
+
+	return false, lastFailoverError
+}
+
+// handleSingleChannelProxy 处理单渠道代理请求（现有逻辑）
+func handleSingleChannelProxy(
+	c *gin.Context,
+	envCfg *config.EnvConfig,
+	cfgManager *config.ConfigManager,
+	bodyBytes []byte,
+	claudeReq types.ClaudeRequest,
+	startTime time.Time,
+) {
+	// 获取当前上游配置
+	upstream, err := cfgManager.GetCurrentUpstream()
+	if err != nil {
+		c.JSON(503, gin.H{
+			"error": "未配置任何渠道，请先在管理界面添加渠道",
+			"code":  "NO_UPSTREAM",
+		})
+		return
+	}
+
+	if len(upstream.APIKeys) == 0 {
+		c.JSON(503, gin.H{
+			"error": fmt.Sprintf("当前渠道 \"%s\" 未配置API密钥", upstream.Name),
+			"code":  "NO_API_KEYS",
+		})
+		return
+	}
+
+	// 获取提供商
+	provider := providers.GetProvider(upstream.ServiceType)
+	if provider == nil {
+		c.JSON(400, gin.H{"error": "Unsupported service type"})
+		return
+	}
+
+	// 实现 failover 重试逻辑
+	maxRetries := len(upstream.APIKeys)
+	failedKeys := make(map[string]bool)
+	var lastError error
+	var lastOriginalBodyBytes []byte
+	var lastFailoverError *struct {
+		Status int
+		Body   []byte
+	}
+	deprioritizeCandidates := make(map[string]bool)
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// 恢复请求体
+		c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+		apiKey, err := cfgManager.GetNextAPIKey(upstream, failedKeys)
+		if err != nil {
+			lastError = err
+			break
+		}
+
+		if envCfg.ShouldLog("info") {
+			log.Printf("🎯 使用上游: %s - %s (尝试 %d/%d)", upstream.Name, upstream.BaseURL, attempt+1, maxRetries)
+			log.Printf("🔑 使用API密钥: %s", maskAPIKey(apiKey))
+		}
+
+		// 转换请求
+		providerReq, originalBodyBytes, err := provider.ConvertToProviderRequest(c, upstream, apiKey)
+		if err != nil {
+			lastError = err
+			failedKeys[apiKey] = true
+			if originalBodyBytes != nil {
+				lastOriginalBodyBytes = originalBodyBytes
+			}
+			continue
+		}
+		lastOriginalBodyBytes = originalBodyBytes
+
+		// 请求日志记录
+		if envCfg.EnableRequestLogs {
+			log.Printf("📥 收到请求: %s %s", c.Request.Method, c.Request.URL.Path)
+			if envCfg.IsDevelopment() {
+				logBody := lastOriginalBodyBytes
+				if len(logBody) == 0 && c.Request.Body != nil {
+					bodyFromContext, _ := io.ReadAll(c.Request.Body)
+					c.Request.Body = io.NopCloser(bytes.NewReader(bodyFromContext))
+					logBody = bodyFromContext
+				}
+				formattedBody := utils.FormatJSONBytesForLog(logBody, 500)
+				log.Printf("📄 原始请求体:\n%s", formattedBody)
+
+				sanitizedHeaders := make(map[string]string)
+				for key, values := range c.Request.Header {
+					if len(values) > 0 {
+						sanitizedHeaders[key] = values[0]
+					}
+				}
+				maskedHeaders := utils.MaskSensitiveHeaders(sanitizedHeaders)
+				headersJSON, _ := json.MarshalIndent(maskedHeaders, "", "  ")
+				log.Printf("📥 原始请求头:\n%s", string(headersJSON))
+			}
+		}
+
+		// 发送请求
+		resp, err := sendRequest(providerReq, upstream, envCfg, claudeReq.Stream)
+		if err != nil {
+			lastError = err
+			failedKeys[apiKey] = true
+			cfgManager.MarkKeyAsFailed(apiKey)
+			log.Printf("⚠️ API密钥失败: %v", err)
+			continue
+		}
+
+		// 检查响应状态
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			respBodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			respBodyBytes = utils.DecompressGzipIfNeeded(resp, respBodyBytes)
+
+			shouldFailover, isQuotaRelated := shouldRetryWithNextKey(resp.StatusCode, respBodyBytes)
+			if shouldFailover {
+				lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)
+				failedKeys[apiKey] = true
+				cfgManager.MarkKeyAsFailed(apiKey)
+
+				log.Printf("⚠️ API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
+				if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
+					formattedBody := utils.FormatJSONBytesForLog(respBodyBytes, 500)
+					log.Printf("📦 失败原因:\n%s", formattedBody)
+				} else if envCfg.EnableResponseLogs {
+					log.Printf("失败原因: %s", string(respBodyBytes))
+				}
+
+				lastFailoverError = &struct {
+					Status int
+					Body   []byte
+				}{
+					Status: resp.StatusCode,
+					Body:   respBodyBytes,
+				}
+
+				if isQuotaRelated {
+					deprioritizeCandidates[apiKey] = true
+				}
+				continue
+			}
+
+			// 非 failover 错误
+			if envCfg.EnableResponseLogs {
+				log.Printf("⚠️ 上游返回错误: %d", resp.StatusCode)
+				if envCfg.IsDevelopment() {
+					formattedBody := utils.FormatJSONBytesForLog(respBodyBytes, 500)
+					log.Printf("📦 错误响应体:\n%s", formattedBody)
+
+					respHeaders := make(map[string]string)
+					for key, values := range resp.Header {
+						if len(values) > 0 {
+							respHeaders[key] = values[0]
+						}
+					}
+					respHeadersJSON, _ := json.MarshalIndent(respHeaders, "", "  ")
+					log.Printf("📋 错误响应头:\n%s", string(respHeadersJSON))
+				}
+			}
+			c.Data(resp.StatusCode, "application/json", respBodyBytes)
+			return
+		}
+
+		// 处理成功响应
+		if len(deprioritizeCandidates) > 0 {
+			for key := range deprioritizeCandidates {
+				if err := cfgManager.DeprioritizeAPIKey(key); err != nil {
+					log.Printf("⚠️ 密钥降级失败: %v", err)
+				}
+			}
+		}
+
+		if claudeReq.Stream {
+			handleStreamResponse(c, resp, provider, envCfg, startTime, upstream)
+		} else {
+			handleNormalResponse(c, resp, provider, envCfg, startTime)
+		}
+		return
+	}
+
+	// 所有密钥都失败了
+	log.Printf("💥 所有API密钥都失败了")
+
+	if lastFailoverError != nil {
+		status := lastFailoverError.Status
+		if status == 0 {
+			status = 500
+		}
+		var errBody map[string]interface{}
+		if err := json.Unmarshal(lastFailoverError.Body, &errBody); err == nil {
+			c.JSON(status, errBody)
+		} else {
+			c.JSON(status, gin.H{"error": string(lastFailoverError.Body)})
+		}
+	} else {
+		errMsg := "未知错误"
+		if lastError != nil {
+			errMsg = lastError.Error()
+		}
+		c.JSON(500, gin.H{
+			"error":   "所有上游API密钥都不可用",
+			"details": errMsg,
+		})
+	}
 }
 
 // sendRequest 发送HTTP请求
