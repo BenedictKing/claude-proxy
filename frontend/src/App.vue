@@ -1310,6 +1310,11 @@ onUnmounted(() => {
   border-radius: 16px;
 }
 
+.v-theme--dark .action-bar {
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(71, 85, 105, 0.4);
+}
+
 .action-bar-left {
   display: flex;
   flex-wrap: wrap;
