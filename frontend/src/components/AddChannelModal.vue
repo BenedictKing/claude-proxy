@@ -99,7 +99,8 @@
               <v-textarea
                 v-model="form.description"
                 label="描述 (可选)"
-                placeholder="可选的渠道描述..."
+                hint="可选的渠道描述..."
+                persistent-hint
                 prepend-inner-icon="mdi-text"
                 variant="outlined"
                 density="comfortable"
@@ -233,10 +234,54 @@
 
                         <template v-slot:append>
                           <div class="d-flex align-center ga-1">
+                            <!-- 置顶/置底：仅首尾密钥显示 -->
+                            <v-tooltip
+                              v-if="index === form.apiKeys.length - 1 && form.apiKeys.length > 1"
+                              text="置顶"
+                              location="top"
+                              :open-delay="150"
+                              content-class="key-tooltip"
+                            >
+                              <template #activator="{ props: tooltipProps }">
+                                <v-btn
+                                  v-bind="tooltipProps"
+                                  size="small"
+                                  color="warning"
+                                  icon
+                                  variant="text"
+                                  rounded="md"
+                                  @click="moveApiKeyToTop(index)"
+                                >
+                                  <v-icon size="small">mdi-arrow-up-bold</v-icon>
+                                </v-btn>
+                              </template>
+                            </v-tooltip>
+                            <v-tooltip
+                              v-if="index === 0 && form.apiKeys.length > 1"
+                              text="置底"
+                              location="top"
+                              :open-delay="150"
+                              content-class="key-tooltip"
+                            >
+                              <template #activator="{ props: tooltipProps }">
+                                <v-btn
+                                  v-bind="tooltipProps"
+                                  size="small"
+                                  color="warning"
+                                  icon
+                                  variant="text"
+                                  rounded="md"
+                                  @click="moveApiKeyToBottom(index)"
+                                >
+                                  <v-icon size="small">mdi-arrow-down-bold</v-icon>
+                                </v-btn>
+                              </template>
+                            </v-tooltip>
                             <v-tooltip
                               :text="copiedKeyIndex === index ? '已复制!' : '复制密钥'"
                               location="top"
                               :open-delay="150"
+                              content-class="key-tooltip"
                             >
                               <template #activator="{ props: tooltipProps }">
                                 <v-btn
@@ -253,9 +298,20 @@
                                 </v-btn>
                               </template>
                             </v-tooltip>
-                            <v-btn size="small" color="error" icon variant="text" @click="removeApiKey(index)">
-                              <v-icon size="small" color="error">mdi-close</v-icon>
-                            </v-btn>
+                            <v-tooltip text="删除密钥" location="top" :open-delay="150" content-class="key-tooltip">
+                              <template #activator="{ props: tooltipProps }">
+                                <v-btn
+                                  v-bind="tooltipProps"
+                                  size="small"
+                                  color="error"
+                                  icon
+                                  variant="text"
+                                  @click="removeApiKey(index)"
+                                >
+                                  <v-icon size="small" color="error">mdi-close</v-icon>
+                                </v-btn>
+                              </template>
+                            </v-tooltip>
                           </div>
                         </template>
                       </v-list-item>
@@ -567,6 +623,24 @@ const removeApiKey = (index: number) => {
   }
 }
 
+// 将指定密钥移到最上方
+const moveApiKeyToTop = (index: number) => {
+  if (index <= 0 || index >= form.apiKeys.length) return
+  const [key] = form.apiKeys.splice(index, 1)
+  form.apiKeys.unshift(key)
+  duplicateKeyIndex.value = -1
+  copiedKeyIndex.value = null
+}
+
+// 将指定密钥移到最下方
+const moveApiKeyToBottom = (index: number) => {
+  if (index < 0 || index >= form.apiKeys.length - 1) return
+  const [key] = form.apiKeys.splice(index, 1)
+  form.apiKeys.push(key)
+  duplicateKeyIndex.value = -1
+  copiedKeyIndex.value = null
+}
+
 // 复制API密钥到剪贴板
 const copyApiKey = async (key: string, index: number) => {
   try {
@@ -699,5 +773,14 @@ onUnmounted(() => {
   50% {
     opacity: 0.7;
   }
+}
+
+:deep(.key-tooltip) {
+  color: rgba(var(--v-theme-on-surface), 0.92);
+  background-color: rgba(var(--v-theme-surface), 0.98);
+  border: 1px solid rgba(var(--v-theme-primary), 0.45);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
 }
 </style>
