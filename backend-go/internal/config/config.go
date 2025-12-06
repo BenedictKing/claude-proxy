@@ -235,7 +235,57 @@ func (cm *ConfigManager) loadConfig() error {
 		log.Printf("配置迁移完成")
 	}
 
+	// 自检：没有配置 key 的渠道自动暂停
+	needSave := cm.validateChannelKeys()
+	if needSave {
+		if err := cm.saveConfigLocked(cm.config); err != nil {
+			log.Printf("保存自检后的配置失败: %v", err)
+			return err
+		}
+	}
+
 	return nil
+}
+
+// validateChannelKeys 自检渠道密钥配置
+// 没有配置 API key 的渠道，即使状态为 active 也应暂停
+// 返回 true 表示有配置被修改，需要保存
+func (cm *ConfigManager) validateChannelKeys() bool {
+	modified := false
+
+	// 检查 Messages 渠道
+	for i := range cm.config.Upstream {
+		upstream := &cm.config.Upstream[i]
+		status := upstream.Status
+		if status == "" {
+			status = "active"
+		}
+
+		// 如果是 active 状态但没有配置 key，自动设为 suspended
+		if status == "active" && len(upstream.APIKeys) == 0 {
+			upstream.Status = "suspended"
+			modified = true
+			log.Printf("⚠️ [自检] Messages 渠道 [%d] %s 没有配置 API key，已自动暂停", i, upstream.Name)
+		}
+	}
+
+	// 检查 Responses 渠道
+	for i := range cm.config.ResponsesUpstream {
+		upstream := &cm.config.ResponsesUpstream[i]
+		status := upstream.Status
+		if status == "" {
+			status = "active"
+		}
+
+		// 如果是 active 状态但没有配置 key，自动设为 suspended
+		if status == "active" && len(upstream.APIKeys) == 0 {
+			upstream.Status = "suspended"
+			modified = true
+			log.Printf("⚠️ [自检] Responses 渠道 [%d] %s 没有配置 API key，已自动暂停", i, upstream.Name)
+		}
+	}
+
+	return modified
 }
 
 // saveConfigLocked 保存配置（已加锁）
