@@ -86,6 +86,8 @@ import { ConfigManager } from '@backend/config/config-manager'
 | **HTTP 处理**  | `backend-go/internal/handlers/`   | REST API 路由和业务逻辑     |
 | **中间件**     | `backend-go/internal/middleware/` | 认证、日志、CORS            |
 | **会话管理**   | `backend-go/internal/session/`    | Responses API 会话跟踪      |
+| **调度器**     | `backend-go/internal/scheduler/`  | 多渠道智能调度              |
+| **指标管理**   | `backend-go/internal/metrics/`    | 渠道健康度和性能指标        |
 
 ## 设计模式
 
@@ -336,7 +338,138 @@ providerReq, err := converter.ToProviderRequest(sess, &responsesReq)
 }
 ```
 
-### 5. 中间件模式
+### 5. 多渠道调度模式 (Channel Scheduler) 🆕
+
+**v2.0.11 新增**：智能多渠道调度系统，支持优先级排序、健康检查和故障转移。
+
+#### 核心组件
+
+```go
+// ChannelScheduler 多渠道调度器
+type ChannelScheduler struct {
+    configManager           *config.ConfigManager
+    messagesMetricsManager  *metrics.MetricsManager
+    responsesMetricsManager *metrics.MetricsManager
+    traceAffinity           *session.TraceAffinityManager
+}
+
+// SelectChannel 选择最佳渠道
+func (s *ChannelScheduler) SelectChannel(
+    ctx context.Context,
+    userID string,
+    failedChannels map[int]bool,
+    isResponses bool,
+) (*SelectionResult, error)
+```
+
+#### 调度优先级
+
+调度器按以下优先级选择渠道：
+
+```
+1. Trace 亲和性检查
+   └─ 同一用户优先使用之前成功的渠道
+        ↓ (无亲和记录或渠道不健康)
+2. 健康检查
+   └─ 跳过失败率 >= 50% 的渠道
+        ↓ (渠道健康)
+3. 优先级排序
+   └─ 按 priority 字段排序（数字越小优先级越高）
+        ↓ (所有健康渠道都失败)
+4. 降级选择
+   └─ 选择失败率最低的渠道
+```
+
+#### 渠道状态
+
+```go
+type UpstreamConfig struct {
+    // ... 其他字段
+    Priority int    `json:"priority"` // 优先级（数字越小越高）
+    Status   string `json:"status"`   // active | suspended | disabled
+}
+```
+
+| 状态 | 参与调度 | 故障转移 | 说明 |
+|------|----------|----------|------|
+| `active` | ✅ | ✅ | 正常运行 |
+| `suspended` | ✅ | ✅ | 暂停但保留在序列中（被健康检查跳过） |
+| `disabled` | ❌ | ❌ | 备用池，完全不参与 |
+
+> ⚠️ **状态 vs 熔断的区别**：
+> - `status: suspended` 是**配置层面**的状态，需要手动改为 `active` 才能恢复
+> - 运行时熔断（`CircuitBrokenAt`）是**指标层面**的临时保护，15 分钟后自动恢复
+> - 启动时就是 `suspended` 的渠道不会触发自动恢复逻辑
+
+#### 指标管理
+
+```go
+// MetricsManager 渠道指标管理
+type MetricsManager struct {
+    metrics             map[int]*ChannelMetrics
+    windowSize          int           // 滑动窗口大小（默认 10）
+    failureThreshold    float64       // 失败率阈值（默认 0.5）
+    circuitRecoveryTime time.Duration // 熔断恢复时间（默认 15 分钟）
+}
+
+// 核心方法
+func (m *MetricsManager) RecordSuccess(channelIndex int)
+func (m *MetricsManager) RecordFailure(channelIndex int)
+func (m *MetricsManager) CalculateFailureRate(channelIndex int) float64
+func (m *MetricsManager) IsChannelHealthy(channelIndex int) bool
+```
+
+**滑动窗口算法**：
+- 基于最近 N 次请求（默认 10 次）计算失败率
+- 失败率 >= 50% 触发熔断，记录 `CircuitBrokenAt` 时间戳
+- 熔断恢复方式：
+  - **自动恢复**：15 分钟后后台任务自动重置滑动窗口
+  - **成功请求恢复**：任意成功请求立即清除熔断状态
+  - **手动恢复**：通过 API 调用 `Reset()` 重置
+
+#### Trace 亲和性
+
+```go
+// TraceAffinityManager 用户会话亲和性
+type TraceAffinityManager struct {
+    affinity map[string]*TraceAffinity // key: user_id
+    ttl      time.Duration             // 默认 30 分钟
+}
+
+// 核心方法
+func (m *TraceAffinityManager) GetPreferredChannel(userID string) (int, bool)
+func (m *TraceAffinityManager) SetPreferredChannel(userID string, channelIndex int)
+```
+
+**工作原理**：
+1. 用户首次请求 → 调度器选择渠道 → 记录亲和关系
+2. 用户后续请求 → 优先使用之前成功的渠道
+3. 渠道不健康或 30 分钟无活动 → 清除亲和记录
+
+#### 调度流程图
+
+```mermaid
+graph TD
+    A[请求到达] --> B{检查 Trace 亲和}
+    B -->|有亲和| C{渠道健康?}
+    C -->|是| D[使用亲和渠道]
+    C -->|否| E[遍历活跃渠道]
+    B -->|无亲和| E
+    E --> F{渠道健康?}
+    F -->|是| G[选择该渠道]
+    F -->|否| H[跳过，继续遍历]
+    H --> I{还有渠道?}
+    I -->|是| E
+    I -->|否| J[降级选择最佳渠道]
+    D --> K[执行请求]
+    G --> K
+    J --> K
+    K --> L{请求成功?}
+    L -->|是| M[记录成功 + 更新亲和]
+    L -->|否| N[记录失败 + 尝试下一渠道]
+```
+
+### 6. 中间件模式
 
 Express/Gin 使用中间件架构处理横切关注点：
 
@@ -362,28 +495,31 @@ graph TD
     B --> C[Auth Middleware]
     C --> D[Logger Middleware]
     D --> E[Route Handler]
-    E --> F[Config Manager]
-    F --> G[Load Balancer]
-    G --> H[Provider Factory]
-    H --> I[Request Converter]
-    I --> J[Upstream API]
-    J --> K[Response Converter]
-    K --> L[Logger Middleware]
-    L --> M[Client Response]
+    E --> F[Channel Scheduler]
+    F --> G[Trace Affinity Check]
+    G --> H[Health Check]
+    H --> I[Provider Factory]
+    I --> J[Request Converter]
+    J --> K[Upstream API]
+    K --> L[Response Converter]
+    L --> M[Metrics Recorder]
+    M --> N[Client Response]
 
-    N[Config File] --> F
-    O[File Watcher] --> N
+    O[Config Manager] --> F
+    P[Metrics Manager] --> H
+    Q[File Watcher] --> O
 ```
 
 **Messages API 流程说明**:
 1. 客户端请求到达 Gin 路由器
 2. 通过认证和日志中间件
-3. 路由处理器获取配置
-4. 负载均衡器选择 API 密钥
-5. Provider 工厂创建对应的协议转换器
-6. 转换请求格式并发送到上游 API
-7. 接收上游响应并转换回 Claude 格式
-8. 记录日志并返回给客户端
+3. 路由处理器调用 Channel Scheduler
+4. 调度器检查 Trace 亲和性（优先使用历史成功渠道）
+5. 健康检查过滤不健康渠道
+6. Provider 工厂创建对应的协议转换器
+7. 转换请求格式并发送到上游 API
+8. 接收上游响应并转换回 Claude 格式
+9. 记录指标（成功/失败）并返回给客户端
 
 **Responses API 特殊流程**:
 ```mermaid

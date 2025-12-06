@@ -133,7 +133,7 @@
               <div class="stat-card-content">
                 <div class="stat-card-value">
                   {{ activeChannelCount
-                  }}<span class="stat-card-total">/{{ currentChannelsData.channels?.length || 0 }}</span>
+                  }}<span class="stat-card-total">/{{ failoverChannelCount }}</span>
                 </div>
                 <div class="stat-card-label">活跃渠道</div>
                 <div class="stat-card-desc">参与故障转移调度</div>
@@ -379,8 +379,15 @@ const currentChannelsData = computed(() => {
   return activeTab.value === 'messages' ? channelsData.value : responsesChannelsData.value
 })
 
-// 计算属性：活跃渠道数（非 disabled 状态）
+// 计算属性：活跃渠道数（仅 active 状态）
 const activeChannelCount = computed(() => {
+  const data = currentChannelsData.value
+  if (!data.channels) return 0
+  return data.channels.filter(ch => ch.status === 'active').length
+})
+
+// 计算属性：参与故障转移的渠道数（active + suspended）
+const failoverChannelCount = computed(() => {
   const data = currentChannelsData.value
   if (!data.channels) return 0
   return data.channels.filter(ch => ch.status !== 'disabled').length

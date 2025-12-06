@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"log"
 	"sync"
 	"time"
 )
@@ -14,25 +15,33 @@ type ChannelMetrics struct {
 	ConsecutiveFailures int64      `json:"consecutiveFailures"`
 	LastSuccessAt       *time.Time `json:"lastSuccessAt,omitempty"`
 	LastFailureAt       *time.Time `json:"lastFailureAt,omitempty"`
+	CircuitBrokenAt     *time.Time `json:"circuitBrokenAt,omitempty"` // 熔断开始时间
 	// 滑动窗口记录（最近 N 次请求的结果）
 	recentResults []bool // true=success, false=failure
 }
 
 // MetricsManager 指标管理器
 type MetricsManager struct {
-	mu           sync.RWMutex
-	metrics      map[int]*ChannelMetrics // key: channelIndex
-	windowSize   int                     // 滑动窗口大小
-	failureThreshold float64             // 失败率阈值
+	mu                  sync.RWMutex
+	metrics             map[int]*ChannelMetrics // key: channelIndex
+	windowSize          int                     // 滑动窗口大小
+	failureThreshold    float64                 // 失败率阈值
+	circuitRecoveryTime time.Duration           // 熔断恢复时间
+	stopCh              chan struct{}           // 用于停止清理 goroutine
 }
 
 // NewMetricsManager 创建指标管理器
 func NewMetricsManager() *MetricsManager {
-	return &MetricsManager{
-		metrics:          make(map[int]*ChannelMetrics),
-		windowSize:       10,  // 默认基于最近 10 次请求计算失败率
-		failureThreshold: 0.5, // 默认 50% 失败率阈值
+	m := &MetricsManager{
+		metrics:             make(map[int]*ChannelMetrics),
+		windowSize:          10,               // 默认基于最近 10 次请求计算失败率
+		failureThreshold:    0.5,              // 默认 50% 失败率阈值
+		circuitRecoveryTime: 15 * time.Minute, // 默认 15 分钟自动恢复
+		stopCh:              make(chan struct{}),
 	}
+	// 启动后台熔断恢复任务
+	go m.cleanupCircuitBreakers()
+	return m
 }
 
 // NewMetricsManagerWithConfig 创建带配置的指标管理器
@@ -43,11 +52,16 @@ func NewMetricsManagerWithConfig(windowSize int, failureThreshold float64) *Metr
 	if failureThreshold <= 0 || failureThreshold > 1 {
 		failureThreshold = 0.5
 	}
-	return &MetricsManager{
-		metrics:          make(map[int]*ChannelMetrics),
-		windowSize:       windowSize,
-		failureThreshold: failureThreshold,
+	m := &MetricsManager{
+		metrics:             make(map[int]*ChannelMetrics),
+		windowSize:          windowSize,
+		failureThreshold:    failureThreshold,
+		circuitRecoveryTime: 15 * time.Minute,
+		stopCh:              make(chan struct{}),
 	}
+	// 启动后台熔断恢复任务
+	go m.cleanupCircuitBreakers()
+	return m
 }
 
 // getOrCreate 获取或创建渠道指标
@@ -76,6 +90,12 @@ func (m *MetricsManager) RecordSuccess(channelIndex int) {
 	now := time.Now()
 	metrics.LastSuccessAt = &now
 
+	// 成功后清除熔断标记
+	if metrics.CircuitBrokenAt != nil {
+		metrics.CircuitBrokenAt = nil
+		log.Printf("✅ 渠道 [%d] 因请求成功退出熔断状态", channelIndex)
+	}
+
 	// 更新滑动窗口
 	m.appendToWindow(metrics, true)
 }
@@ -95,6 +115,35 @@ func (m *MetricsManager) RecordFailure(channelIndex int) {
 
 	// 更新滑动窗口
 	m.appendToWindow(metrics, false)
+
+	// 检查是否刚进入熔断状态
+	if metrics.CircuitBrokenAt == nil && m.isCircuitBroken(metrics) {
+		metrics.CircuitBrokenAt = &now
+		log.Printf("⚡ 渠道 [%d] 进入熔断状态（失败率: %.1f%%）", channelIndex, m.calculateFailureRateInternal(metrics)*100)
+	}
+}
+
+// isCircuitBroken 判断是否达到熔断条件（内部方法，调用前需持有锁）
+func (m *MetricsManager) isCircuitBroken(metrics *ChannelMetrics) bool {
+	minRequests := m.windowSize / 2
+	if len(metrics.recentResults) < minRequests {
+		return false
+	}
+	return m.calculateFailureRateInternal(metrics) >= m.failureThreshold
+}
+
+// calculateFailureRateInternal 计算失败率（内部方法，调用前需持有锁）
+func (m *MetricsManager) calculateFailureRateInternal(metrics *ChannelMetrics) float64 {
+	if len(metrics.recentResults) == 0 {
+		return 0
+	}
+	failures := 0
+	for _, success := range metrics.recentResults {
+		if !success {
+			failures++
+		}
+	}
+	return float64(failures) / float64(len(metrics.recentResults))
 }
 
 // appendToWindow 向滑动窗口添加记录
@@ -121,6 +170,7 @@ func (m *MetricsManager) GetMetrics(channelIndex int) *ChannelMetrics {
 			ConsecutiveFailures: metrics.ConsecutiveFailures,
 			LastSuccessAt:       metrics.LastSuccessAt,
 			LastFailureAt:       metrics.LastFailureAt,
+			CircuitBrokenAt:     metrics.CircuitBrokenAt,
 		}
 	}
 	return nil
@@ -141,6 +191,7 @@ func (m *MetricsManager) GetAllMetrics() []*ChannelMetrics {
 			ConsecutiveFailures: metrics.ConsecutiveFailures,
 			LastSuccessAt:       metrics.LastSuccessAt,
 			LastFailureAt:       metrics.LastFailureAt,
+			CircuitBrokenAt:     metrics.CircuitBrokenAt,
 		})
 	}
 	return result
@@ -203,7 +254,9 @@ func (m *MetricsManager) Reset(channelIndex int) {
 	if metrics, exists := m.metrics[channelIndex]; exists {
 		metrics.ConsecutiveFailures = 0
 		metrics.recentResults = make([]bool, 0, m.windowSize)
+		metrics.CircuitBrokenAt = nil // 清除熔断时间
 		// 保留历史统计，但清除滑动窗口
+		log.Printf("🔄 渠道 [%d] 指标已手动重置", channelIndex)
 	}
 }
 
@@ -213,6 +266,51 @@ func (m *MetricsManager) ResetAll() {
 	defer m.mu.Unlock()
 
 	m.metrics = make(map[int]*ChannelMetrics)
+}
+
+// Stop 停止后台清理任务
+func (m *MetricsManager) Stop() {
+	close(m.stopCh)
+}
+
+// cleanupCircuitBreakers 后台任务：定期检查并恢复超时的熔断渠道
+func (m *MetricsManager) cleanupCircuitBreakers() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			m.recoverExpiredCircuitBreakers()
+		case <-m.stopCh:
+			return
+		}
+	}
+}
+
+// recoverExpiredCircuitBreakers 恢复超时的熔断渠道
+func (m *MetricsManager) recoverExpiredCircuitBreakers() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now()
+	for idx, metrics := range m.metrics {
+		if metrics.CircuitBrokenAt != nil {
+			elapsed := now.Sub(*metrics.CircuitBrokenAt)
+			if elapsed > m.circuitRecoveryTime {
+				// 重置熔断状态
+				metrics.ConsecutiveFailures = 0
+				metrics.recentResults = make([]bool, 0, m.windowSize)
+				metrics.CircuitBrokenAt = nil
+				log.Printf("✅ 渠道 [%d] 熔断自动恢复（已超过 %v）", idx, m.circuitRecoveryTime)
+			}
+		}
+	}
+}
+
+// GetCircuitRecoveryTime 获取熔断恢复时间
+func (m *MetricsManager) GetCircuitRecoveryTime() time.Duration {
+	return m.circuitRecoveryTime
 }
 
 // GetFailureThreshold 获取失败率阈值
@@ -237,6 +335,7 @@ type MetricsResponse struct {
 	Latency             int64   `json:"latency"` // 需要从其他地方获取
 	LastSuccessAt       *string `json:"lastSuccessAt,omitempty"`
 	LastFailureAt       *string `json:"lastFailureAt,omitempty"`
+	CircuitBrokenAt     *string `json:"circuitBrokenAt,omitempty"` // 熔断开始时间
 }
 
 // ToResponse 转换为 API 响应格式
@@ -275,6 +374,10 @@ func (m *MetricsManager) ToResponse(channelIndex int, latency int64) *MetricsRes
 	if metrics.LastFailureAt != nil {
 		t := metrics.LastFailureAt.Format(time.RFC3339)
 		resp.LastFailureAt = &t
+	}
+	if metrics.CircuitBrokenAt != nil {
+		t := metrics.CircuitBrokenAt.Format(time.RFC3339)
+		resp.CircuitBrokenAt = &t
 	}
 
 	return resp

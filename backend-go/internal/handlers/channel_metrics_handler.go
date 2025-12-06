@@ -40,6 +40,9 @@ func GetChannelMetrics(metricsManager *metrics.MetricsManager) gin.HandlerFunc {
 			if m.LastFailureAt != nil {
 				item["lastFailureAt"] = m.LastFailureAt.Format("2006-01-02T15:04:05Z07:00")
 			}
+			if m.CircuitBrokenAt != nil {
+				item["circuitBrokenAt"] = m.CircuitBrokenAt.Format("2006-01-02T15:04:05Z07:00")
+			}
 
 			result = append(result, item)
 		}
@@ -90,12 +93,13 @@ func GetSchedulerStats(sch *scheduler.ChannelScheduler) gin.HandlerFunc {
 		}
 
 		stats := gin.H{
-			"multiChannelMode":   sch.IsMultiChannelMode(isResponses),
-			"activeChannelCount": sch.GetActiveChannelCount(isResponses),
-			"traceAffinityCount": sch.GetTraceAffinityManager().Size(),
-			"traceAffinityTTL":   sch.GetTraceAffinityManager().GetTTL().String(),
-			"failureThreshold":   metricsManager.GetFailureThreshold() * 100,
-			"windowSize":         metricsManager.GetWindowSize(),
+			"multiChannelMode":    sch.IsMultiChannelMode(isResponses),
+			"activeChannelCount":  sch.GetActiveChannelCount(isResponses),
+			"traceAffinityCount":  sch.GetTraceAffinityManager().Size(),
+			"traceAffinityTTL":    sch.GetTraceAffinityManager().GetTTL().String(),
+			"failureThreshold":    metricsManager.GetFailureThreshold() * 100,
+			"windowSize":          metricsManager.GetWindowSize(),
+			"circuitRecoveryTime": metricsManager.GetCircuitRecoveryTime().String(),
 		}
 
 		c.JSON(200, stats)

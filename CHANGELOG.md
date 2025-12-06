@@ -4,6 +4,139 @@
 
 ---
 
+## [v2.0.11-go] - 2025-12-06
+
+### 🚀 重大功能
+
+#### 多渠道智能调度器
+
+新增完整的多渠道调度系统，支持智能故障转移和负载均衡：
+
+**核心模块**：
+
+- **ChannelScheduler** (`internal/scheduler/channel_scheduler.go`)
+  - 基于优先级的渠道选择
+  - Trace 亲和性支持（同一用户会话绑定到同一渠道）
+  - 失败率检测和自动熔断
+  - 降级选择（选择失败率最低的渠道）
+
+- **MetricsManager** (`internal/metrics/channel_metrics.go`)
+  - 滑动窗口算法计算实时成功率
+  - 可配置窗口大小（默认 10 次请求）
+  - 可配置失败率阈值（默认 50%）
+  - 自动熔断和恢复机制
+  - 熔断自动恢复（默认 15 分钟后自动尝试恢复）
+  - 熔断时间戳记录（`circuitBrokenAt` 字段）
+
+- **TraceAffinityManager** (`internal/session/trace_affinity.go`)
+  - 用户会话与渠道绑定
+  - TTL 自动过期（默认 30 分钟）
+  - 定期清理过期记录
+
+**调度优先级**：
+1. Trace 亲和性（优先使用用户之前成功的渠道）
+2. 健康检查（跳过失败率过高的渠道）
+3. 优先级顺序（数字越小优先级越高）
+4. 降级选择（所有渠道都不健康时选择最佳的）
+
+#### 渠道状态管理
+
+新增渠道状态字段，支持三种状态：
+
+| 状态 | 说明 |
+|------|------|
+| `active` | 正常运行，参与调度 |
+| `suspended` | 暂停状态，保留在故障转移序列但跳过 |
+| `disabled` | 备用池，不参与调度 |
+
+> ⚠️ **注意**：`suspended` 是配置层面的状态，需手动恢复；运行时熔断会在 15 分钟后自动恢复。
+
+**配置字段扩展**：
+- `priority` - 渠道优先级（数字越小优先级越高）
+- `status` - 渠道状态（active/suspended/disabled）
+
+**向后兼容**：
+- 旧配置文件自动迁移到新格式
+- `currentUpstream` 字段自动转换为 status 状态
+
+#### 渠道密钥自检
+
+- 启动时自动检测无 API Key 的渠道
+- 无 Key 渠道自动设置为 `suspended` 状态
+- 防止因配置错误导致请求失败
+
+### 🎨 前端 UI
+
+#### 渠道编排面板
+
+新增 `ChannelOrchestration.vue` 组件：
+
+- **拖拽排序**: 通过拖拽调整渠道优先级，自动保存
+- **实时指标**: 显示成功率、请求数、延迟等指标
+- **状态切换**: 一键切换 active/suspended/disabled 状态
+- **备用池管理**: 独立管理备用渠道
+- **多渠道/单渠道模式**: 自动检测并显示当前模式
+
+#### 渠道状态徽章
+
+新增 `ChannelStatusBadge.vue` 组件：
+
+- 实时显示渠道健康状态
+- 颜色编码：绿色（健康）、黄色（警告）、红色（熔断）
+- 悬停显示详细指标
+
+#### 响应式 UI 优化
+
+- 移动端适配优化
+- 复古像素主题增强
+- 暗色模式操作栏背景色适配
+
+### 🔧 技术改进
+
+#### API 端点
+
+- `GET /api/channels/metrics` - 获取 Messages 渠道指标
+- `GET /api/responses/channels/metrics` - 获取 Responses 渠道指标
+- `POST /api/channels/:id/resume` - 恢复熔断渠道
+- `POST /api/responses/channels/:id/resume` - 恢复 Responses 熔断渠道
+- `GET /api/scheduler/stats` - 获取调度器统计信息（含熔断恢复时间）
+- `PATCH /api/channels/:id` - 更新渠道配置（支持 priority/status）
+- `PATCH /api/channels/order` - 批量更新渠道优先级顺序
+
+#### CORS 增强
+
+- 支持 PATCH 方法
+- OPTIONS 预检请求返回 204
+
+#### 代理目标配置
+
+- 新增 `VITE_PROXY_TARGET` 环境变量
+- 前端开发时可配置后端代理目标
+
+### 📝 技术细节
+
+**新增模块**：
+
+| 模块 | 路径 | 职责 |
+|------|------|------|
+| **调度器** | `internal/scheduler/` | 多渠道调度逻辑 |
+| **指标** | `internal/metrics/` | 渠道健康度指标 |
+| **亲和性** | `internal/session/trace_affinity.go` | 用户会话亲和 |
+
+**架构图**：
+
+```
+请求 → 调度器选择渠道 → 执行请求 → 记录指标
+           ↓                          ↓
+     Trace亲和检查              成功/失败统计
+           ↓                          ↓
+     健康度检查                 滑动窗口更新
+           ↓                          ↓
+     优先级排序                 熔断判断
+```
+
+---
+
 ## [v2.0.10-go] - 2025-12-06
 
 ### 🎨 UI 重构

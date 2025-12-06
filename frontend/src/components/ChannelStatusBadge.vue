@@ -21,16 +21,6 @@
         <div v-else class="text-caption text-medium-emphasis">暂无指标数据</div>
       </div>
     </v-tooltip>
-
-    <!-- 熔断指示器 -->
-    <v-badge
-      v-if="isSuspended && metrics?.consecutiveFailures"
-      :content="metrics.consecutiveFailures"
-      color="error"
-      :offset-x="-4"
-      :offset-y="-4"
-      class="failure-badge"
-    />
   </div>
 </template>
 
@@ -106,7 +96,6 @@ const iconSize = computed(() => {
   }
 })
 
-const isSuspended = computed(() => props.status === 'suspended')
 const showMetrics = computed(() => !!props.metrics)
 
 // 格式化时间
@@ -350,11 +339,5 @@ const formatTime = (dateStr: string): string => {
 
 .tooltip-content {
   max-width: 200px;
-}
-
-.failure-badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
 }
 </style>
