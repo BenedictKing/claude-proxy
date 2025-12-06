@@ -4,6 +4,30 @@
 
 ---
 
+## [v2.0.10-go] - 2025-12-06
+
+### 🎨 UI 重构
+
+#### 复古像素 (Retro Pixel) 主题
+
+采用 **Neo-Brutalism** 设计语言，完全重构前端样式：
+
+- **无圆角**: 全局 `border-radius: 0`
+- **等宽字体**: `Courier New`, `Consolas`, `Liberation Mono`
+- **粗实体边框**: `2px solid` 黑色/白色边框
+- **硬阴影**: `box-shadow: Npx Npx 0 0` 偏移阴影（无模糊）
+- **按压交互**: hover 上浮 + active 按压效果
+- **高对比度状态标签**: 实心背景 + 实体边框
+- **复古纸张背景**: 亮色模式使用 `#fffbeb`
+
+### 🔧 技术变更
+
+- 移除 DaisyUI 依赖
+- 移除玻璃拟态 (Glassmorphism) 效果
+- 简化主题配置 (`useTheme.ts`)
+
+---
+
 ## [v2.0.9-go] - 2025-12-04
 
 ### ✨ 新功能

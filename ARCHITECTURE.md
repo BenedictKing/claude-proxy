@@ -63,7 +63,8 @@ import { ConfigManager } from '@backend/config/config-manager'
 ### 前端 (frontend/)
 
 - **框架**: Vue 3 (Composition API)
-- **UI 组件库**: Vuetify 3 + DaisyUI
+- **UI 组件库**: Vuetify 3
+- **UI 主题**: 复古像素 (Neo-Brutalism)
 - **构建工具**: Vite
 - **状态管理**: Vue Composition API
 - **HTTP 客户端**: Fetch API
