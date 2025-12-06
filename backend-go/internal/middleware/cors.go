@@ -22,13 +22,13 @@ func CORSMiddleware(envCfg *config.EnvConfig) gin.HandlerFunc {
 			c.Header("Access-Control-Allow-Origin", envCfg.CORSOrigin)
 		}
 
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key")
 		c.Header("Access-Control-Allow-Credentials", "true")
 
 		// 处理预检请求
 		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(200)
+			c.AbortWithStatus(204)
 			return
 		}
 
