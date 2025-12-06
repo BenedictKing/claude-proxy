@@ -54,8 +54,9 @@ func ResponsesHandler(
 			_ = json.Unmarshal(bodyBytes, &responsesReq)
 		}
 
-		// 提取 user_id 用于 Trace 亲和性
-		userID := extractUserID(bodyBytes)
+		// 提取对话标识用于 Trace 亲和性
+		// 优先级: Conversation_id Header > Session_id Header > prompt_cache_key > metadata.user_id
+		userID := extractConversationID(c, bodyBytes)
 
 		// 检查是否为多渠道模式
 		isMultiChannel := channelScheduler.IsMultiChannelMode(true) // true = isResponses
@@ -664,4 +665,37 @@ func parseInputToItems(input interface{}) ([]types.ResponsesItem, error) {
 	default:
 		return nil, fmt.Errorf("unsupported input type")
 	}
+}
+
+// extractConversationID 从请求中提取对话标识（用于 Responses API 渠道亲和）
+// 优先级: Conversation_id Header > Session_id Header > prompt_cache_key > metadata.user_id
+func extractConversationID(c *gin.Context, bodyBytes []byte) string {
+	// 1. HTTP Header: Conversation_id
+	if convID := c.GetHeader("Conversation_id"); convID != "" {
+		return convID
+	}
+
+	// 2. HTTP Header: Session_id
+	if sessID := c.GetHeader("Session_id"); sessID != "" {
+		return sessID
+	}
+
+	// 3. Request Body: prompt_cache_key 或 metadata.user_id
+	var req struct {
+		PromptCacheKey string `json:"prompt_cache_key"`
+		Metadata       struct {
+			UserID string `json:"user_id"`
+		} `json:"metadata"`
+	}
+	if err := json.Unmarshal(bodyBytes, &req); err == nil {
+		if req.PromptCacheKey != "" {
+			return req.PromptCacheKey
+		}
+		// 4. Fallback: metadata.user_id
+		if req.Metadata.UserID != "" {
+			return req.Metadata.UserID
+		}
+	}
+
+	return ""
 }
