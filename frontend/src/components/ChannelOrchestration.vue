@@ -1,7 +1,7 @@
 <template>
   <v-card elevation="2" rounded="lg" class="channel-orchestration">
     <!-- 调度器统计信息 -->
-    <v-card-title class="d-flex align-center justify-space-between py-3 px-4">
+    <v-card-title class="d-flex align-center justify-space-between py-3 px-0">
       <div class="d-flex align-center">
         <v-icon class="mr-2" color="primary">mdi-swap-vertical-bold</v-icon>
         <span class="text-h6">渠道编排</span>
@@ -11,16 +11,14 @@
         <v-chip v-else size="small" color="warning" variant="tonal" class="ml-3"> 单渠道模式 </v-chip>
       </div>
       <div class="d-flex align-center ga-2">
-        <v-btn variant="text" size="small" @click="refreshMetrics" :loading="isLoadingMetrics">
-          <v-icon>mdi-refresh</v-icon>
-        </v-btn>
+        <v-progress-circular v-if="isLoadingMetrics" indeterminate size="16" width="2" color="primary" />
       </div>
     </v-card-title>
 
     <v-divider />
 
     <!-- 故障转移序列 (active + suspended) -->
-    <div class="px-4 pt-3 pb-2">
+    <div class="pt-3 pb-2">
       <div class="d-flex align-center justify-space-between mb-2">
         <div class="text-subtitle-2 text-medium-emphasis d-flex align-center">
           <v-icon size="small" class="mr-1" color="success">mdi-play-circle</v-icon>
@@ -57,10 +55,25 @@
             <!-- 状态指示器 -->
             <ChannelStatusBadge :status="element.status || 'active'" :metrics="getChannelMetrics(element.index)" />
 
-            <!-- 渠道名称 -->
+            <!-- 渠道名称和描述 -->
             <div class="channel-name">
               <span class="font-weight-medium">{{ element.name }}</span>
+              <!-- 官网链接按钮 -->
+              <v-btn
+                :href="getWebsiteUrl(element)"
+                target="_blank"
+                rel="noopener"
+                icon
+                size="x-small"
+                variant="text"
+                color="primary"
+                class="ml-1"
+                title="打开官网"
+              >
+                <v-icon size="14">mdi-open-in-new</v-icon>
+              </v-btn>
               <span class="text-caption text-medium-emphasis ml-2">{{ element.serviceType }}</span>
+              <span v-if="element.description" class="text-caption text-disabled ml-3">{{ element.description }}</span>
             </div>
 
             <!-- 指标显示 -->
@@ -162,8 +175,8 @@
     <v-divider class="my-2" />
 
     <!-- 备用资源池 (disabled only) -->
-    <div class="px-4 pt-2 pb-3">
-      <div class="d-flex align-center justify-space-between mb-2">
+    <div class="pt-2 pb-3">
+      <div class="inactive-pool-header">
         <div class="text-subtitle-2 text-medium-emphasis d-flex align-center">
           <v-icon size="small" class="mr-1" color="grey">mdi-archive-outline</v-icon>
           备用资源池
@@ -176,8 +189,13 @@
         <div v-for="channel in inactiveChannels" :key="channel.index" class="inactive-channel-row">
           <!-- 渠道信息 -->
           <div class="channel-info">
-            <span class="font-weight-medium text-medium-emphasis">{{ channel.name }}</span>
-            <span class="text-caption text-disabled ml-2">{{ channel.serviceType }}</span>
+            <div class="channel-info-main">
+              <span class="font-weight-medium">{{ channel.name }}</span>
+              <span class="text-caption text-disabled ml-2">{{ channel.serviceType }}</span>
+            </div>
+            <div v-if="channel.description" class="channel-info-desc text-caption text-disabled">
+              {{ channel.description }}
+            </div>
           </div>
 
           <!-- API密钥数量 -->
@@ -309,6 +327,17 @@ const getSuccessRateColor = (rate?: number): string => {
   return 'error'
 }
 
+// 获取官网 URL（优先使用 website，否则从 baseUrl 提取域名）
+const getWebsiteUrl = (channel: Channel): string => {
+  if (channel.website) return channel.website
+  try {
+    const url = new URL(channel.baseUrl)
+    return `${url.protocol}//${url.host}`
+  } catch {
+    return channel.baseUrl
+  }
+}
+
 // 刷新指标
 const refreshMetrics = async () => {
   isLoadingMetrics.value = true
@@ -392,6 +421,11 @@ const resumeChannel = async (channelId: number) => {
 // 组件挂载时加载指标
 onMounted(() => {
   refreshMetrics()
+})
+
+// 暴露方法给父组件
+defineExpose({
+  refreshMetrics
 })
 </script>
 
@@ -530,6 +564,13 @@ onMounted(() => {
 }
 
 /* 备用资源池样式 */
+.inactive-pool-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
 .inactive-pool {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -563,12 +604,35 @@ onMounted(() => {
   transform: translateY(-2px);
 }
 
+.v-theme--dark .inactive-channel-row {
+  background: rgba(var(--v-theme-surface-variant), 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.v-theme--dark .inactive-channel-row:hover {
+  background: rgba(var(--v-theme-primary), 0.12);
+  border-color: rgba(var(--v-theme-primary), 0.25);
+}
+
 .inactive-channel-row .channel-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.inactive-channel-row .channel-info-main {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.inactive-channel-row .channel-info-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
 }
 
 .inactive-channel-row .channel-actions {
@@ -609,6 +673,30 @@ onMounted(() => {
   .inactive-pool {
     grid-template-columns: 1fr;
     padding: 12px;
+  }
+
+  .inactive-pool-header {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .inactive-channel-row {
+    flex-wrap: wrap;
+    padding: 10px;
+  }
+
+  .inactive-channel-row .channel-info {
+    flex: 1 1 100%;
+    margin-bottom: 8px;
+  }
+
+  .inactive-channel-row .channel-keys {
+    display: none;
+  }
+
+  .inactive-channel-row .channel-actions {
+    flex: 1;
+    justify-content: flex-end;
   }
 }
 </style>

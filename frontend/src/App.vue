@@ -61,16 +61,17 @@
     </v-dialog>
 
     <!-- 应用栏 - 毛玻璃效果 -->
-    <v-app-bar elevation="0" :height="$vuetify.display.mobile ? 64 : 72" class="app-header">
+    <v-app-bar elevation="0" :height="$vuetify.display.mobile ? 56 : 72" class="app-header">
       <template #prepend>
         <div class="app-logo">
-          <v-icon :size="$vuetify.display.mobile ? 26 : 32" color="primary"> mdi-rocket-launch </v-icon>
+          <v-icon :size="$vuetify.display.mobile ? 22 : 32" color="primary"> mdi-rocket-launch </v-icon>
         </div>
       </template>
 
-      <v-app-bar-title class="d-flex flex-column justify-center">
+      <!-- 自定义标题容器 - 替代 v-app-bar-title -->
+      <div class="header-title">
         <div
-          :class="$vuetify.display.mobile ? 'text-subtitle-1' : 'text-h6'"
+          :class="$vuetify.display.mobile ? 'text-body-2' : 'text-h6'"
           class="font-weight-bold d-flex align-center"
         >
           <span class="api-type-text" :class="{ active: activeTab === 'messages' }" @click="activeTab = 'messages'">
@@ -80,15 +81,15 @@
           <span class="api-type-text" :class="{ active: activeTab === 'responses' }" @click="activeTab = 'responses'">
             Codex
           </span>
-          <span class="brand-text">API Proxy</span>
+          <span class="brand-text d-none d-sm-inline">API Proxy</span>
         </div>
-      </v-app-bar-title>
+      </div>
 
       <v-spacer></v-spacer>
 
-      <!-- 主题切换 -->
-      <v-btn icon variant="text" size="small" class="header-btn" @click="toggleTheme">
-        <v-icon size="20">{{ currentTheme === 'dark' ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
+      <!-- 暗色模式切换 -->
+      <v-btn icon variant="text" size="small" class="header-btn" @click="toggleDarkMode">
+        <v-icon size="20">{{ theme.global.current.value.dark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
       </v-btn>
 
       <!-- 注销按钮 -->
@@ -108,9 +109,9 @@
     <!-- 主要内容 -->
     <v-main>
       <v-container fluid class="pa-4 pa-md-6">
-        <!-- 统计卡片 - 现代玻璃拟态风格 -->
+        <!-- 统计卡片 - 玻璃拟态风格 -->
         <v-row class="mb-6 stat-cards-row">
-          <v-col cols="12" sm="6" lg="3">
+          <v-col cols="6" sm="4">
             <div class="stat-card stat-card-info">
               <div class="stat-card-icon">
                 <v-icon size="28">mdi-server-network</v-icon>
@@ -124,7 +125,7 @@
             </div>
           </v-col>
 
-          <v-col cols="12" sm="6" lg="3">
+          <v-col cols="6" sm="4">
             <div class="stat-card stat-card-success">
               <div class="stat-card-icon">
                 <v-icon size="28">mdi-check-circle</v-icon>
@@ -141,21 +142,7 @@
             </div>
           </v-col>
 
-          <v-col cols="12" sm="6" lg="3">
-            <div class="stat-card stat-card-primary">
-              <div class="stat-card-icon">
-                <v-icon size="28">mdi-swap-horizontal</v-icon>
-              </div>
-              <div class="stat-card-content">
-                <div class="stat-card-value text-capitalize">{{ currentChannelsData.loadBalance || 'none' }}</div>
-                <div class="stat-card-label">API密钥分配</div>
-                <div class="stat-card-desc">当前渠道内密钥策略</div>
-              </div>
-              <div class="stat-card-glow"></div>
-            </div>
-          </v-col>
-
-          <v-col cols="12" sm="6" lg="3">
+          <v-col cols="6" sm="4">
             <div class="stat-card stat-card-emerald">
               <div class="stat-card-icon pulse-animation">
                 <v-icon size="28">mdi-heart-pulse</v-icon>
@@ -264,6 +251,7 @@
         <!-- 渠道编排（高密度列表模式） -->
         <ChannelOrchestration
           v-if="currentChannelsData.channels?.length"
+          ref="channelOrchestrationRef"
           :channels="currentChannelsData.channels"
           :current-channel-index="currentChannelsData.current"
           :channel-type="activeTab"
@@ -344,14 +332,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useTheme } from 'vuetify'
 import { api, type Channel, type ChannelsResponse } from './services/api'
 import AddChannelModal from './components/AddChannelModal.vue'
 import ChannelOrchestration from './components/ChannelOrchestration.vue'
+import { useAppTheme } from './composables/useTheme'
 
 // Vuetify主题
 const theme = useTheme()
+
+// 应用主题系统
+const { init: initTheme } = useAppTheme()
+
+// 渠道编排组件引用
+const channelOrchestrationRef = ref<InstanceType<typeof ChannelOrchestration> | null>(null)
+
+// 自动刷新定时器
+let autoRefreshTimer: ReturnType<typeof setInterval> | null = null
+const AUTO_REFRESH_INTERVAL = 2000 // 2秒
 
 // 响应式数据
 const activeTab = ref<'messages' | 'responses'>('messages') // Tab 切换状态
@@ -363,7 +362,7 @@ const editingChannel = ref<Channel | null>(null)
 const selectedChannelForKey = ref<number>(-1)
 const newApiKey = ref('')
 const isPingingAll = ref(false)
-const currentTheme = ref<'light' | 'dark' | 'auto'>('auto')
+const darkModePreference = ref<'light' | 'dark' | 'auto'>('auto')
 
 // Toast通知系统
 interface Toast {
@@ -587,13 +586,13 @@ const updateLoadBalance = async (strategy: string) => {
 }
 
 // 主题管理
-const toggleTheme = () => {
-  const newTheme = currentTheme.value === 'dark' ? 'light' : 'dark'
-  setTheme(newTheme)
+const toggleDarkMode = () => {
+  const newMode = darkModePreference.value === 'dark' ? 'light' : 'dark'
+  setDarkMode(newMode)
 }
 
-const setTheme = (themeName: 'light' | 'dark' | 'auto') => {
-  currentTheme.value = themeName
+const setDarkMode = (themeName: 'light' | 'dark' | 'auto') => {
+  darkModePreference.value = themeName
   const apply = (isDark: boolean) => {
     // Sync Vuetify theme
     theme.global.name.value = isDark ? 'dark' : 'light'
@@ -767,14 +766,18 @@ const handleAuthError = (error: any) => {
 
 // 初始化
 onMounted(async () => {
-  // 加载保存的主题
-  const savedTheme = (localStorage.getItem('theme') as 'light' | 'dark' | 'auto') || 'auto'
-  setTheme(savedTheme)
+  // 初始化复古像素主题
+  document.documentElement.dataset.theme = 'retro'
+  initTheme()
+
+  // 加载保存的暗色模式偏好
+  const savedMode = (localStorage.getItem('theme') as 'light' | 'dark' | 'auto') || 'auto'
+  setDarkMode(savedMode)
 
   // 监听系统主题变化
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
   const handlePref = () => {
-    if (currentTheme.value === 'auto') setTheme('auto')
+    if (darkModePreference.value === 'auto') setDarkMode('auto')
   }
   mediaQuery.addEventListener('change', handlePref)
 
@@ -797,20 +800,73 @@ onMounted(async () => {
   if (authenticated) {
     // 加载渠道数据
     await refreshChannels()
+    // 启动自动刷新
+    startAutoRefresh()
   }
 })
+
+// 启动自动刷新定时器
+const startAutoRefresh = () => {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer)
+  }
+  autoRefreshTimer = setInterval(async () => {
+    if (isAuthenticated.value) {
+      try {
+        // 静默刷新渠道数据
+        if (activeTab.value === 'messages') {
+          channelsData.value = await api.getChannels()
+        } else {
+          responsesChannelsData.value = await api.getResponsesChannels()
+        }
+        // 同时刷新渠道指标
+        channelOrchestrationRef.value?.refreshMetrics()
+      } catch (error) {
+        // 静默处理错误，避免刷新失败时干扰用户
+        console.warn('自动刷新失败:', error)
+      }
+    }
+  }, AUTO_REFRESH_INTERVAL)
+}
+
+// 停止自动刷新定时器
+const stopAutoRefresh = () => {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer)
+    autoRefreshTimer = null
+  }
+}
 
 // 监听 Tab 切换，刷新对应数据
 watch(activeTab, async () => {
   if (isAuthenticated.value) {
     await refreshChannels()
+    // 切换 Tab 时立即刷新指标
+    channelOrchestrationRef.value?.refreshMetrics()
+  }
+})
+
+// 监听认证状态变化
+watch(isAuthenticated, (newValue) => {
+  if (newValue) {
+    startAutoRefresh()
+  } else {
+    stopAutoRefresh()
+  }
+})
+
+// 在组件卸载时清除定时器
+onUnmounted(() => {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer)
+    autoRefreshTimer = null
   }
 })
 </script>
 
 <style scoped>
 /* =====================================================
-   🎨 现代化 UI 样式系统
+   🎨 现代化 UI 样式系统 - 支持动态主题
    ===================================================== */
 
 /* ----- 应用栏 - 毛玻璃效果 ----- */
@@ -825,12 +881,35 @@ watch(activeTab, async () => {
 
 .v-theme--dark .app-header {
   background: rgba(var(--v-theme-surface), 0.75) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* 修复 Header 布局 - 防止标题被遮挡 */
+.app-header :deep(.v-toolbar__prepend) {
+  margin-inline-end: 4px !important;
 }
 
 .app-header .v-toolbar-title {
+  overflow: hidden !important;
+  min-width: 0 !important;
+  flex: 1 !important;
+}
+
+.app-header :deep(.v-toolbar__content) {
   overflow: visible !important;
-  width: auto !important;
+}
+
+.app-header :deep(.v-toolbar__content > .v-toolbar-title) {
+  min-width: 0 !important;
+  margin-inline-start: 0 !important;
+  margin-inline-end: auto !important;
+}
+
+.app-header :deep(.v-toolbar-title__placeholder) {
+  width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .app-logo {
@@ -841,27 +920,16 @@ watch(activeTab, async () => {
   justify-content: center;
   background: linear-gradient(135deg, rgba(var(--v-theme-primary), 0.15), rgba(var(--v-theme-secondary), 0.1));
   border-radius: 12px;
-  margin-right: 12px;
+  margin-right: 8px;
 }
 
-.brand-text {
-  margin-left: 10px;
-  background: linear-gradient(135deg, rgb(var(--v-theme-primary)), rgb(var(--v-theme-secondary)));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+/* 自定义标题容器 - 替代 v-app-bar-title */
+.header-title {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
-.header-btn {
-  border-radius: 10px !important;
-  margin-left: 4px;
-}
-
-.header-btn:hover {
-  background: rgba(var(--v-theme-primary), 0.1);
-}
-
-/* ----- API Tab 切换样式 ----- */
 .api-type-text {
   cursor: pointer;
   opacity: 0.5;
@@ -898,6 +966,23 @@ watch(activeTab, async () => {
   margin: 0 2px;
   cursor: default;
   padding: 0;
+}
+
+.brand-text {
+  margin-left: 10px;
+  background: linear-gradient(135deg, rgb(var(--v-theme-primary)), rgb(var(--v-theme-secondary)));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.header-btn {
+  border-radius: 10px !important;
+  margin-left: 4px;
+}
+
+.header-btn:hover {
+  background: rgba(var(--v-theme-primary), 0.1);
 }
 
 /* ----- 统计卡片 - 玻璃拟态 ----- */
@@ -978,6 +1063,9 @@ watch(activeTab, async () => {
   font-size: 0.75rem;
   opacity: 0.6;
   margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stat-card-glow {
@@ -1054,6 +1142,160 @@ watch(activeTab, async () => {
   color: #34d399;
 }
 
+/* =========================================
+   深海蓝 (Ocean Blue) 主题 - 全局样式
+   使用 Vuetify 主题变量，支持亮/暗模式
+   ========================================= */
+
+/* 全局背景 */
+.v-application {
+  background-color: rgb(var(--v-theme-surface)) !important;
+}
+
+.v-main {
+  background-color: rgb(var(--v-theme-surface)) !important;
+}
+
+/* 统计卡片图标配色 */
+.stat-card-icon {
+  background: rgba(var(--v-theme-primary), 0.12) !important;
+}
+
+.stat-card-icon .v-icon {
+  color: rgb(var(--v-theme-primary)) !important;
+}
+
+.stat-card-emerald .stat-card-icon {
+  background: rgba(var(--v-theme-success), 0.12) !important;
+}
+
+.stat-card-emerald .stat-card-icon .v-icon {
+  color: rgb(var(--v-theme-success)) !important;
+}
+
+/* 主按钮渐变 */
+.action-btn-primary {
+  background: linear-gradient(135deg, rgb(var(--v-theme-primary)) 0%, rgb(var(--v-theme-secondary)) 100%) !important;
+  box-shadow: 0 8px 20px -4px rgba(var(--v-theme-primary), 0.4) !important;
+}
+
+.action-btn-primary:hover {
+  box-shadow: 0 10px 25px -4px rgba(var(--v-theme-primary), 0.5) !important;
+}
+
+/* 渠道编排容器透明背景 */
+.channel-orchestration {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+/* 渠道列表卡片样式 */
+.channel-list .channel-row {
+  background: rgb(var(--v-theme-surface)) !important;
+  margin-bottom: 0;
+  border-radius: 16px !important;
+  padding: 14px 12px 14px 28px !important;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08) !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03) !important;
+  min-height: 48px !important;
+  position: relative;
+}
+
+.v-theme--dark .channel-list .channel-row {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.15) !important;
+}
+
+.channel-list .channel-row:active {
+  transform: scale(0.98);
+  transition: transform 0.15s;
+}
+
+/* 序号改为左上角角标 */
+.channel-row .priority-number {
+  position: absolute !important;
+  top: -1px !important;
+  left: -1px !important;
+  background: rgba(var(--v-theme-on-surface), 0.06) !important;
+  color: rgba(var(--v-theme-on-surface), 0.5) !important;
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  padding: 2px 6px !important;
+  border-bottom-right-radius: 8px !important;
+  border-top-left-radius: 16px !important;
+  width: auto !important;
+  height: auto !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08) !important;
+  border-top: none !important;
+  border-left: none !important;
+}
+
+/* 拖拽手柄 */
+.drag-handle {
+  opacity: 0.3;
+  padding: 8px;
+  margin-left: -8px;
+}
+
+/* 渠道名称 */
+.channel-name {
+  font-size: 14px !important;
+  font-weight: 700;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.channel-name .text-caption.text-medium-emphasis {
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px !important;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.6) !important;
+}
+
+/* 官网跳转图标 */
+.channel-name .v-btn--icon {
+  width: 24px !important;
+  height: 24px !important;
+  opacity: 0.4;
+}
+
+/* 隐藏描述文字 */
+.channel-name .text-disabled {
+  display: none !important;
+}
+
+/* 隐藏指标和密钥数 */
+.channel-metrics,
+.channel-keys {
+  display: none !important;
+}
+
+/* --- 备用资源池 --- */
+.inactive-pool {
+  background: rgba(var(--v-theme-on-surface), 0.03) !important;
+  border: 2px dashed rgba(var(--v-theme-on-surface), 0.12) !important;
+  border-radius: 18px !important;
+  padding: 8px !important;
+  margin-top: 12px;
+}
+
+.inactive-channel-row {
+  background: rgb(var(--v-theme-surface)) !important;
+  margin: 6px !important;
+  padding: 12px !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.06) !important;
+}
+
+.inactive-channel-row .channel-info-main {
+  color: rgba(var(--v-theme-on-surface), 0.6) !important;
+  font-weight: 600;
+}
+
 /* ----- 操作按钮区域 ----- */
 .action-bar {
   display: flex;
@@ -1062,15 +1304,10 @@ watch(activeTab, async () => {
   justify-content: space-between;
   gap: 12px;
   padding: 16px 20px;
-  background: rgba(var(--v-theme-surface), 0.7);
+  background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border: 1px solid rgba(226, 232, 240, 0.6);
   border-radius: 16px;
-}
-
-.v-theme--dark .action-bar {
-  background: rgba(var(--v-theme-surface), 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .action-bar-left {
@@ -1096,14 +1333,6 @@ watch(activeTab, async () => {
   transform: translateY(-1px);
 }
 
-.action-btn-primary {
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35) !important;
-}
-
-.action-btn-primary:hover {
-  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45) !important;
-}
-
 .load-balance-btn {
   text-transform: capitalize;
 }
@@ -1122,21 +1351,132 @@ watch(activeTab, async () => {
   margin-bottom: 0;
 }
 
+/* =========================================
+   手机端专属样式 (≤600px)
+   仅包含布局和尺寸调整，颜色继承全局主题
+   ========================================= */
 @media (max-width: 600px) {
+  /* --- 顶部导航栏 --- */
+  .app-header {
+    padding: 0 12px !important;
+    background: rgba(var(--v-theme-surface), 0.9) !important;
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.05) !important;
+    box-shadow: none !important;
+  }
+
+  .app-logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    margin-right: 8px;
+  }
+
+  .app-logo .v-icon {
+    filter: drop-shadow(0 2px 4px rgba(var(--v-theme-primary), 0.3));
+  }
+
+  .api-type-text {
+    padding: 2px 6px;
+  }
+
+  .api-type-text.active {
+    color: rgb(var(--v-theme-primary)) !important;
+    font-weight: 800 !important;
+  }
+
+  .brand-text {
+    display: none;
+  }
+
+  /* --- 统计卡片优化 --- */
+  .stat-card {
+    padding: 14px 12px;
+    gap: 10px;
+    min-height: auto;
+    background: rgb(var(--v-theme-surface)) !important;
+    border-radius: 18px !important;
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.06) !important;
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.06) !important;
+  }
+
+  .stat-card-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+
+  .stat-card-icon .v-icon {
+    font-size: 18px !important;
+  }
+
+  .stat-card-value {
+    font-size: 1.35rem;
+    font-weight: 800 !important;
+    line-height: 1.2;
+    color: rgb(var(--v-theme-on-surface));
+    letter-spacing: -0.5px;
+  }
+
+  .stat-card-label {
+    font-size: 0.7rem;
+    color: rgba(var(--v-theme-on-surface), 0.6);
+    font-weight: 500;
+  }
+
+  .stat-card-desc,
+  .stat-card-glow {
+    display: none;
+  }
+
+  .stat-cards-row {
+    margin-bottom: 12px !important;
+  }
+
+  .stat-cards-row .v-col {
+    padding: 4px !important;
+  }
+
+  /* --- 操作按钮区域 --- */
   .action-bar {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px !important;
   }
 
-  .action-bar-left,
-  .action-bar-right {
-    justify-content: center;
+  /* --- 渠道编排容器 --- */
+  .channel-orchestration {
+    border-radius: 0 !important;
   }
 
-  .action-btn {
-    flex: 1;
-    min-width: 0;
+  .channel-orchestration .v-card-title {
+    display: none !important;
+  }
+
+  .channel-orchestration > .v-divider {
+    display: none !important;
+  }
+
+  /* 隐藏"故障转移序列"标题区域 */
+  .channel-orchestration .px-4.pt-3.pb-2 > .d-flex.mb-2 {
+    display: none !important;
+  }
+
+  /* --- 渠道列表卡片化 --- */
+  .channel-list .channel-row:active {
+    transform: scale(0.98);
+    transition: transform 0.15s;
+  }
+
+  /* --- 通用优化 --- */
+  .v-chip {
+    border-radius: 6px !important;
+    font-weight: 600;
+  }
+
+  /* 隐藏分割线 */
+  .channel-orchestration .v-divider {
+    display: none !important;
   }
 }
 
@@ -1168,34 +1508,6 @@ watch(activeTab, async () => {
   }
 }
 
-@media (max-width: 600px) {
-  .app-header {
-    padding: 0 12px !important;
-  }
-
-  .app-logo {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    margin-right: 8px;
-  }
-
-  .stat-card {
-    padding: 16px;
-    gap: 12px;
-  }
-
-  .stat-card-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
-  }
-
-  .stat-card-value {
-    font-size: 1.5rem;
-  }
-}
-
 /* ----- 渠道列表动画 ----- */
 .d-contents {
   display: contents;
@@ -1223,5 +1535,91 @@ watch(activeTab, async () => {
 
 .channel-list-move {
   transition: transform 0.4s ease;
+}
+</style>
+
+<!-- 全局样式 - 复古像素主题 -->
+<style>
+/* 复古像素主题 - 全局样式 */
+[data-theme="retro"] {
+  --app-radius: 0px;
+  --app-font: "Courier New", Consolas, monospace;
+}
+
+[data-theme="retro"] .v-application {
+  font-family: "Courier New", Consolas, monospace !important;
+}
+
+[data-theme="retro"] .stat-card {
+  border-radius: 0 !important;
+  box-shadow: 4px 4px 0 0 rgba(var(--v-theme-on-surface), 0.8) !important;
+  border: 2px solid rgba(var(--v-theme-on-surface), 0.8) !important;
+}
+
+[data-theme="retro"] .action-bar {
+  border-radius: 0 !important;
+  box-shadow: 4px 4px 0 0 rgba(var(--v-theme-on-surface), 0.8) !important;
+  border: 2px solid rgba(var(--v-theme-on-surface), 0.8) !important;
+}
+
+[data-theme="retro"] .channel-orchestration {
+  border-radius: 0 !important;
+}
+
+[data-theme="retro"] .channel-row {
+  border-radius: 0 !important;
+  box-shadow: 3px 3px 0 0 rgba(var(--v-theme-on-surface), 0.6) !important;
+  border: 2px solid rgba(var(--v-theme-on-surface), 0.6) !important;
+}
+
+[data-theme="retro"] .inactive-pool {
+  border-radius: 0 !important;
+  border: 2px dashed rgba(var(--v-theme-on-surface), 0.5) !important;
+}
+
+[data-theme="retro"] .inactive-channel-row {
+  border-radius: 0 !important;
+  box-shadow: 2px 2px 0 0 rgba(var(--v-theme-on-surface), 0.5) !important;
+  border: 2px solid rgba(var(--v-theme-on-surface), 0.5) !important;
+}
+
+[data-theme="retro"] .v-btn:not(.v-btn--icon) {
+  border-radius: 0 !important;
+  box-shadow: 3px 3px 0 0 rgba(var(--v-theme-on-surface), 0.8) !important;
+  border: 2px solid rgba(var(--v-theme-on-surface), 0.8) !important;
+  transition: all 0.1s ease !important;
+}
+
+[data-theme="retro"] .v-btn:not(.v-btn--icon):hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 0 rgba(var(--v-theme-on-surface), 0.8) !important;
+}
+
+[data-theme="retro"] .v-btn:not(.v-btn--icon):active {
+  transform: translate(2px, 2px) !important;
+  box-shadow: none !important;
+}
+
+[data-theme="retro"] .v-chip {
+  border-radius: 0 !important;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.5) !important;
+}
+
+[data-theme="retro"] .v-card {
+  border-radius: 0 !important;
+}
+
+[data-theme="retro"] .priority-number {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+/* 暗色模式下的复古主题 */
+.v-theme--dark[data-theme="retro"] .stat-card,
+.v-theme--dark[data-theme="retro"] .action-bar,
+.v-theme--dark[data-theme="retro"] .channel-row,
+.v-theme--dark[data-theme="retro"] .v-btn:not(.v-btn--icon) {
+  box-shadow: 4px 4px 0 0 rgba(255, 255, 255, 0.7) !important;
+  border-color: rgba(255, 255, 255, 0.7) !important;
 }
 </style>

@@ -160,6 +160,79 @@ const formatTime = (dateStr: string): string => {
   color: rgb(var(--v-theme-success));
 }
 
+/* 手机端隐藏状态文字，改为呼吸灯样式 */
+@media (max-width: 600px) {
+  .status-label {
+    display: none;
+  }
+
+  .badge-content {
+    padding: 0;
+    background: transparent !important;
+    border-radius: 0;
+  }
+
+  .badge-content .v-icon {
+    font-size: 0 !important;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 10px;
+    position: relative;
+  }
+
+  /* 活跃状态 - 绿色呼吸灯 */
+  .status-active .badge-content .v-icon {
+    background: #10b981;
+  }
+
+  .status-active .badge-content .v-icon::after {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    width: 16px;
+    height: 16px;
+    background: rgba(16, 185, 129, 0.25);
+    border-radius: 50%;
+    animation: pulse-glow 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  /* 熔断状态 - 橙色 */
+  .status-suspended .badge-content .v-icon {
+    background: #f59e0b;
+  }
+
+  .status-suspended .badge-content .v-icon::after {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    width: 16px;
+    height: 16px;
+    background: rgba(245, 158, 11, 0.25);
+    border-radius: 50%;
+    animation: pulse-glow 1.5s infinite cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  /* 禁用状态 - 灰色 */
+  .status-disabled .badge-content .v-icon,
+  .status-unknown .badge-content .v-icon {
+    background: #94a3b8;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      transform: scale(0.8);
+      opacity: 0.8;
+    }
+    50% {
+      transform: scale(1.2);
+      opacity: 0.3;
+    }
+  }
+}
+
 .status-suspended .badge-content {
   background: rgba(var(--v-theme-warning), 0.15);
   color: rgb(var(--v-theme-warning));
