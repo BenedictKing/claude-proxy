@@ -64,7 +64,7 @@
     <v-app-bar elevation="0" :height="$vuetify.display.mobile ? 56 : 72" class="app-header">
       <template #prepend>
         <div class="app-logo">
-          <v-icon :size="$vuetify.display.mobile ? 22 : 32" color="primary"> mdi-rocket-launch </v-icon>
+          <v-icon :size="$vuetify.display.mobile ? 22 : 32" color="white"> mdi-rocket-launch </v-icon>
         </div>
       </template>
 
@@ -594,11 +594,7 @@ const toggleDarkMode = () => {
 const setDarkMode = (themeName: 'light' | 'dark' | 'auto') => {
   darkModePreference.value = themeName
   const apply = (isDark: boolean) => {
-    // Sync Vuetify theme
     theme.global.name.value = isDark ? 'dark' : 'light'
-    // Sync DaisyUI theme on <html data-theme="...">
-    const daisyTheme = isDark ? 'night' : 'emerald'
-    document.documentElement.setAttribute('data-theme', daisyTheme)
   }
 
   if (themeName === 'auto') {
@@ -866,25 +862,24 @@ onUnmounted(() => {
 
 <style scoped>
 /* =====================================================
-   🎨 现代化 UI 样式系统 - 支持动态主题
+   🎮 复古像素 (Retro Pixel) 主题样式系统
+   Neo-Brutalism: 直角、粗黑边框、硬阴影、等宽字体
    ===================================================== */
 
-/* ----- 应用栏 - 毛玻璃效果 ----- */
+/* ----- 应用栏 - 复古像素风格 ----- */
 .app-header {
-  background: rgba(var(--v-theme-surface), 0.8) !important;
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  transition: all 0.3s ease;
+  background: rgb(var(--v-theme-surface)) !important;
+  border-bottom: 2px solid rgb(var(--v-theme-on-surface));
+  transition: none;
   padding: 0 16px !important;
 }
 
 .v-theme--dark .app-header {
-  background: rgba(var(--v-theme-surface), 0.75) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgb(var(--v-theme-surface)) !important;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.8);
 }
 
-/* 修复 Header 布局 - 防止标题被遮挡 */
+/* 修复 Header 布局 */
 .app-header :deep(.v-toolbar__prepend) {
   margin-inline-end: 4px !important;
 }
@@ -918,12 +913,18 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, rgba(var(--v-theme-primary), 0.15), rgba(var(--v-theme-secondary), 0.1));
-  border-radius: 12px;
+  background: rgb(var(--v-theme-primary));
+  border: 2px solid rgb(var(--v-theme-on-surface));
+  box-shadow: 3px 3px 0 0 rgb(var(--v-theme-on-surface));
   margin-right: 8px;
 }
 
-/* 自定义标题容器 - 替代 v-app-bar-title */
+.v-theme--dark .app-logo {
+  border-color: rgba(255, 255, 255, 0.8);
+  box-shadow: 3px 3px 0 0 rgba(255, 255, 255, 0.8);
+}
+
+/* 自定义标题容器 */
 .header-title {
   display: flex;
   align-items: center;
@@ -933,32 +934,26 @@ onUnmounted(() => {
 .api-type-text {
   cursor: pointer;
   opacity: 0.5;
-  transition: all 0.2s ease;
+  transition: all 0.1s ease;
   padding: 4px 8px;
-  border-radius: 6px;
   position: relative;
 }
 
 .api-type-text:not(.separator):hover {
   opacity: 0.8;
-  background: rgba(var(--v-theme-primary), 0.08);
+  background: rgba(var(--v-theme-primary), 0.15);
 }
 
 .api-type-text.active {
   opacity: 1;
   font-weight: 700;
   color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.1);
+  border: 1px solid rgb(var(--v-theme-on-surface));
 }
 
-.api-type-text.active::after {
-  content: '';
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 0;
-  height: 2px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, rgb(var(--v-theme-primary)), rgb(var(--v-theme-secondary)));
+.v-theme--dark .api-type-text.active {
+  border-color: rgba(255, 255, 255, 0.6);
 }
 
 .separator {
@@ -970,22 +965,34 @@ onUnmounted(() => {
 
 .brand-text {
   margin-left: 10px;
-  background: linear-gradient(135deg, rgb(var(--v-theme-primary)), rgb(var(--v-theme-secondary)));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: rgb(var(--v-theme-primary));
+  font-weight: 700;
 }
 
 .header-btn {
-  border-radius: 10px !important;
+  border: 2px solid rgb(var(--v-theme-on-surface)) !important;
+  box-shadow: 2px 2px 0 0 rgb(var(--v-theme-on-surface)) !important;
   margin-left: 4px;
+  transition: all 0.1s ease !important;
+}
+
+.v-theme--dark .header-btn {
+  border-color: rgba(255, 255, 255, 0.6) !important;
+  box-shadow: 2px 2px 0 0 rgba(255, 255, 255, 0.6) !important;
 }
 
 .header-btn:hover {
   background: rgba(var(--v-theme-primary), 0.1);
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 0 rgb(var(--v-theme-on-surface)) !important;
 }
 
-/* ----- 统计卡片 - 玻璃拟态 ----- */
+.header-btn:active {
+  transform: translate(2px, 2px) !important;
+  box-shadow: none !important;
+}
+
+/* ----- 统计卡片 - 复古像素风格 ----- */
 .stat-cards-row {
   margin-top: -8px;
 }
@@ -996,42 +1003,56 @@ onUnmounted(() => {
   align-items: center;
   gap: 16px;
   padding: 20px;
-  border-radius: 16px;
-  background: rgba(var(--v-theme-surface), 0.7);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgb(var(--v-theme-surface));
+  border: 2px solid rgb(var(--v-theme-on-surface));
+  box-shadow: 6px 6px 0 0 rgb(var(--v-theme-on-surface));
+  transition: all 0.1s ease;
   overflow: hidden;
   min-height: 100px;
 }
 
 .stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+  transform: translate(-2px, -2px);
+  box-shadow: 8px 8px 0 0 rgb(var(--v-theme-on-surface));
+}
+
+.stat-card:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 0 rgb(var(--v-theme-on-surface));
 }
 
 .v-theme--dark .stat-card {
-  background: rgba(var(--v-theme-surface), 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgb(var(--v-theme-surface));
+  border-color: rgba(255, 255, 255, 0.8);
+  box-shadow: 6px 6px 0 0 rgba(255, 255, 255, 0.8);
 }
 
 .v-theme--dark .stat-card:hover {
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: 8px 8px 0 0 rgba(255, 255, 255, 0.8);
+}
+
+.v-theme--dark .stat-card:active {
+  box-shadow: 2px 2px 0 0 rgba(255, 255, 255, 0.8);
 }
 
 .stat-card-icon {
   width: 56px;
   height: 56px;
-  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: transform 0.3s ease;
+  border: 2px solid rgb(var(--v-theme-on-surface));
+  background: rgba(var(--v-theme-primary), 0.15);
+  transition: transform 0.1s ease;
+}
+
+.v-theme--dark .stat-card-icon {
+  border-color: rgba(255, 255, 255, 0.6);
 }
 
 .stat-card:hover .stat-card-icon {
-  transform: scale(1.1);
+  transform: scale(1.05);
 }
 
 .stat-card-content {
@@ -1057,6 +1078,7 @@ onUnmounted(() => {
   font-weight: 600;
   margin-top: 2px;
   opacity: 0.85;
+  text-transform: uppercase;
 }
 
 .stat-card-desc {
@@ -1068,169 +1090,162 @@ onUnmounted(() => {
   text-overflow: ellipsis;
 }
 
+/* 隐藏光晕效果 */
 .stat-card-glow {
-  position: absolute;
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  filter: blur(40px);
-  opacity: 0.4;
-  right: -20px;
-  top: -20px;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-}
-
-.stat-card:hover .stat-card-glow {
-  opacity: 0.6;
+  display: none;
 }
 
 /* 统计卡片颜色变体 */
 .stat-card-info .stat-card-icon {
-  background: linear-gradient(135deg, #3b82f6, #60a5fa);
+  background: #3b82f6;
   color: white;
 }
 .stat-card-info .stat-card-value {
   color: #3b82f6;
-}
-.stat-card-info .stat-card-glow {
-  background: #3b82f6;
 }
 .v-theme--dark .stat-card-info .stat-card-value {
   color: #60a5fa;
 }
 
 .stat-card-success .stat-card-icon {
-  background: linear-gradient(135deg, #10b981, #34d399);
+  background: #10b981;
   color: white;
 }
 .stat-card-success .stat-card-value {
   color: #10b981;
-}
-.stat-card-success .stat-card-glow {
-  background: #10b981;
 }
 .v-theme--dark .stat-card-success .stat-card-value {
   color: #34d399;
 }
 
 .stat-card-primary .stat-card-icon {
-  background: linear-gradient(135deg, #6366f1, #818cf8);
+  background: #6366f1;
   color: white;
 }
 .stat-card-primary .stat-card-value {
   color: #6366f1;
-}
-.stat-card-primary .stat-card-glow {
-  background: #6366f1;
 }
 .v-theme--dark .stat-card-primary .stat-card-value {
   color: #818cf8;
 }
 
 .stat-card-emerald .stat-card-icon {
-  background: linear-gradient(135deg, #059669, #10b981);
+  background: #059669;
   color: white;
 }
 .stat-card-emerald .stat-card-value {
   color: #059669;
-}
-.stat-card-emerald .stat-card-glow {
-  background: #059669;
 }
 .v-theme--dark .stat-card-emerald .stat-card-value {
   color: #34d399;
 }
 
 /* =========================================
-   深海蓝 (Ocean Blue) 主题 - 全局样式
-   使用 Vuetify 主题变量，支持亮/暗模式
+   复古像素主题 - 全局样式覆盖
    ========================================= */
 
 /* 全局背景 */
 .v-application {
-  background-color: rgb(var(--v-theme-surface)) !important;
+  background-color: #fffbeb !important;
+  font-family: 'Courier New', Consolas, monospace !important;
+}
+
+.v-theme--dark .v-application,
+.v-theme--dark.v-application {
+  background-color: rgb(var(--v-theme-background)) !important;
 }
 
 .v-main {
-  background-color: rgb(var(--v-theme-surface)) !important;
+  background-color: #fffbeb !important;
+}
+
+.v-theme--dark .v-main {
+  background-color: rgb(var(--v-theme-background)) !important;
 }
 
 /* 统计卡片图标配色 */
-.stat-card-icon {
-  background: rgba(var(--v-theme-primary), 0.12) !important;
-}
-
 .stat-card-icon .v-icon {
-  color: rgb(var(--v-theme-primary)) !important;
-}
-
-.stat-card-emerald .stat-card-icon {
-  background: rgba(var(--v-theme-success), 0.12) !important;
+  color: white !important;
 }
 
 .stat-card-emerald .stat-card-icon .v-icon {
-  color: rgb(var(--v-theme-success)) !important;
+  color: white !important;
 }
 
-/* 主按钮渐变 */
+/* 主按钮 - 复古像素风格 */
 .action-btn-primary {
-  background: linear-gradient(135deg, rgb(var(--v-theme-primary)) 0%, rgb(var(--v-theme-secondary)) 100%) !important;
-  box-shadow: 0 8px 20px -4px rgba(var(--v-theme-primary), 0.4) !important;
+  background: rgb(var(--v-theme-primary)) !important;
+  border: 2px solid rgb(var(--v-theme-on-surface)) !important;
+  box-shadow: 4px 4px 0 0 rgb(var(--v-theme-on-surface)) !important;
+  color: white !important;
 }
 
 .action-btn-primary:hover {
-  box-shadow: 0 10px 25px -4px rgba(var(--v-theme-primary), 0.5) !important;
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 0 rgb(var(--v-theme-on-surface)) !important;
 }
 
-/* 渠道编排容器透明背景 */
+.action-btn-primary:active {
+  transform: translate(2px, 2px) !important;
+  box-shadow: none !important;
+}
+
+.v-theme--dark .action-btn-primary {
+  border-color: rgba(255, 255, 255, 0.8) !important;
+  box-shadow: 4px 4px 0 0 rgba(255, 255, 255, 0.8) !important;
+}
+
+/* 渠道编排容器 */
 .channel-orchestration {
   background: transparent !important;
   box-shadow: none !important;
   border: none !important;
-  border-radius: 0 !important;
 }
 
 /* 渠道列表卡片样式 */
 .channel-list .channel-row {
   background: rgb(var(--v-theme-surface)) !important;
   margin-bottom: 0;
-  border-radius: 16px !important;
   padding: 14px 12px 14px 28px !important;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08) !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03) !important;
+  border: 2px solid rgb(var(--v-theme-on-surface)) !important;
+  box-shadow: 4px 4px 0 0 rgb(var(--v-theme-on-surface)) !important;
   min-height: 48px !important;
   position: relative;
 }
 
 .v-theme--dark .channel-list .channel-row {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.15) !important;
+  border-color: rgba(255, 255, 255, 0.7) !important;
+  box-shadow: 4px 4px 0 0 rgba(255, 255, 255, 0.7) !important;
 }
 
 .channel-list .channel-row:active {
-  transform: scale(0.98);
-  transition: transform 0.15s;
+  transform: translate(2px, 2px);
+  box-shadow: none !important;
+  transition: transform 0.1s;
 }
 
-/* 序号改为左上角角标 */
+/* 序号角标 */
 .channel-row .priority-number {
   position: absolute !important;
   top: -1px !important;
   left: -1px !important;
-  background: rgba(var(--v-theme-on-surface), 0.06) !important;
-  color: rgba(var(--v-theme-on-surface), 0.5) !important;
-  font-size: 9px !important;
+  background: rgb(var(--v-theme-surface)) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
+  font-size: 10px !important;
   font-weight: 700 !important;
-  padding: 2px 6px !important;
-  border-bottom-right-radius: 8px !important;
-  border-top-left-radius: 16px !important;
+  padding: 2px 8px !important;
+  border: 1px solid rgb(var(--v-theme-on-surface)) !important;
+  border-top: none !important;
+  border-left: none !important;
   width: auto !important;
   height: auto !important;
   margin: 0 !important;
   box-shadow: none !important;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08) !important;
-  border-top: none !important;
-  border-left: none !important;
+  text-transform: uppercase;
+}
+
+.v-theme--dark .channel-row .priority-number {
+  border-color: rgba(255, 255, 255, 0.5) !important;
 }
 
 /* 拖拽手柄 */
@@ -1248,12 +1263,17 @@ onUnmounted(() => {
 }
 
 .channel-name .text-caption.text-medium-emphasis {
-  background: rgba(var(--v-theme-on-surface), 0.06);
+  background: rgb(var(--v-theme-surface-variant));
   padding: 2px 6px;
-  border-radius: 4px;
   font-size: 10px !important;
   font-weight: 600;
-  color: rgba(var(--v-theme-on-surface), 0.6) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
+  border: 1px solid rgb(var(--v-theme-on-surface));
+  text-transform: uppercase;
+}
+
+.v-theme--dark .channel-name .text-caption.text-medium-emphasis {
+  border-color: rgba(255, 255, 255, 0.5);
 }
 
 /* 官网跳转图标 */
@@ -1276,23 +1296,31 @@ onUnmounted(() => {
 
 /* --- 备用资源池 --- */
 .inactive-pool {
-  background: rgba(var(--v-theme-on-surface), 0.03) !important;
-  border: 2px dashed rgba(var(--v-theme-on-surface), 0.12) !important;
-  border-radius: 18px !important;
+  background: rgb(var(--v-theme-surface)) !important;
+  border: 2px dashed rgb(var(--v-theme-on-surface)) !important;
   padding: 8px !important;
   margin-top: 12px;
+}
+
+.v-theme--dark .inactive-pool {
+  border-color: rgba(255, 255, 255, 0.5) !important;
 }
 
 .inactive-channel-row {
   background: rgb(var(--v-theme-surface)) !important;
   margin: 6px !important;
   padding: 12px !important;
-  border-radius: 12px !important;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.06) !important;
+  border: 2px solid rgb(var(--v-theme-on-surface)) !important;
+  box-shadow: 3px 3px 0 0 rgb(var(--v-theme-on-surface)) !important;
+}
+
+.v-theme--dark .inactive-channel-row {
+  border-color: rgba(255, 255, 255, 0.6) !important;
+  box-shadow: 3px 3px 0 0 rgba(255, 255, 255, 0.6) !important;
 }
 
 .inactive-channel-row .channel-info-main {
-  color: rgba(var(--v-theme-on-surface), 0.6) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
   font-weight: 600;
 }
 
@@ -1304,15 +1332,15 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 16px 20px;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(226, 232, 240, 0.6);
-  border-radius: 16px;
+  background: rgb(var(--v-theme-surface));
+  border: 2px solid rgb(var(--v-theme-on-surface));
+  box-shadow: 6px 6px 0 0 rgb(var(--v-theme-on-surface));
 }
 
 .v-theme--dark .action-bar {
-  background: rgba(30, 41, 59, 0.7);
-  border: 1px solid rgba(71, 85, 105, 0.4);
+  background: rgb(var(--v-theme-surface));
+  border-color: rgba(255, 255, 255, 0.8);
+  box-shadow: 6px 6px 0 0 rgba(255, 255, 255, 0.8);
 }
 
 .action-bar-left {
@@ -1328,23 +1356,43 @@ onUnmounted(() => {
 }
 
 .action-btn {
-  border-radius: 12px !important;
   font-weight: 600;
   letter-spacing: 0.3px;
-  transition: all 0.2s ease;
+  text-transform: uppercase;
+  transition: all 0.1s ease;
+  border: 2px solid rgb(var(--v-theme-on-surface)) !important;
+  box-shadow: 4px 4px 0 0 rgb(var(--v-theme-on-surface)) !important;
+}
+
+.v-theme--dark .action-btn {
+  border-color: rgba(255, 255, 255, 0.7) !important;
+  box-shadow: 4px 4px 0 0 rgba(255, 255, 255, 0.7) !important;
 }
 
 .action-btn:hover {
-  transform: translateY(-1px);
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 0 rgb(var(--v-theme-on-surface)) !important;
+}
+
+.action-btn:active {
+  transform: translate(2px, 2px) !important;
+  box-shadow: none !important;
 }
 
 .load-balance-btn {
-  text-transform: capitalize;
+  text-transform: uppercase;
 }
 
 .load-balance-menu {
   min-width: 300px;
   padding: 8px;
+  border: 2px solid rgb(var(--v-theme-on-surface)) !important;
+  box-shadow: 4px 4px 0 0 rgb(var(--v-theme-on-surface)) !important;
+}
+
+.v-theme--dark .load-balance-menu {
+  border-color: rgba(255, 255, 255, 0.7) !important;
+  box-shadow: 4px 4px 0 0 rgba(255, 255, 255, 0.7) !important;
 }
 
 .load-balance-menu .v-list-item {
@@ -1358,27 +1406,29 @@ onUnmounted(() => {
 
 /* =========================================
    手机端专属样式 (≤600px)
-   仅包含布局和尺寸调整，颜色继承全局主题
    ========================================= */
 @media (max-width: 600px) {
   /* --- 顶部导航栏 --- */
   .app-header {
     padding: 0 12px !important;
-    background: rgba(var(--v-theme-surface), 0.9) !important;
-    backdrop-filter: blur(20px);
-    border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.05) !important;
+    background: rgb(var(--v-theme-surface)) !important;
+    border-bottom: 2px solid rgb(var(--v-theme-on-surface)) !important;
     box-shadow: none !important;
+  }
+
+  .v-theme--dark .app-header {
+    border-bottom-color: rgba(255, 255, 255, 0.7) !important;
   }
 
   .app-logo {
     width: 32px;
     height: 32px;
-    border-radius: 8px;
     margin-right: 8px;
+    box-shadow: 2px 2px 0 0 rgb(var(--v-theme-on-surface));
   }
 
-  .app-logo .v-icon {
-    filter: drop-shadow(0 2px 4px rgba(var(--v-theme-primary), 0.3));
+  .v-theme--dark .app-logo {
+    box-shadow: 2px 2px 0 0 rgba(255, 255, 255, 0.7);
   }
 
   .api-type-text {
@@ -1400,15 +1450,18 @@ onUnmounted(() => {
     gap: 10px;
     min-height: auto;
     background: rgb(var(--v-theme-surface)) !important;
-    border-radius: 18px !important;
-    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.06) !important;
-    border: 1px solid rgba(var(--v-theme-on-surface), 0.06) !important;
+    box-shadow: 4px 4px 0 0 rgb(var(--v-theme-on-surface)) !important;
+    border: 2px solid rgb(var(--v-theme-on-surface)) !important;
+  }
+
+  .v-theme--dark .stat-card {
+    box-shadow: 4px 4px 0 0 rgba(255, 255, 255, 0.7) !important;
+    border-color: rgba(255, 255, 255, 0.7) !important;
   }
 
   .stat-card-icon {
     width: 36px;
     height: 36px;
-    border-radius: 12px;
   }
 
   .stat-card-icon .v-icon {
@@ -1427,10 +1480,10 @@ onUnmounted(() => {
     font-size: 0.7rem;
     color: rgba(var(--v-theme-on-surface), 0.6);
     font-weight: 500;
+    text-transform: uppercase;
   }
 
-  .stat-card-desc,
-  .stat-card-glow {
+  .stat-card-desc {
     display: none;
   }
 
@@ -1447,13 +1500,14 @@ onUnmounted(() => {
     flex-wrap: wrap;
     gap: 8px;
     padding: 12px !important;
+    box-shadow: 4px 4px 0 0 rgb(var(--v-theme-on-surface)) !important;
+  }
+
+  .v-theme--dark .action-bar {
+    box-shadow: 4px 4px 0 0 rgba(255, 255, 255, 0.7) !important;
   }
 
   /* --- 渠道编排容器 --- */
-  .channel-orchestration {
-    border-radius: 0 !important;
-  }
-
   .channel-orchestration .v-card-title {
     display: none !important;
   }
@@ -1469,14 +1523,20 @@ onUnmounted(() => {
 
   /* --- 渠道列表卡片化 --- */
   .channel-list .channel-row:active {
-    transform: scale(0.98);
-    transition: transform 0.15s;
+    transform: translate(2px, 2px);
+    box-shadow: none !important;
+    transition: transform 0.1s;
   }
 
   /* --- 通用优化 --- */
   .v-chip {
-    border-radius: 6px !important;
     font-weight: 600;
+    border: 1px solid rgb(var(--v-theme-on-surface));
+    text-transform: uppercase;
+  }
+
+  .v-theme--dark .v-chip {
+    border-color: rgba(255, 255, 255, 0.5);
   }
 
   /* 隐藏分割线 */
@@ -1485,18 +1545,17 @@ onUnmounted(() => {
   }
 }
 
-/* 心跳动画 */
+/* 心跳动画 - 简化为简单闪烁 */
 .pulse-animation {
-  animation: pulse 2s ease-in-out infinite;
+  animation: pixel-blink 1s step-end infinite;
 }
 
-@keyframes pulse {
-  0%,
-  100% {
-    transform: scale(1);
+@keyframes pixel-blink {
+  0%, 100% {
+    opacity: 1;
   }
   50% {
-    transform: scale(1.05);
+    opacity: 0.7;
   }
 }
 
@@ -1519,112 +1578,93 @@ onUnmounted(() => {
 }
 
 .channel-col {
-  transition: all 0.4s ease;
+  transition: all 0.2s ease;
   max-width: 640px;
 }
 
 .channel-list-enter-active,
 .channel-list-leave-active {
-  transition: all 0.4s ease;
+  transition: all 0.2s ease;
 }
 
 .channel-list-enter-from {
   opacity: 0;
-  transform: translateY(30px) scale(0.95);
+  transform: translateY(10px);
 }
 
 .channel-list-leave-to {
   opacity: 0;
-  transform: translateY(-30px) scale(0.95);
+  transform: translateY(-10px);
 }
 
 .channel-list-move {
-  transition: transform 0.4s ease;
+  transition: transform 0.2s ease;
 }
 </style>
 
 <!-- 全局样式 - 复古像素主题 -->
 <style>
 /* 复古像素主题 - 全局样式 */
-[data-theme="retro"] {
-  --app-radius: 0px;
-  --app-font: "Courier New", Consolas, monospace;
+.v-application {
+  font-family: 'Courier New', Consolas, 'Liberation Mono', monospace !important;
 }
 
-[data-theme="retro"] .v-application {
-  font-family: "Courier New", Consolas, monospace !important;
-}
-
-[data-theme="retro"] .stat-card {
+/* 所有按钮复古像素风格 */
+.v-btn:not(.v-btn--icon) {
   border-radius: 0 !important;
-  box-shadow: 4px 4px 0 0 rgba(var(--v-theme-on-surface), 0.8) !important;
-  border: 2px solid rgba(var(--v-theme-on-surface), 0.8) !important;
+  text-transform: uppercase !important;
+  font-weight: 600 !important;
 }
 
-[data-theme="retro"] .action-bar {
-  border-radius: 0 !important;
-  box-shadow: 4px 4px 0 0 rgba(var(--v-theme-on-surface), 0.8) !important;
-  border: 2px solid rgba(var(--v-theme-on-surface), 0.8) !important;
-}
-
-[data-theme="retro"] .channel-orchestration {
+/* 所有卡片复古像素风格 */
+.v-card {
   border-radius: 0 !important;
 }
 
-[data-theme="retro"] .channel-row {
+/* 所有 Chip 复古像素风格 */
+.v-chip {
   border-radius: 0 !important;
-  box-shadow: 3px 3px 0 0 rgba(var(--v-theme-on-surface), 0.6) !important;
-  border: 2px solid rgba(var(--v-theme-on-surface), 0.6) !important;
+  font-weight: 600;
+  text-transform: uppercase;
 }
 
-[data-theme="retro"] .inactive-pool {
-  border-radius: 0 !important;
-  border: 2px dashed rgba(var(--v-theme-on-surface), 0.5) !important;
-}
-
-[data-theme="retro"] .inactive-channel-row {
-  border-radius: 0 !important;
-  box-shadow: 2px 2px 0 0 rgba(var(--v-theme-on-surface), 0.5) !important;
-  border: 2px solid rgba(var(--v-theme-on-surface), 0.5) !important;
-}
-
-[data-theme="retro"] .v-btn:not(.v-btn--icon) {
-  border-radius: 0 !important;
-  box-shadow: 3px 3px 0 0 rgba(var(--v-theme-on-surface), 0.8) !important;
-  border: 2px solid rgba(var(--v-theme-on-surface), 0.8) !important;
-  transition: all 0.1s ease !important;
-}
-
-[data-theme="retro"] .v-btn:not(.v-btn--icon):hover {
-  transform: translate(-1px, -1px);
-  box-shadow: 4px 4px 0 0 rgba(var(--v-theme-on-surface), 0.8) !important;
-}
-
-[data-theme="retro"] .v-btn:not(.v-btn--icon):active {
-  transform: translate(2px, 2px) !important;
-  box-shadow: none !important;
-}
-
-[data-theme="retro"] .v-chip {
-  border-radius: 0 !important;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.5) !important;
-}
-
-[data-theme="retro"] .v-card {
+/* 输入框复古像素风格 */
+.v-text-field .v-field {
   border-radius: 0 !important;
 }
 
-[data-theme="retro"] .priority-number {
-  border-radius: 0 !important;
-  box-shadow: none !important;
+/* 对话框复古像素风格 */
+.v-dialog .v-card {
+  border: 2px solid currentColor !important;
+  box-shadow: 6px 6px 0 0 currentColor !important;
 }
 
-/* 暗色模式下的复古主题 */
-.v-theme--dark[data-theme="retro"] .stat-card,
-.v-theme--dark[data-theme="retro"] .action-bar,
-.v-theme--dark[data-theme="retro"] .channel-row,
-.v-theme--dark[data-theme="retro"] .v-btn:not(.v-btn--icon) {
-  box-shadow: 4px 4px 0 0 rgba(255, 255, 255, 0.7) !important;
+/* 菜单复古像素风格 */
+.v-menu > .v-overlay__content > .v-list {
+  border-radius: 0 !important;
+  border: 2px solid rgb(var(--v-theme-on-surface)) !important;
+  box-shadow: 4px 4px 0 0 rgb(var(--v-theme-on-surface)) !important;
+}
+
+.v-theme--dark .v-menu > .v-overlay__content > .v-list {
   border-color: rgba(255, 255, 255, 0.7) !important;
+  box-shadow: 4px 4px 0 0 rgba(255, 255, 255, 0.7) !important;
+}
+
+/* Snackbar 复古像素风格 */
+.v-snackbar__wrapper {
+  border-radius: 0 !important;
+  border: 2px solid currentColor !important;
+  box-shadow: 4px 4px 0 0 currentColor !important;
+}
+
+/* 状态徽章复古像素风格 */
+.status-badge .badge-content {
+  border-radius: 0 !important;
+  border: 1px solid rgb(var(--v-theme-on-surface));
+}
+
+.v-theme--dark .status-badge .badge-content {
+  border-color: rgba(255, 255, 255, 0.6);
 }
 </style>

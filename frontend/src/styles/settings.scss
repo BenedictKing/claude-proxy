@@ -1,22 +1,22 @@
-// Vuetify 样式变量配置
+// Vuetify 样式变量配置 - 复古像素主题
 
-// 先定义变量，再导入vuetify设置
-$border-radius-root: 12px !default;
-$btn-border-radius: 8px !default;
-$card-border-radius: 16px !default;
-$sheet-border-radius: 12px !default;
+// 复古像素主题：无圆角
+$border-radius-root: 0px !default;
+$btn-border-radius: 0px !default;
+$card-border-radius: 0px !default;
+$sheet-border-radius: 0px !default;
 
-// 自定义颜色
-$primary: #1976D2 !default;
-$secondary: #424242 !default;
-$accent: #82B1FF !default;
-$success: #4CAF50 !default;
-$info: #2196F3 !default;
-$warning: #FFC107 !default;
-$error: #FF5252 !default;
+// 自定义颜色 - 复古高对比度
+$primary: #6366F1 !default;
+$secondary: #8B5CF6 !default;
+$accent: #EC4899 !default;
+$success: #10B981 !default;
+$info: #3B82F6 !default;
+$warning: #F59E0B !default;
+$error: #EF4444 !default;
 
-// 字体配置
-$body-font-family: 'Inter', 'Roboto', sans-serif !default;
-$headings-font-family: 'Inter', 'Roboto', sans-serif !default;
+// 字体配置 - 等宽字体
+$body-font-family: 'Courier New', Consolas, 'Liberation Mono', monospace !default;
+$headings-font-family: 'Courier New', Consolas, 'Liberation Mono', monospace !default;
 
 @use 'vuetify/settings';

@@ -5,11 +5,11 @@ export default {
     "./src/**/*.{vue,js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      fontFamily: {
+        mono: ['"Courier New"', 'Consolas', '"Liberation Mono"', 'monospace'],
+      },
+    },
   },
-  plugins: [require("daisyui")],
-  daisyui: {
-    // Use mature, built-in palettes
-    themes: ["emerald", "night"],
-  },
+  plugins: [],
 }

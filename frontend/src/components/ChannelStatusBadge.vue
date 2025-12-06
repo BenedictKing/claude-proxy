@@ -3,7 +3,7 @@
     <v-tooltip location="top">
       <template #activator="{ props: tooltipProps }">
         <div class="badge-content" v-bind="tooltipProps">
-          <v-icon :size="iconSize" :color="statusColor">{{ statusIcon }}</v-icon>
+          <v-icon :size="iconSize" class="status-icon">{{ statusIcon }}</v-icon>
           <span v-if="showLabel" class="status-label">{{ statusLabel }}</span>
         </div>
       </template>
@@ -128,6 +128,11 @@ const formatTime = (dateStr: string): string => {
 </script>
 
 <style scoped>
+/* =====================================================
+   🎮 状态徽章 - 复古像素主题样式
+   Neo-Brutalism: 直角、实体边框、高对比度
+   ===================================================== */
+
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -139,10 +144,14 @@ const formatTime = (dateStr: string): string => {
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  border-radius: 16px;
-  background: rgba(var(--v-theme-surface-variant), 0.5);
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgb(var(--v-theme-on-surface));
   cursor: help;
-  transition: all 0.2s ease;
+  transition: all 0.1s ease;
+}
+
+.v-theme--dark .badge-content {
+  border-color: rgba(255, 255, 255, 0.6);
 }
 
 .badge-content:hover {
@@ -150,17 +159,115 @@ const formatTime = (dateStr: string): string => {
 }
 
 .status-label {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-/* 状态样式 */
+/* 状态样式 - 高对比度实心边框 */
 .status-active .badge-content {
-  background: rgba(var(--v-theme-success), 0.1);
-  color: rgb(var(--v-theme-success));
+  background: #bbf7d0;
+  color: #166534;
+  border-color: #166534;
 }
 
-/* 手机端隐藏状态文字，改为呼吸灯样式 */
+.status-active .badge-content .status-icon {
+  color: #166534 !important;
+}
+
+.v-theme--dark .status-active .badge-content {
+  background: #166534;
+  color: #bbf7d0;
+  border-color: #bbf7d0;
+}
+
+.v-theme--dark .status-active .badge-content .status-icon {
+  color: #bbf7d0 !important;
+}
+
+.status-suspended .badge-content {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #92400e;
+  animation: pixel-blink 1.5s step-end infinite;
+}
+
+.status-suspended .badge-content .status-icon {
+  color: #92400e !important;
+}
+
+.v-theme--dark .status-suspended .badge-content {
+  background: #92400e;
+  color: #fef3c7;
+  border-color: #fef3c7;
+}
+
+.v-theme--dark .status-suspended .badge-content .status-icon {
+  color: #fef3c7 !important;
+}
+
+.status-disabled .badge-content {
+  background: #e5e7eb;
+  color: #6b7280;
+  border-color: #6b7280;
+}
+
+.status-disabled .badge-content .status-icon {
+  color: #6b7280 !important;
+}
+
+.v-theme--dark .status-disabled .badge-content {
+  background: #374151;
+  color: #9ca3af;
+  border-color: #9ca3af;
+}
+
+.v-theme--dark .status-disabled .badge-content .status-icon {
+  color: #9ca3af !important;
+}
+
+.status-error .badge-content {
+  background: #fecaca;
+  color: #991b1b;
+  border-color: #991b1b;
+}
+
+.status-error .badge-content .status-icon {
+  color: #991b1b !important;
+}
+
+.v-theme--dark .status-error .badge-content {
+  background: #991b1b;
+  color: #fecaca;
+  border-color: #fecaca;
+}
+
+.v-theme--dark .status-error .badge-content .status-icon {
+  color: #fecaca !important;
+}
+
+.status-unknown .badge-content {
+  background: #e5e7eb;
+  color: #6b7280;
+  border-color: #6b7280;
+}
+
+.status-unknown .badge-content .status-icon {
+  color: #6b7280 !important;
+}
+
+.v-theme--dark .status-unknown .badge-content {
+  background: #374151;
+  color: #9ca3af;
+  border-color: #9ca3af;
+}
+
+.v-theme--dark .status-unknown .badge-content .status-icon {
+  color: #9ca3af !important;
+}
+
+/* 手机端隐藏状态文字，改为像素点样式 */
 @media (max-width: 600px) {
   .status-label {
     display: none;
@@ -169,98 +276,75 @@ const formatTime = (dateStr: string): string => {
   .badge-content {
     padding: 0;
     background: transparent !important;
-    border-radius: 0;
+    border: none !important;
   }
 
   .badge-content .v-icon {
     font-size: 0 !important;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
+    width: 10px;
+    height: 10px;
     margin-right: 10px;
     position: relative;
   }
 
-  /* 活跃状态 - 绿色呼吸灯 */
+  /* 活跃状态 - 绿色像素点 */
   .status-active .badge-content .v-icon {
     background: #10b981;
+    border: 2px solid #065f46;
   }
 
   .status-active .badge-content .v-icon::after {
     content: '';
     position: absolute;
-    top: -4px;
-    left: -4px;
-    width: 16px;
-    height: 16px;
-    background: rgba(16, 185, 129, 0.25);
-    border-radius: 50%;
-    animation: pulse-glow 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+    top: -3px;
+    left: -3px;
+    width: 14px;
+    height: 14px;
+    background: rgba(16, 185, 129, 0.3);
+    animation: pixel-pulse 1s step-end infinite;
   }
 
-  /* 熔断状态 - 橙色 */
+  /* 熔断状态 - 橙色像素点 */
   .status-suspended .badge-content .v-icon {
     background: #f59e0b;
+    border: 2px solid #92400e;
   }
 
   .status-suspended .badge-content .v-icon::after {
     content: '';
     position: absolute;
-    top: -4px;
-    left: -4px;
-    width: 16px;
-    height: 16px;
-    background: rgba(245, 158, 11, 0.25);
-    border-radius: 50%;
-    animation: pulse-glow 1.5s infinite cubic-bezier(0.4, 0, 0.6, 1);
+    top: -3px;
+    left: -3px;
+    width: 14px;
+    height: 14px;
+    background: rgba(245, 158, 11, 0.3);
+    animation: pixel-pulse 0.75s step-end infinite;
   }
 
-  /* 禁用状态 - 灰色 */
+  /* 禁用状态 - 灰色像素点 */
   .status-disabled .badge-content .v-icon,
   .status-unknown .badge-content .v-icon {
     background: #94a3b8;
+    border: 2px solid #475569;
   }
 
-  @keyframes pulse-glow {
+  @keyframes pixel-pulse {
     0%, 100% {
-      transform: scale(0.8);
-      opacity: 0.8;
+      opacity: 1;
     }
     50% {
-      transform: scale(1.2);
-      opacity: 0.3;
+      opacity: 0.4;
     }
   }
 }
 
-.status-suspended .badge-content {
-  background: rgba(var(--v-theme-warning), 0.15);
-  color: rgb(var(--v-theme-warning));
-  animation: pulse-warning 2s infinite;
-}
-
-.status-disabled .badge-content {
-  background: rgba(var(--v-theme-error), 0.1);
-  color: rgb(var(--v-theme-error));
-}
-
-.status-error .badge-content {
-  background: rgba(var(--v-theme-error), 0.15);
-  color: rgb(var(--v-theme-error));
-}
-
-.status-unknown .badge-content {
-  background: rgba(var(--v-theme-grey), 0.1);
-  color: rgb(var(--v-theme-grey));
-}
-
-/* 熔断闪烁动画 */
-@keyframes pulse-warning {
+/* 像素风格闪烁动画 */
+@keyframes pixel-blink {
   0%, 100% {
     opacity: 1;
   }
   50% {
-    opacity: 0.7;
+    opacity: 0.6;
   }
 }
 
