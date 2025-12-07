@@ -76,6 +76,11 @@ func (s *ChannelScheduler) SelectChannel(
 		if preferredIdx, ok := s.traceAffinity.GetPreferredChannel(userID); ok {
 			for _, ch := range activeChannels {
 				if ch.Index == preferredIdx && !failedChannels[preferredIdx] {
+					// 检查渠道状态：只有 active 状态才使用亲和性
+					if ch.Status != "active" {
+						log.Printf("⏸️ 跳过亲和渠道 [%d] %s: 状态为 %s (user: %s)", preferredIdx, ch.Name, ch.Status, maskUserID(userID))
+						continue
+					}
 					// 检查渠道是否健康
 					if metricsManager.IsChannelHealthy(preferredIdx) {
 						upstream := s.getUpstreamByIndex(preferredIdx, isResponses)
