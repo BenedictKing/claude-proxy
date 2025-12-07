@@ -38,10 +38,10 @@ func TestPrepareUpstreamHeaders(t *testing.T) {
 		{
 			name: "保留其他头部",
 			headers: map[string]string{
-				"Content-Type":   "application/json",
-				"User-Agent":     "TestClient/1.0",
-				"Accept":         "*/*",
-				"Custom-Header":  "custom-value",
+				"Content-Type":  "application/json",
+				"User-Agent":    "TestClient/1.0",
+				"Accept":        "*/*",
+				"Custom-Header": "custom-value",
 			},
 			targetHost: "api.example.com",
 			wantHost:   "api.example.com",
@@ -88,27 +88,27 @@ func TestPrepareUpstreamHeaders(t *testing.T) {
 
 func TestSetAuthenticationHeader(t *testing.T) {
 	tests := []struct {
-		name             string
-		apiKey           string
-		wantXApiKey      string
+		name              string
+		apiKey            string
+		wantXApiKey       string
 		wantAuthorization string
 	}{
 		{
-			name:             "Claude官方格式密钥",
-			apiKey:           "sk-ant-api03-1234567890",
-			wantXApiKey:      "sk-ant-api03-1234567890",
+			name:              "Claude官方格式密钥",
+			apiKey:            "sk-ant-api03-1234567890",
+			wantXApiKey:       "sk-ant-api03-1234567890",
 			wantAuthorization: "",
 		},
 		{
-			name:             "通用Bearer格式密钥",
-			apiKey:           "sk-1234567890abcdef",
-			wantXApiKey:      "",
+			name:              "通用Bearer格式密钥",
+			apiKey:            "sk-1234567890abcdef",
+			wantXApiKey:       "",
 			wantAuthorization: "Bearer sk-1234567890abcdef",
 		},
 		{
-			name:             "其他格式密钥",
-			apiKey:           "custom-key-format",
-			wantXApiKey:      "",
+			name:              "其他格式密钥",
+			apiKey:            "custom-key-format",
+			wantXApiKey:       "",
 			wantAuthorization: "Bearer custom-key-format",
 		},
 	}
@@ -168,21 +168,21 @@ func TestEnsureCompatibleUserAgent(t *testing.T) {
 			name:            "Claude服务 - 空User-Agent",
 			serviceType:     "claude",
 			initialUA:       "",
-			expectedUA:      "claude-cli/1.0.58 (external, cli)",
+			expectedUA:      "claude-cli/2.0.34 (external, cli)",
 			shouldBeChanged: true,
 		},
 		{
 			name:            "Claude服务 - 非Claude-CLI User-Agent",
 			serviceType:     "claude",
 			initialUA:       "Mozilla/5.0",
-			expectedUA:      "claude-cli/1.0.58 (external, cli)",
+			expectedUA:      "claude-cli/2.0.34 (external, cli)",
 			shouldBeChanged: true,
 		},
 		{
 			name:            "Claude服务 - 已有Claude-CLI User-Agent",
 			serviceType:     "claude",
-			initialUA:       "claude-cli/1.0.58 (external, cli)",
-			expectedUA:      "claude-cli/1.0.58 (external, cli)",
+			initialUA:       "claude-cli/2.0.34 (external, cli)",
+			expectedUA:      "claude-cli/2.0.34 (external, cli)",
 			shouldBeChanged: false,
 		},
 		{
@@ -217,4 +217,3 @@ func TestEnsureCompatibleUserAgent(t *testing.T) {
 		})
 	}
 }
-

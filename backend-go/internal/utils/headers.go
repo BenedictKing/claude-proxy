@@ -74,7 +74,7 @@ func EnsureCompatibleUserAgent(headers http.Header, serviceType string) {
 	// 仅在Claude服务类型且用户未设置或设置不正确时才修改
 	if serviceType == "claude" {
 		if userAgent == "" || !strings.HasPrefix(strings.ToLower(userAgent), "claude-cli") {
-			headers.Set("User-Agent", "claude-cli/1.0.58 (external, cli)")
+			headers.Set("User-Agent", "claude-cli/2.0.34 (external, cli)")
 		}
 	}
 }
