@@ -506,7 +506,11 @@ const headerIconStyle = computed(() => ({
   color: 'rgb(var(--v-theme-on-primary))'
 }))
 
-const subtitleClasses = computed(() => 'text-medium-emphasis')
+const subtitleClasses = computed(() => {
+  const isDark = theme.global.current.value.dark
+  // Dark mode: use medium emphasis; Light mode: use white with opacity for primary bg
+  return isDark ? 'text-medium-emphasis' : 'text-white-subtitle'
+})
 
 const isFormValid = computed(() => {
   return form.name.trim() && form.serviceType && form.baseUrl.trim() && isValidUrl(form.baseUrl)
@@ -761,6 +765,11 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 浅色模式下副标题使用白色带透明度 */
+.text-white-subtitle {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
 .animate-pulse {
   animation: pulse 1.5s ease-in-out infinite;
 }

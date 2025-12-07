@@ -95,7 +95,12 @@
 
             <!-- API密钥数量 -->
             <div class="channel-keys">
-              <v-chip size="x-small" variant="outlined">
+              <v-chip
+                size="x-small"
+                variant="outlined"
+                class="keys-chip"
+                @click="$emit('edit', element)"
+              >
                 <v-icon start size="x-small">mdi-key</v-icon>
                 {{ element.apiKeys?.length || 0 }}
               </v-chip>
@@ -200,7 +205,13 @@
 
           <!-- API密钥数量 -->
           <div class="channel-keys">
-            <v-chip size="x-small" variant="outlined" color="grey">
+            <v-chip
+              size="x-small"
+              variant="outlined"
+              color="grey"
+              class="keys-chip"
+              @click="$emit('edit', channel)"
+            >
               <v-icon start size="x-small">mdi-key</v-icon>
               {{ channel.apiKeys?.length || 0 }}
             </v-chip>
@@ -453,6 +464,7 @@ defineExpose({
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
+  margin: 2px;
   background: rgb(var(--v-theme-surface));
   border: 2px solid rgb(var(--v-theme-on-surface));
   box-shadow: 4px 4px 0 0 rgb(var(--v-theme-on-surface));
@@ -464,6 +476,7 @@ defineExpose({
   background: rgba(var(--v-theme-primary), 0.08);
   transform: translate(-2px, -2px);
   box-shadow: 6px 6px 0 0 rgb(var(--v-theme-on-surface));
+  border: 2px solid rgb(var(--v-theme-on-surface));
 }
 
 .channel-row:active {
@@ -476,21 +489,29 @@ defineExpose({
   border-color: rgba(255, 255, 255, 0.7);
   box-shadow: 4px 4px 0 0 rgba(255, 255, 255, 0.7);
 }
-
 .v-theme--dark .channel-row:hover {
   background: rgba(var(--v-theme-primary), 0.12);
   box-shadow: 6px 6px 0 0 rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.7);
 }
 
 /* suspended 状态的视觉区分 */
 .channel-row.is-suspended {
   background: rgba(var(--v-theme-warning), 0.1);
   border-color: rgb(var(--v-theme-warning));
-  border-left: 4px solid rgb(var(--v-theme-warning));
+  box-shadow: 4px 4px 0 0 rgb(var(--v-theme-on-surface));
 }
-
 .channel-row.is-suspended:hover {
   background: rgba(var(--v-theme-warning), 0.15);
+  box-shadow: 6px 6px 0 0 rgb(var(--v-theme-on-surface));
+}
+
+.v-theme--dark .channel-row.is-suspended {
+  box-shadow: 4px 4px 0 0 rgba(255, 255, 255, 0.7);
+}
+
+.v-theme--dark .channel-row.is-suspended:hover {
+  box-shadow: 6px 6px 0 0 rgba(255, 255, 255, 0.7);
 }
 
 .channel-row.ghost {
@@ -556,6 +577,17 @@ defineExpose({
 .channel-keys {
   display: flex;
   align-items: center;
+}
+
+.channel-keys .keys-chip {
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.channel-keys .keys-chip:hover {
+  background: rgba(var(--v-theme-primary), 0.1);
+  border-color: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-primary));
 }
 
 .channel-actions {

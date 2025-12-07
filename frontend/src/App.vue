@@ -70,10 +70,7 @@
 
       <!-- 自定义标题容器 - 替代 v-app-bar-title -->
       <div class="header-title">
-        <div
-          :class="$vuetify.display.mobile ? 'text-body-2' : 'text-h6'"
-          class="font-weight-bold d-flex align-center"
-        >
+        <div :class="$vuetify.display.mobile ? 'text-body-2' : 'text-h6'" class="font-weight-bold d-flex align-center">
           <span class="api-type-text" :class="{ active: activeTab === 'messages' }" @click="activeTab = 'messages'">
             Claude
           </span>
@@ -89,7 +86,9 @@
 
       <!-- 暗色模式切换 -->
       <v-btn icon variant="text" size="small" class="header-btn" @click="toggleDarkMode">
-        <v-icon size="20">{{ theme.global.current.value.dark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
+        <v-icon size="20">{{
+          theme.global.current.value.dark ? 'mdi-weather-night' : 'mdi-white-balance-sunny'
+        }}</v-icon>
       </v-btn>
 
       <!-- 注销按钮 -->
@@ -132,8 +131,7 @@
               </div>
               <div class="stat-card-content">
                 <div class="stat-card-value">
-                  {{ activeChannelCount
-                  }}<span class="stat-card-total">/{{ failoverChannelCount }}</span>
+                  {{ activeChannelCount }}<span class="stat-card-total">/{{ failoverChannelCount }}</span>
                 </div>
                 <div class="stat-card-label">活跃渠道</div>
                 <div class="stat-card-desc">参与故障转移调度</div>
@@ -850,7 +848,7 @@ watch(activeTab, async () => {
 })
 
 // 监听认证状态变化
-watch(isAuthenticated, (newValue) => {
+watch(isAuthenticated, newValue => {
   if (newValue) {
     startAutoRefresh()
   } else {
@@ -1010,6 +1008,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 16px;
   padding: 20px;
+  margin: 2px;
   background: rgb(var(--v-theme-surface));
   border: 2px solid rgb(var(--v-theme-on-surface));
   box-shadow: 6px 6px 0 0 rgb(var(--v-theme-on-surface));
@@ -1017,10 +1016,10 @@ onUnmounted(() => {
   overflow: hidden;
   min-height: 100px;
 }
-
 .stat-card:hover {
   transform: translate(-2px, -2px);
   box-shadow: 8px 8px 0 0 rgb(var(--v-theme-on-surface));
+  border: 2px solid rgb(var(--v-theme-on-surface));
 }
 
 .stat-card:active {
@@ -1033,9 +1032,9 @@ onUnmounted(() => {
   border-color: rgba(255, 255, 255, 0.8);
   box-shadow: 6px 6px 0 0 rgba(255, 255, 255, 0.8);
 }
-
 .v-theme--dark .stat-card:hover {
   box-shadow: 8px 8px 0 0 rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.8);
 }
 
 .v-theme--dark .stat-card:active {
@@ -1354,7 +1353,7 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 .action-bar-right {
@@ -1504,14 +1503,40 @@ onUnmounted(() => {
 
   /* --- 操作按钮区域 --- */
   .action-bar {
-    flex-wrap: wrap;
-    gap: 8px;
+    flex-direction: column;
+    gap: 10px;
     padding: 12px !important;
     box-shadow: 4px 4px 0 0 rgb(var(--v-theme-on-surface)) !important;
   }
 
   .v-theme--dark .action-bar {
     box-shadow: 4px 4px 0 0 rgba(255, 255, 255, 0.7) !important;
+  }
+
+  .action-bar-left {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .action-bar-left .action-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* 刷新按钮独占一行 */
+  .action-bar-left .action-btn:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  .action-bar-right {
+    width: 100%;
+  }
+
+  .action-bar-right .load-balance-btn {
+    width: 100%;
+    justify-content: center;
   }
 
   /* --- 渠道编排容器 --- */
@@ -1558,7 +1583,8 @@ onUnmounted(() => {
 }
 
 @keyframes pixel-blink {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
