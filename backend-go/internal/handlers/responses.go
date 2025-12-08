@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/claude-proxy/internal/config"
+	"github.com/BenedictKing/claude-proxy/internal/converters"
 	"github.com/BenedictKing/claude-proxy/internal/httpclient"
 	"github.com/BenedictKing/claude-proxy/internal/middleware"
 	"github.com/BenedictKing/claude-proxy/internal/providers"
@@ -231,7 +232,7 @@ func tryResponsesChannelWithAllKeys(
 			}
 		}
 
-		handleResponsesSuccess(c, resp, provider, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq)
+		handleResponsesSuccess(c, resp, provider, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, bodyBytes)
 		return true, nil
 	}
 
@@ -391,7 +392,7 @@ func handleSingleChannelResponses(
 			}
 		}
 
-		handleResponsesSuccess(c, resp, provider, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq)
+		handleResponsesSuccess(c, resp, provider, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, bodyBytes)
 		return
 	}
 
@@ -481,6 +482,7 @@ func handleResponsesSuccess(
 	sessionManager *session.SessionManager,
 	startTime time.Time,
 	originalReq *types.ResponsesRequest,
+	originalRequestJSON []byte, // 原始请求 JSON，用于 Chat → Responses 转换
 ) {
 	defer resp.Body.Close()
 
@@ -488,7 +490,7 @@ func handleResponsesSuccess(
 	isStream := originalReq != nil && originalReq.Stream
 
 	if isStream {
-		// 流式响应处理:直接转发SSE流
+		// 流式响应处理
 		if envCfg.EnableResponseLogs {
 			responseTime := time.Since(startTime).Milliseconds()
 			log.Printf("⏱️ Responses 流式响应开始: %dms, 状态: %d", responseTime, resp.StatusCode)
@@ -511,6 +513,10 @@ func handleResponsesSuccess(
 			synthesizer = utils.NewStreamSynthesizer(upstreamType)
 		}
 
+		// 判断是否需要转换：非 responses 类型的上游需要从 Chat Completions 转换为 Responses 格式
+		needConvert := upstreamType != "responses"
+		var converterState any
+
 		// 转发流式响应并记录内容
 		c.Status(resp.StatusCode)
 		flusher, _ := c.Writer.(http.Flusher)
@@ -523,23 +529,42 @@ func handleResponsesSuccess(
 		for scanner.Scan() {
 			line := scanner.Text()
 
-			// 写入客户端
-			_, err := c.Writer.Write([]byte(line + "\n"))
-			if err != nil {
-				log.Printf("⚠️ 流式响应传输错误: %v", err)
-				break
-			}
-
-			if flusher != nil {
-				flusher.Flush()
-			}
-
 			// 记录日志（仅在开发模式下）
 			if streamLoggingEnabled {
 				logBuffer.WriteString(line + "\n")
 				if synthesizer != nil {
 					synthesizer.ProcessLine(line)
 				}
+			}
+
+			if needConvert {
+				// 调用转换器将 Chat Completions SSE 转换为 Responses SSE
+				events := converters.ConvertOpenAIChatToResponses(
+					c.Request.Context(),
+					originalReq.Model,
+					originalRequestJSON,
+					nil,
+					[]byte(line),
+					&converterState,
+				)
+				for _, event := range events {
+					_, err := c.Writer.Write([]byte(event))
+					if err != nil {
+						log.Printf("⚠️ 流式响应传输错误: %v", err)
+						break
+					}
+				}
+			} else {
+				// 直接透传 Responses 格式的流
+				_, err := c.Writer.Write([]byte(line + "\n"))
+				if err != nil {
+					log.Printf("⚠️ 流式响应传输错误: %v", err)
+					break
+				}
+			}
+
+			if flusher != nil {
+				flusher.Flush()
 			}
 		}
 
