@@ -618,6 +618,11 @@ func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
+	// 新建渠道默认设为 active
+	if upstream.Status == "" {
+		upstream.Status = "active"
+	}
+
 	cm.config.Upstream = append(cm.config.Upstream, upstream)
 
 	// 如果这是第一个渠道,自动设为当前
@@ -1069,6 +1074,11 @@ func (cm *ConfigManager) SetCurrentResponsesUpstream(index int) error {
 func (cm *ConfigManager) AddResponsesUpstream(upstream UpstreamConfig) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
+
+	// 新建渠道默认设为 active
+	if upstream.Status == "" {
+		upstream.Status = "active"
+	}
 
 	cm.config.ResponsesUpstream = append(cm.config.ResponsesUpstream, upstream)
 
