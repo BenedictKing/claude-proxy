@@ -39,7 +39,7 @@ WORKDIR /app
 RUN apk --no-cache add ca-certificates tzdata
 
 # 从构建阶段复制 Go 二进制文件（已内嵌前端资源）
-COPY --from=builder /src/backend-go/dist/claude-proxy /app/claude-proxy
+COPY --from=builder /src/dist/claude-proxy-go /app/claude-proxy
 
 # 创建配置目录和日志目录
 RUN mkdir -p /app/.config/backups /app/logs
