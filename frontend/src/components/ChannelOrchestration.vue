@@ -98,19 +98,35 @@
                     <div class="text-caption font-weight-bold mb-1">请求统计</div>
                     <div class="metrics-tooltip-row">
                       <span>15分钟:</span>
-                      <span>{{ get15mStats(element.index)?.requestCount || 0 }} 请求 ({{ get15mStats(element.index)?.successRate?.toFixed(0) || 100 }}%)</span>
+                      <span
+                        >{{ get15mStats(element.index)?.requestCount || 0 }} 请求 ({{
+                          get15mStats(element.index)?.successRate?.toFixed(0) || 100
+                        }}%)</span
+                      >
                     </div>
                     <div class="metrics-tooltip-row">
                       <span>1小时:</span>
-                      <span>{{ get1hStats(element.index)?.requestCount || 0 }} 请求 ({{ get1hStats(element.index)?.successRate?.toFixed(0) || 100 }}%)</span>
+                      <span
+                        >{{ get1hStats(element.index)?.requestCount || 0 }} 请求 ({{
+                          get1hStats(element.index)?.successRate?.toFixed(0) || 100
+                        }}%)</span
+                      >
                     </div>
                     <div class="metrics-tooltip-row">
                       <span>6小时:</span>
-                      <span>{{ get6hStats(element.index)?.requestCount || 0 }} 请求 ({{ get6hStats(element.index)?.successRate?.toFixed(0) || 100 }}%)</span>
+                      <span
+                        >{{ get6hStats(element.index)?.requestCount || 0 }} 请求 ({{
+                          get6hStats(element.index)?.successRate?.toFixed(0) || 100
+                        }}%)</span
+                      >
                     </div>
                     <div class="metrics-tooltip-row">
                       <span>24小时:</span>
-                      <span>{{ get24hStats(element.index)?.requestCount || 0 }} 请求 ({{ get24hStats(element.index)?.successRate?.toFixed(0) || 100 }}%)</span>
+                      <span
+                        >{{ get24hStats(element.index)?.requestCount || 0 }} 请求 ({{
+                          get24hStats(element.index)?.successRate?.toFixed(0) || 100
+                        }}%)</span
+                      >
                     </div>
                   </div>
                 </v-tooltip>
@@ -120,12 +136,7 @@
 
             <!-- API密钥数量 -->
             <div class="channel-keys">
-              <v-chip
-                size="x-small"
-                variant="outlined"
-                class="keys-chip"
-                @click="$emit('edit', element)"
-              >
+              <v-chip size="x-small" variant="outlined" class="keys-chip" @click="$emit('edit', element)">
                 <v-icon start size="x-small">mdi-key</v-icon>
                 {{ element.apiKeys?.length || 0 }}
               </v-chip>
@@ -187,10 +198,7 @@
                     </template>
                     <v-list-item-title>移至备用池</v-list-item-title>
                   </v-list-item>
-                  <v-list-item
-                    @click="handleDeleteChannel(element)"
-                    :disabled="!canDeleteChannel(element)"
-                  >
+                  <v-list-item @click="handleDeleteChannel(element)" :disabled="!canDeleteChannel(element)">
                     <template #prepend>
                       <v-icon size="small" :color="canDeleteChannel(element) ? 'error' : 'grey'">mdi-delete</v-icon>
                     </template>
@@ -244,13 +252,7 @@
 
           <!-- API密钥数量 -->
           <div class="channel-keys">
-            <v-chip
-              size="x-small"
-              variant="outlined"
-              color="grey"
-              class="keys-chip"
-              @click="$emit('edit', channel)"
-            >
+            <v-chip size="x-small" variant="outlined" color="grey" class="keys-chip" @click="$emit('edit', channel)">
               <v-icon start size="x-small">mdi-key</v-icon>
               {{ channel.apiKeys?.length || 0 }}
             </v-chip>
@@ -836,6 +838,7 @@ defineExpose({
 .metrics-tooltip {
   font-size: 12px;
   line-height: 1.5;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .metrics-tooltip-row {
@@ -851,5 +854,6 @@ defineExpose({
 
 .metrics-tooltip-row span:last-child {
   font-weight: 500;
+  color: rgb(var(--v-theme-on-surface));
 }
 </style>
