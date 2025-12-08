@@ -504,7 +504,6 @@ GET /health
   "mode": "production",
   "config": {
     "upstreamCount": 3,
-    "currentUpstream": "openai",
     "loadBalance": "round-robin"
   }
 }

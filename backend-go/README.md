@@ -171,10 +171,10 @@ HEALTH_CHECK_PATH=/health
       "name": "OpenAI",
       "baseUrl": "https://api.openai.com/v1",
       "apiKeys": ["sk-your-api-key"],
-      "serviceType": "openai"
+      "serviceType": "openai",
+      "status": "active"
     }
   ],
-  "currentUpstream": 0,
   "loadBalance": "failover"
 }
 ```

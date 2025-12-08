@@ -42,7 +42,6 @@ func GetUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 
 		c.JSON(200, gin.H{
 			"channels":    upstreams,
-			"current":     cfg.CurrentUpstream,
 			"loadBalance": cfg.LoadBalance,
 		})
 	}
@@ -195,33 +194,6 @@ func DeleteApiKey(cfgManager *config.ConfigManager) gin.HandlerFunc {
 
 		c.JSON(200, gin.H{
 			"message": "API密钥已删除",
-		})
-	}
-}
-
-// SetCurrentUpstream 设置当前上游
-func SetCurrentUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		idStr := c.Param("id")
-		id, err := strconv.Atoi(idStr)
-		if err != nil {
-			c.JSON(400, gin.H{"error": "Invalid upstream ID"})
-			return
-		}
-
-		if err := cfgManager.SetCurrentUpstream(id); err != nil {
-			if strings.Contains(err.Error(), "无效的上游索引") {
-				c.JSON(404, gin.H{"error": "Upstream not found"})
-			} else {
-				c.JSON(500, gin.H{"error": "Failed to save config"})
-			}
-			return
-		}
-
-		c.JSON(200, gin.H{
-			"message": "当前上游已切换",
-			"current": id,
-			"success": true,
 		})
 	}
 }
@@ -416,7 +388,6 @@ func GetResponsesUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 
 		c.JSON(200, gin.H{
 			"channels":    upstreams,
-			"current":     cfg.CurrentResponsesUpstream,
 			"loadBalance": cfg.ResponsesLoadBalance,
 		})
 	}
@@ -481,25 +452,6 @@ func DeleteResponsesUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		}
 
 		c.JSON(200, gin.H{"message": "Responses upstream deleted successfully"})
-	}
-}
-
-// SetCurrentResponsesUpstream 设置当前 Responses 上游
-func SetCurrentResponsesUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		idStr := c.Param("id")
-		id, err := strconv.Atoi(idStr)
-		if err != nil {
-			c.JSON(400, gin.H{"error": "Invalid upstream ID"})
-			return
-		}
-
-		if err := cfgManager.SetCurrentResponsesUpstream(id); err != nil {
-			c.JSON(500, gin.H{"error": err.Error()})
-			return
-		}
-
-		c.JSON(200, gin.H{"message": "Current Responses upstream set successfully"})
 	}
 }
 

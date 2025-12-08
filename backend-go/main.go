@@ -88,7 +88,6 @@ func main() {
 		apiGroup.DELETE("/channels/:id/keys/:apiKey", handlers.DeleteApiKey(cfgManager))
 		apiGroup.POST("/channels/:id/keys/:apiKey/top", handlers.MoveApiKeyToTop(cfgManager))
 		apiGroup.POST("/channels/:id/keys/:apiKey/bottom", handlers.MoveApiKeyToBottom(cfgManager))
-		apiGroup.POST("/channels/:id/current", handlers.SetCurrentUpstream(cfgManager))
 
 		// 多渠道调度 API
 		apiGroup.POST("/channels/reorder", handlers.ReorderChannels(cfgManager))
@@ -107,7 +106,6 @@ func main() {
 		apiGroup.DELETE("/responses/channels/:id/keys/:apiKey", handlers.DeleteResponsesApiKey(cfgManager))
 		apiGroup.POST("/responses/channels/:id/keys/:apiKey/top", handlers.MoveResponsesApiKeyToTop(cfgManager))
 		apiGroup.POST("/responses/channels/:id/keys/:apiKey/bottom", handlers.MoveResponsesApiKeyToBottom(cfgManager))
-		apiGroup.POST("/responses/channels/:id/current", handlers.SetCurrentResponsesUpstream(cfgManager))
 		apiGroup.PUT("/responses/loadbalance", handlers.UpdateResponsesLoadBalance(cfgManager))
 
 		// Responses 多渠道调度 API

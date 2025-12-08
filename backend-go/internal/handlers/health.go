@@ -20,7 +20,6 @@ func HealthCheck(envCfg *config.EnvConfig, cfgManager *config.ConfigManager) gin
 			"version":   getVersion(),
 			"config": gin.H{
 				"upstreamCount":        len(config.Upstream),
-				"currentUpstream":      config.CurrentUpstream,
 				"loadBalance":          config.LoadBalance,
 				"responsesLoadBalance": config.ResponsesLoadBalance,
 			},
@@ -80,7 +79,6 @@ func ReloadConfig(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			"timestamp": time.Now().Format(time.RFC3339),
 			"config": gin.H{
 				"upstreamCount":        len(config.Upstream),
-				"currentUpstream":      config.CurrentUpstream,
 				"loadBalance":          config.LoadBalance,
 				"responsesLoadBalance": config.ResponsesLoadBalance,
 			},

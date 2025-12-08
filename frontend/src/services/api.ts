@@ -204,12 +204,6 @@ class ApiService {
     })
   }
 
-  async setCurrentChannel(id: number): Promise<void> {
-    await this.request(`/channels/${id}/current`, {
-      method: 'POST'
-    })
-  }
-
   async addApiKey(channelId: number, apiKey: string): Promise<void> {
     await this.request(`/channels/${channelId}/keys`, {
       method: 'POST',
@@ -268,12 +262,6 @@ class ApiService {
   async deleteResponsesChannel(id: number): Promise<void> {
     await this.request(`/responses/channels/${id}`, {
       method: 'DELETE'
-    })
-  }
-
-  async setCurrentResponsesChannel(id: number): Promise<void> {
-    await this.request(`/responses/channels/${id}/current`, {
-      method: 'POST'
     })
   }
 

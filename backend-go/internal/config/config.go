@@ -408,6 +408,7 @@ func (cm *ConfigManager) GetConfig() Config {
 }
 
 // GetCurrentUpstream 获取当前上游配置
+// 优先选择第一个 active 状态的渠道，若无则回退到第一个渠道
 func (cm *ConfigManager) GetCurrentUpstream() (*UpstreamConfig, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
@@ -416,11 +417,17 @@ func (cm *ConfigManager) GetCurrentUpstream() (*UpstreamConfig, error) {
 		return nil, fmt.Errorf("未配置任何上游渠道")
 	}
 
-	if cm.config.CurrentUpstream >= len(cm.config.Upstream) {
-		return nil, fmt.Errorf("当前渠道索引 %d 无效", cm.config.CurrentUpstream)
+	// 优先选择第一个 active 状态的渠道
+	for i := range cm.config.Upstream {
+		status := cm.config.Upstream[i].Status
+		if status == "" || status == "active" {
+			upstream := cm.config.Upstream[i]
+			return &upstream, nil
+		}
 	}
 
-	upstream := cm.config.Upstream[cm.config.CurrentUpstream]
+	// 没有 active 渠道，回退到第一个渠道
+	upstream := cm.config.Upstream[0]
 	return &upstream, nil
 }
 
@@ -594,25 +601,6 @@ func (cm *ConfigManager) clearFailedKeysForUpstream(upstream *UpstreamConfig) {
 	}
 }
 
-// SetCurrentUpstream 设置当前上游
-func (cm *ConfigManager) SetCurrentUpstream(index int) error {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-
-	if index < 0 || index >= len(cm.config.Upstream) {
-		return fmt.Errorf("无效的上游索引: %d", index)
-	}
-
-	cm.config.CurrentUpstream = index
-
-	if err := cm.saveConfigLocked(cm.config); err != nil {
-		return err
-	}
-
-	log.Printf("已切换到上游: [%d] %s", index, cm.config.Upstream[index].Name)
-	return nil
-}
-
 // AddUpstream 添加上游
 func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig) error {
 	cm.mu.Lock()
@@ -624,12 +612,6 @@ func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig) error {
 	}
 
 	cm.config.Upstream = append(cm.config.Upstream, upstream)
-
-	// 如果这是第一个渠道,自动设为当前
-	if len(cm.config.Upstream) == 1 {
-		cm.config.CurrentUpstream = 0
-		log.Printf("首个Messages渠道已自动设为当前: %s", upstream.Name)
-	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return err
@@ -706,21 +688,6 @@ func (cm *ConfigManager) RemoveUpstream(index int) (*UpstreamConfig, error) {
 
 	// 清理被删除渠道的失败 key 冷却记录
 	cm.clearFailedKeysForUpstream(&removed)
-
-	// 调整当前上游索引
-	if cm.config.CurrentUpstream >= len(cm.config.Upstream) {
-		if len(cm.config.Upstream) > 0 {
-			cm.config.CurrentUpstream = len(cm.config.Upstream) - 1
-		} else {
-			cm.config.CurrentUpstream = 0
-		}
-	}
-
-	// 如果删除后只剩一个渠道,自动设为当前
-	if len(cm.config.Upstream) == 1 {
-		cm.config.CurrentUpstream = 0
-		log.Printf("唯一Messages渠道已自动设为当前: %s", cm.config.Upstream[0].Name)
-	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return nil, err
@@ -833,32 +800,52 @@ func validateLoadBalanceStrategy(strategy string) error {
 	return nil
 }
 
-// DeprioritizeAPIKey 降低API密钥优先级
+// DeprioritizeAPIKey 降低API密钥优先级（在所有渠道中查找）
 func (cm *ConfigManager) DeprioritizeAPIKey(apiKey string) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	upstream := &cm.config.Upstream[cm.config.CurrentUpstream]
+	// 遍历所有渠道查找该 API 密钥
+	for upstreamIdx := range cm.config.Upstream {
+		upstream := &cm.config.Upstream[upstreamIdx]
+		index := -1
+		for i, key := range upstream.APIKeys {
+			if key == apiKey {
+				index = i
+				break
+			}
+		}
 
-	// 查找密钥索引
-	index := -1
-	for i, key := range upstream.APIKeys {
-		if key == apiKey {
-			index = i
-			break
+		if index != -1 && index != len(upstream.APIKeys)-1 {
+			// 移动到末尾
+			upstream.APIKeys = append(upstream.APIKeys[:index], upstream.APIKeys[index+1:]...)
+			upstream.APIKeys = append(upstream.APIKeys, apiKey)
+			log.Printf("已将API密钥移动到末尾以降低优先级: %s (渠道: %s)", maskAPIKey(apiKey), upstream.Name)
+			return cm.saveConfigLocked(cm.config)
 		}
 	}
 
-	if index == -1 || index == len(upstream.APIKeys)-1 {
-		return nil
+	// 同样遍历 Responses 渠道
+	for upstreamIdx := range cm.config.ResponsesUpstream {
+		upstream := &cm.config.ResponsesUpstream[upstreamIdx]
+		index := -1
+		for i, key := range upstream.APIKeys {
+			if key == apiKey {
+				index = i
+				break
+			}
+		}
+
+		if index != -1 && index != len(upstream.APIKeys)-1 {
+			// 移动到末尾
+			upstream.APIKeys = append(upstream.APIKeys[:index], upstream.APIKeys[index+1:]...)
+			upstream.APIKeys = append(upstream.APIKeys, apiKey)
+			log.Printf("已将API密钥移动到末尾以降低优先级: %s (Responses渠道: %s)", maskAPIKey(apiKey), upstream.Name)
+			return cm.saveConfigLocked(cm.config)
+		}
 	}
 
-	// 移动到末尾
-	upstream.APIKeys = append(upstream.APIKeys[:index], upstream.APIKeys[index+1:]...)
-	upstream.APIKeys = append(upstream.APIKeys, apiKey)
-
-	log.Printf("已将API密钥移动到末尾以降低优先级: %s", maskAPIKey(apiKey))
-	return cm.saveConfigLocked(cm.config)
+	return nil
 }
 
 // MoveAPIKeyToTop 将指定渠道的 API 密钥移到最前面
@@ -1035,6 +1022,7 @@ func (cm *ConfigManager) Close() error {
 // ============== Responses 接口专用方法 ==============
 
 // GetCurrentResponsesUpstream 获取当前 Responses 上游配置
+// 优先选择第一个 active 状态的渠道，若无则回退到第一个渠道
 func (cm *ConfigManager) GetCurrentResponsesUpstream() (*UpstreamConfig, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
@@ -1043,31 +1031,18 @@ func (cm *ConfigManager) GetCurrentResponsesUpstream() (*UpstreamConfig, error) 
 		return nil, fmt.Errorf("未配置任何 Responses 渠道")
 	}
 
-	if cm.config.CurrentResponsesUpstream >= len(cm.config.ResponsesUpstream) {
-		return nil, fmt.Errorf("当前 Responses 渠道索引 %d 无效", cm.config.CurrentResponsesUpstream)
+	// 优先选择第一个 active 状态的渠道
+	for i := range cm.config.ResponsesUpstream {
+		status := cm.config.ResponsesUpstream[i].Status
+		if status == "" || status == "active" {
+			upstream := cm.config.ResponsesUpstream[i]
+			return &upstream, nil
+		}
 	}
 
-	upstream := cm.config.ResponsesUpstream[cm.config.CurrentResponsesUpstream]
+	// 没有 active 渠道，回退到第一个渠道
+	upstream := cm.config.ResponsesUpstream[0]
 	return &upstream, nil
-}
-
-// SetCurrentResponsesUpstream 设置当前 Responses 上游
-func (cm *ConfigManager) SetCurrentResponsesUpstream(index int) error {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-
-	if index < 0 || index >= len(cm.config.ResponsesUpstream) {
-		return fmt.Errorf("无效的 Responses 上游索引: %d", index)
-	}
-
-	cm.config.CurrentResponsesUpstream = index
-
-	if err := cm.saveConfigLocked(cm.config); err != nil {
-		return err
-	}
-
-	log.Printf("已切换到 Responses 上游: [%d] %s", index, cm.config.ResponsesUpstream[index].Name)
-	return nil
 }
 
 // AddResponsesUpstream 添加 Responses 上游
@@ -1081,12 +1056,6 @@ func (cm *ConfigManager) AddResponsesUpstream(upstream UpstreamConfig) error {
 	}
 
 	cm.config.ResponsesUpstream = append(cm.config.ResponsesUpstream, upstream)
-
-	// 如果这是第一个渠道,自动设为当前
-	if len(cm.config.ResponsesUpstream) == 1 {
-		cm.config.CurrentResponsesUpstream = 0
-		log.Printf("首个Responses渠道已自动设为当前: %s", upstream.Name)
-	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return err
@@ -1163,21 +1132,6 @@ func (cm *ConfigManager) RemoveResponsesUpstream(index int) (*UpstreamConfig, er
 
 	// 清理被删除渠道的失败 key 冷却记录
 	cm.clearFailedKeysForUpstream(&removed)
-
-	// 调整当前上游索引
-	if cm.config.CurrentResponsesUpstream >= len(cm.config.ResponsesUpstream) {
-		if len(cm.config.ResponsesUpstream) > 0 {
-			cm.config.CurrentResponsesUpstream = len(cm.config.ResponsesUpstream) - 1
-		} else {
-			cm.config.CurrentResponsesUpstream = 0
-		}
-	}
-
-	// 如果删除后只剩一个渠道,自动设为当前
-	if len(cm.config.ResponsesUpstream) == 1 {
-		cm.config.CurrentResponsesUpstream = 0
-		log.Printf("唯一Responses渠道已自动设为当前: %s", cm.config.ResponsesUpstream[0].Name)
-	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return nil, err
