@@ -16,7 +16,7 @@ func ServeFrontend(r *gin.Engine, frontendFS embed.FS) {
 	if err != nil {
 		// 如果提取失败，返回错误页面
 		r.GET("/", func(c *gin.Context) {
-			c.HTML(503, "", getErrorPage())
+			c.Data(503, "text/html; charset=utf-8", []byte(getErrorPage()))
 		})
 		return
 	}
@@ -28,7 +28,7 @@ func ServeFrontend(r *gin.Engine, frontendFS embed.FS) {
 	r.GET("/", func(c *gin.Context) {
 		indexContent, err := fs.ReadFile(distFS, "index.html")
 		if err != nil {
-			c.HTML(503, "", getErrorPage())
+			c.Data(503, "text/html; charset=utf-8", []byte(getErrorPage()))
 			return
 		}
 		c.Data(200, "text/html; charset=utf-8", indexContent)
@@ -65,7 +65,7 @@ func ServeFrontend(r *gin.Engine, frontendFS embed.FS) {
 		// 文件不存在，返回 index.html (SPA 路由支持)
 		indexContent, err := fs.ReadFile(distFS, "index.html")
 		if err != nil {
-			c.HTML(503, "", getErrorPage())
+			c.Data(503, "text/html; charset=utf-8", []byte(getErrorPage()))
 			return
 		}
 		c.Data(200, "text/html; charset=utf-8", indexContent)

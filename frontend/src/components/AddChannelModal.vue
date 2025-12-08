@@ -10,17 +10,11 @@
             {{ isEditing ? '编辑渠道' : '添加新渠道' }}
           </div>
           <div class="text-body-2" :class="subtitleClasses">
-            {{ isEditing ? '修改渠道配置信息' : (isQuickMode ? '快速批量添加 API 密钥' : '配置API渠道信息和密钥') }}
+            {{ isEditing ? '修改渠道配置信息' : isQuickMode ? '快速批量添加 API 密钥' : '配置API渠道信息和密钥' }}
           </div>
         </div>
         <!-- 模式切换按钮（仅在添加模式显示） -->
-        <v-btn
-          v-if="!isEditing"
-          variant="outlined"
-          size="small"
-          @click="toggleMode"
-          class="mode-toggle-btn"
-        >
+        <v-btn v-if="!isEditing" variant="outlined" size="small" @click="toggleMode" class="mode-toggle-btn">
           <v-icon start size="16">{{ isQuickMode ? 'mdi-form-textbox' : 'mdi-lightning-bolt' }}</v-icon>
           {{ isQuickMode ? '详细配置' : '快速添加' }}
         </v-btn>
@@ -47,10 +41,7 @@
               <div class="d-flex flex-column ga-3">
                 <!-- Base URL 检测 -->
                 <div class="d-flex align-center ga-3">
-                  <v-icon
-                    :color="detectedBaseUrl ? 'success' : 'error'"
-                    size="20"
-                  >
+                  <v-icon :color="detectedBaseUrl ? 'success' : 'error'" size="20">
                     {{ detectedBaseUrl ? 'mdi-check-circle' : 'mdi-alert-circle' }}
                   </v-icon>
                   <div class="flex-grow-1">
@@ -59,23 +50,22 @@
                       {{ detectedBaseUrl || '请输入一个有效的 URL (https://...)' }}
                     </div>
                   </div>
-                  <v-chip v-if="detectedBaseUrl" size="x-small" color="success" variant="tonal">
-                    已检测
-                  </v-chip>
+                  <v-chip v-if="detectedBaseUrl" size="x-small" color="success" variant="tonal"> 已检测 </v-chip>
                 </div>
 
                 <!-- API Keys 检测 -->
                 <div class="d-flex align-center ga-3">
-                  <v-icon
-                    :color="detectedApiKeys.length > 0 ? 'success' : 'error'"
-                    size="20"
-                  >
+                  <v-icon :color="detectedApiKeys.length > 0 ? 'success' : 'error'" size="20">
                     {{ detectedApiKeys.length > 0 ? 'mdi-check-circle' : 'mdi-alert-circle' }}
                   </v-icon>
                   <div class="flex-grow-1">
                     <div class="text-body-2 font-weight-medium">API 密钥</div>
                     <div class="text-caption" :class="detectedApiKeys.length > 0 ? 'text-success' : 'text-error'">
-                      {{ detectedApiKeys.length > 0 ? `已检测到 ${detectedApiKeys.length} 个密钥` : '请至少输入一个 API Key' }}
+                      {{
+                        detectedApiKeys.length > 0
+                          ? `已检测到 ${detectedApiKeys.length} 个密钥`
+                          : '请至少输入一个 API Key'
+                      }}
                     </div>
                   </div>
                   <v-chip v-if="detectedApiKeys.length > 0" size="x-small" color="success" variant="tonal">
@@ -92,9 +82,7 @@
                       {{ generatedChannelName }}
                     </div>
                   </div>
-                  <v-chip size="x-small" color="primary" variant="tonal">
-                    自动生成
-                  </v-chip>
+                  <v-chip size="x-small" color="primary" variant="tonal"> 自动生成 </v-chip>
                 </div>
 
                 <!-- 渠道类型提示 -->
@@ -540,7 +528,7 @@ const toggleMode = () => {
 // 检测单个 token 是否为有效的 API Key
 const isValidApiKey = (token: string): boolean => {
   // 常见 API Key 前缀格式
-  if (/^(sk-|key-|api-|AIza)/i.test(token)) {
+  if (/^(sk-|cr_|ms-|key-|api-|AIza)/i.test(token)) {
     return true
   }
   // 长度足够且只包含合法字符的也可能是 key
@@ -824,11 +812,7 @@ const subtitleClasses = computed(() => {
 
 const isFormValid = computed(() => {
   return (
-    form.name.trim() &&
-    form.serviceType &&
-    form.baseUrl.trim() &&
-    isValidUrl(form.baseUrl) &&
-    form.apiKeys.length > 0
+    form.name.trim() && form.serviceType && form.baseUrl.trim() && isValidUrl(form.baseUrl) && form.apiKeys.length > 0
   )
 })
 
