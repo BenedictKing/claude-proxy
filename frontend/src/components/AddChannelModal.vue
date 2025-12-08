@@ -222,7 +222,7 @@
 
                 <v-card-text class="pt-2">
                   <div class="text-body-2 text-medium-emphasis mb-4">
-                    配置模型名称映射，将请求中的模型名重定向到目标模型。例如：将 "opus" 重定向到 "claude-3-5-sonnet"
+                    {{ modelMappingHint }}
                   </div>
 
                   <!-- 现有映射列表 -->
@@ -273,7 +273,7 @@
                     <v-text-field
                       v-model="newMapping.target"
                       label="目标模型名"
-                      placeholder="例如：claude-3-5-sonnet"
+                      :placeholder="targetModelPlaceholder"
                       variant="outlined"
                       density="comfortable"
                       hide-details
@@ -674,12 +674,49 @@ const serviceTypeOptions = computed(() => {
   }
 })
 
-// 源模型选项 (Claude模型的常用别名)
-const sourceModelOptions = [
-  { title: 'opus', value: 'opus' },
-  { title: 'sonnet', value: 'sonnet' },
-  { title: 'haiku', value: 'haiku' }
-]
+// 全部源模型选项 - 根据渠道类型动态显示
+const allSourceModelOptions = computed(() => {
+  if (props.channelType === 'responses') {
+    // Responses API (Codex) 常用模型名称
+    return [
+      { title: 'codex', value: 'codex' },
+      { title: 'gpt-5.1-codex-max', value: 'gpt-5.1-codex-max' },
+      { title: 'gpt-5.1-codex', value: 'gpt-5.1-codex' },
+      { title: 'gpt-5.1-codex-mini', value: 'gpt-5.1-codex-mini' },
+      { title: 'gpt-5.1', value: 'gpt-5.1' }
+    ]
+  } else {
+    // Messages API (Claude) 常用模型别名
+    return [
+      { title: 'opus', value: 'opus' },
+      { title: 'sonnet', value: 'sonnet' },
+      { title: 'haiku', value: 'haiku' }
+    ]
+  }
+})
+
+// 可选的源模型选项 - 过滤掉已配置的模型
+const sourceModelOptions = computed(() => {
+  const configuredModels = Object.keys(form.modelMapping)
+  return allSourceModelOptions.value.filter(opt => !configuredModels.includes(opt.value))
+})
+
+// 模型重定向的示例文本 - 根据渠道类型动态显示
+const modelMappingHint = computed(() => {
+  if (props.channelType === 'responses') {
+    return '配置模型名称映射，将请求中的模型名重定向到目标模型。例如：将 "o3" 重定向到 "gpt-5.1-codex-max"'
+  } else {
+    return '配置模型名称映射，将请求中的模型名重定向到目标模型。例如：将 "opus" 重定向到 "claude-3-5-sonnet"'
+  }
+})
+
+const targetModelPlaceholder = computed(() => {
+  if (props.channelType === 'responses') {
+    return '例如：gpt-5.1-codex-max'
+  } else {
+    return '例如：claude-3-5-sonnet'
+  }
+})
 
 // 表单数据
 const form = reactive({

@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -965,19 +966,34 @@ func (cm *ConfigManager) MoveResponsesAPIKeyToBottom(upstreamIndex int, apiKey s
 
 // RedirectModel 模型重定向
 func RedirectModel(model string, upstream *UpstreamConfig) string {
-	if upstream.ModelMapping == nil {
+	if upstream.ModelMapping == nil || len(upstream.ModelMapping) == 0 {
 		return model
 	}
 
-	// 直接匹配
+	// 直接匹配（精确匹配优先）
 	if mapped, ok := upstream.ModelMapping[model]; ok {
 		return mapped
 	}
 
-	// 模糊匹配 (与TS版本行为保持一致)
-	for sourceModel, targetModel := range upstream.ModelMapping {
-		if strings.Contains(model, sourceModel) || strings.Contains(sourceModel, model) {
-			return targetModel
+	// 模糊匹配：按源模型长度从长到短排序，确保最长匹配优先
+	// 例如：同时配置 "codex" 和 "gpt-5.1-codex" 时，"gpt-5.1-codex" 应该先匹配
+	type mapping struct {
+		source string
+		target string
+	}
+	mappings := make([]mapping, 0, len(upstream.ModelMapping))
+	for source, target := range upstream.ModelMapping {
+		mappings = append(mappings, mapping{source, target})
+	}
+	// 按源模型长度降序排序
+	sort.Slice(mappings, func(i, j int) bool {
+		return len(mappings[i].source) > len(mappings[j].source)
+	})
+
+	// 按排序后的顺序进行模糊匹配
+	for _, m := range mappings {
+		if strings.Contains(model, m.source) || strings.Contains(m.source, model) {
+			return m.target
 		}
 	}
 
