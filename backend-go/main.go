@@ -16,7 +16,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-//go:embed frontend/dist/*
+//go:embed all:frontend/dist
 var frontendFS embed.FS
 
 func main() {

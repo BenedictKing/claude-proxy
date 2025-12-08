@@ -36,7 +36,7 @@ embed-frontend:
 	@echo "$(GREEN)📋 嵌入前端到 Go 后端...$(NC)"
 	@rm -rf backend-go/frontend/dist
 	@mkdir -p backend-go/frontend/dist
-	@cp -r frontend/dist backend-go/frontend/dist
+	@cp -r frontend/dist/* backend-go/frontend/dist/
 
 clean:
 	@cd backend-go && $(MAKE) clean
