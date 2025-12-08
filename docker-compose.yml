@@ -10,7 +10,7 @@ services:
     container_name: claude-proxy
     ports:
       # 统一端口：前端界面 + API + 管理接口
-      - '3003:3000'
+      - '3000:3000'
     volumes:
       # 配置目录持久化
       - ./.config:/app/.config
