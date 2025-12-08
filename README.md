@@ -5,7 +5,7 @@
 ## 🚀 功能特性
 
 - **🖥️ 一体化架构**: 后端集成前端，单容器部署，完全替代 Nginx
-- **🔐 统一认证**: 一个密钥保护所有入口（前端界面、管理API、代理API）
+- **🔐 统一认证**: 一个密钥保护所有入口（前端界面、管理 API、代理 API）
 - **📱 Web 管理面板**: 现代化可视化界面，支持渠道管理、实时监控和配置
 - **双 API 支持**: 同时支持 Claude Messages API (`/v1/messages`) 和 Codex Responses API (`/v1/responses`)
 - **统一入口**: 通过统一端点访问不同的 AI 服务
@@ -49,10 +49,10 @@
 
 我们**强烈推荐**以下两种方式部署，它们经过充分测试，性能优异：
 
-| 部署方式 | 启动时间 | 内存占用 | 适用场景 |
-|---------|---------|---------|---------|
-| **🐳 Docker** | ~2s | ~25MB | 生产环境、一键部署 |
-| **🚀 Go 版本** | <100ms | ~20MB | 高性能、原生部署 |
+| 部署方式       | 启动时间 | 内存占用 | 适用场景           |
+| -------------- | -------- | -------- | ------------------ |
+| **🐳 Docker**  | ~2s      | ~25MB    | 生产环境、一键部署 |
+| **🚀 Go 版本** | <100ms   | ~20MB    | 高性能、原生部署   |
 
 ---
 
@@ -74,7 +74,8 @@ docker-compose up -d
 ```
 
 访问地址：
-- **Web管理界面**: http://localhost:3000
+
+- **Web 管理界面**: http://localhost:3000
 - **Messages API 端点**: http://localhost:3000/v1/messages
 - **Responses API 端点**: http://localhost:3000/v1/responses
 - **健康检查**: http://localhost:3000/health
@@ -94,21 +95,21 @@ cd claude-proxy
 cp backend-go/.env.example backend-go/.env
 # 编辑 backend-go/.env 文件，设置你的配置
 
-# 3. 构建并启动（自动构建前端+后端）
-make build-current
-cd backend-go && ./dist/claude-proxy
+# 3. 启动服务
+make run           # 普通用户运行（推荐）
+# 或 make dev       # 开发调试（热重载）
+# 或 make help      # 查看所有命令
 ```
 
-**或使用 Makefile 快捷命令：**
+**快捷命令说明：**
 
 ```bash
-cd backend-go
+make run           # 普通用户运行（自动构建前端并启动后端）
+make dev           # 开发调试（后端热重载）
 make help          # 查看所有可用命令
-make dev           # 开发模式（热重载）
-make build-run     # 构建并运行
 ```
 
-> 📚 Go 版本配置管理详见 `cd backend-go && make help`
+> 📚 更多配置管理命令详见 `make help`
 
 ---
 
@@ -122,24 +123,25 @@ services:
   claude-proxy:
     build:
       context: .
-      dockerfile: Dockerfile_China  # 国内网络使用
+      dockerfile: Dockerfile_China # 国内网络使用
     container_name: claude-proxy
     ports:
-      - "3000:3000"  # 统一端口
+      - '3000:3000' # 统一端口
     environment:
       - ENV=production
-      - ENABLE_WEB_UI=true  # true=一体化, false=纯API
+      - ENABLE_WEB_UI=true # true=一体化, false=纯API
       - PROXY_ACCESS_KEY=your-super-strong-secret-key
       - LOG_LEVEL=info
     volumes:
-      - ./.config:/app/.config  # 配置持久化
-      - ./logs:/app/logs        # 日志持久化
+      - ./.config:/app/.config # 配置持久化
+      - ./logs:/app/logs # 日志持久化
     restart: unless-stopped
 ```
 
 ### 云平台一键部署
 
 #### Railway 部署
+
 ```bash
 # 1. 连接 GitHub 仓库到 Railway
 # 2. 设置环境变量
@@ -153,6 +155,7 @@ PORT=3000
 ```
 
 #### Render 部署
+
 ```bash
 # 1. 选择 Docker 服务类型
 # 2. 连接 GitHub 仓库
@@ -164,6 +167,7 @@ PORT=3000
 ```
 
 #### Fly.io 部署
+
 ```bash
 # 快速部署
 fly launch --dockerfile Dockerfile
@@ -177,6 +181,7 @@ fly logs
 ```
 
 #### Zeabur 部署
+
 ```bash
 # 1. 连接 GitHub 仓库
 # 2. 自动检测 Docker 项目
@@ -187,7 +192,8 @@ fly logs
 ## 🔧 配置管理
 
 **两种配置方式**:
-1. **Web界面** (推荐): 访问 `http://localhost:3000` → 输入密钥 → 可视化管理
+
+1. **Web 界面** (推荐): 访问 `http://localhost:3000` → 输入密钥 → 可视化管理
 2. **命令行工具**: `cd backend-go && make help`
 
 > 📚 环境变量配置详见 [ENVIRONMENT.md](ENVIRONMENT.md)
@@ -199,8 +205,8 @@ fly logs
 所有访问入口均受 `PROXY_ACCESS_KEY` 保护：
 
 1. **前端管理界面** (`/`) - 通过查询参数或本地存储验证密钥
-2. **管理API** (`/api/*`) - 需要 `x-api-key` 请求头
-3. **代理API** (`/v1/messages`) - 需要 `x-api-key` 请求头
+2. **管理 API** (`/api/*`) - 需要 `x-api-key` 请求头
+3. **代理 API** (`/v1/messages`) - 需要 `x-api-key` 请求头
 4. **健康检查** (`/health`) - 公开访问，无需密钥
 
 ### 认证流程
@@ -387,7 +393,7 @@ curl -X POST http://localhost:3000/v1/responses \
   - `output`: 模型输出内容
   - `usage`: Token 使用统计
 
-### 管理API
+### 管理 API
 
 ```bash
 # 获取渠道列表
@@ -406,18 +412,21 @@ curl -H "x-api-key: your-proxy-access-key" \
 本代理服务器的 Messages API 端点 (`/v1/messages`) 支持多种上游协议转换：
 
 **支持的上游服务**:
+
 - ✅ **Claude API** (Anthropic) - 原生支持，直接透传
 - ✅ **OpenAI API** - 自动转换 Claude 格式 ↔ OpenAI 格式
 - ✅ **OpenAI 兼容 API** - 支持所有兼容 OpenAI 格式的服务
 - ✅ **Gemini API** (Google) - 自动转换 Claude 格式 ↔ Gemini 格式
 
 **核心优势**:
+
 - 🔄 **统一接口**: 客户端只需使用 Claude Messages API 格式
 - 🎯 **自动转换**: 代理自动处理不同上游的协议差异
 - 🔌 **即插即用**: 无需修改客户端代码即可切换上游服务
 - 💰 **成本优化**: 灵活切换不同价格的 AI 服务
 
 **示例**: 使用 Claude API 格式调用 OpenAI GPT-4
+
 ```bash
 curl -X POST http://localhost:3000/v1/messages \
   -H "x-api-key: your-proxy-access-key" \
@@ -536,6 +545,7 @@ ENABLE_RESPONSE_LOGS=true  # 记录响应日志
 ### 常见问题
 
 1. **认证失败**
+
    ```bash
    # 检查密钥设置
    echo $PROXY_ACCESS_KEY
@@ -545,6 +555,7 @@ ENABLE_RESPONSE_LOGS=true  # 记录响应日志
    ```
 
 2. **容器启动失败**
+
    ```bash
    # 检查日志
    docker-compose logs claude-proxy
@@ -573,7 +584,8 @@ ENABLE_RESPONSE_LOGS=true  # 记录响应日志
    # 然后只使用API端点: /v1/messages
    ```
 
-4. **Docker环境前端404**
+4. **Docker 环境前端 404**
+
    ```bash
    # 检查 ENABLE_WEB_UI 设置
    docker-compose exec claude-proxy printenv ENABLE_WEB_UI
@@ -612,11 +624,13 @@ docker-compose up -d --build
 ## 📖 使用指南
 
 ### 命令行配置工具
+
 ```bash
 cd backend-go && make help
 ```
 
 ### 相关文档
+
 - **📐 架构设计**: [ARCHITECTURE.md](ARCHITECTURE.md) - 技术选型、设计模式、数据流
 - **⚙️ 环境配置**: [ENVIRONMENT.md](ENVIRONMENT.md) - 环境变量、配置场景、故障排除
 - **🔨 开发指南**: [DEVELOPMENT.md](DEVELOPMENT.md) - 开发流程、调试技巧、最佳实践
