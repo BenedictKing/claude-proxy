@@ -582,6 +582,17 @@ func (cm *ConfigManager) cleanupExpiredFailures() {
 	}
 }
 
+// clearFailedKeysForUpstream 清理指定渠道的所有失败 key 记录
+// 当渠道被删除时调用，避免内存泄漏和冷却状态残留
+func (cm *ConfigManager) clearFailedKeysForUpstream(upstream *UpstreamConfig) {
+	for _, key := range upstream.APIKeys {
+		if _, exists := cm.failedKeysCache[key]; exists {
+			delete(cm.failedKeysCache, key)
+			log.Printf("已清理被删除渠道 %s 的失败密钥记录: %s", upstream.Name, maskAPIKey(key))
+		}
+	}
+}
+
 // SetCurrentUpstream 设置当前上游
 func (cm *ConfigManager) SetCurrentUpstream(index int) error {
 	cm.mu.Lock()
@@ -686,6 +697,9 @@ func (cm *ConfigManager) RemoveUpstream(index int) (*UpstreamConfig, error) {
 
 	removed := cm.config.Upstream[index]
 	cm.config.Upstream = append(cm.config.Upstream[:index], cm.config.Upstream[index+1:]...)
+
+	// 清理被删除渠道的失败 key 冷却记录
+	cm.clearFailedKeysForUpstream(&removed)
 
 	// 调整当前上游索引
 	if cm.config.CurrentUpstream >= len(cm.config.Upstream) {
@@ -1120,6 +1134,9 @@ func (cm *ConfigManager) RemoveResponsesUpstream(index int) (*UpstreamConfig, er
 
 	removed := cm.config.ResponsesUpstream[index]
 	cm.config.ResponsesUpstream = append(cm.config.ResponsesUpstream[:index], cm.config.ResponsesUpstream[index+1:]...)
+
+	// 清理被删除渠道的失败 key 冷却记录
+	cm.clearFailedKeysForUpstream(&removed)
 
 	// 调整当前上游索引
 	if cm.config.CurrentResponsesUpstream >= len(cm.config.ResponsesUpstream) {
