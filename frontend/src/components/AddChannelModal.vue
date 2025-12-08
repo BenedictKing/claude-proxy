@@ -5,22 +5,122 @@
         <v-avatar :color="avatarColor" variant="flat" size="40">
           <v-icon :style="headerIconStyle" size="20">{{ isEditing ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
         </v-avatar>
-        <div>
+        <div class="flex-grow-1">
           <div class="text-h5 font-weight-bold">
             {{ isEditing ? '编辑渠道' : '添加新渠道' }}
           </div>
-          <div class="text-body-2" :class="subtitleClasses">配置API渠道信息和密钥</div>
+          <div class="text-body-2" :class="subtitleClasses">
+            {{ isEditing ? '修改渠道配置信息' : (isQuickMode ? '快速批量添加 API 密钥' : '配置API渠道信息和密钥') }}
+          </div>
         </div>
+        <!-- 模式切换按钮（仅在添加模式显示） -->
+        <v-btn
+          v-if="!isEditing"
+          variant="outlined"
+          size="small"
+          @click="toggleMode"
+          class="mode-toggle-btn"
+        >
+          <v-icon start size="16">{{ isQuickMode ? 'mdi-form-textbox' : 'mdi-lightning-bolt' }}</v-icon>
+          {{ isQuickMode ? '详细配置' : '快速添加' }}
+        </v-btn>
       </v-card-title>
 
       <v-card-text class="pa-6">
-        <v-form ref="formRef" @submit.prevent="handleSubmit">
+        <!-- 快速添加模式 -->
+        <div v-if="!isEditing && isQuickMode">
+          <v-textarea
+            v-model="quickInput"
+            label="输入内容"
+            placeholder="每行输入一个 API Key 或 Base URL&#10;&#10;示例:&#10;sk-xxx-your-api-key&#10;sk-yyy-another-key&#10;https://api.example.com/v1"
+            variant="outlined"
+            rows="10"
+            no-resize
+            autofocus
+            class="quick-input-textarea"
+            @input="parseQuickInput"
+          />
+
+          <!-- 检测状态提示 -->
+          <v-card variant="outlined" class="mt-4 detection-status-card" rounded="lg">
+            <v-card-text class="pa-4">
+              <div class="d-flex flex-column ga-3">
+                <!-- Base URL 检测 -->
+                <div class="d-flex align-center ga-3">
+                  <v-icon
+                    :color="detectedBaseUrl ? 'success' : 'error'"
+                    size="20"
+                  >
+                    {{ detectedBaseUrl ? 'mdi-check-circle' : 'mdi-alert-circle' }}
+                  </v-icon>
+                  <div class="flex-grow-1">
+                    <div class="text-body-2 font-weight-medium">Base URL</div>
+                    <div class="text-caption" :class="detectedBaseUrl ? 'text-success' : 'text-error'">
+                      {{ detectedBaseUrl || '请输入一个有效的 URL (https://...)' }}
+                    </div>
+                  </div>
+                  <v-chip v-if="detectedBaseUrl" size="x-small" color="success" variant="tonal">
+                    已检测
+                  </v-chip>
+                </div>
+
+                <!-- API Keys 检测 -->
+                <div class="d-flex align-center ga-3">
+                  <v-icon
+                    :color="detectedApiKeys.length > 0 ? 'success' : 'error'"
+                    size="20"
+                  >
+                    {{ detectedApiKeys.length > 0 ? 'mdi-check-circle' : 'mdi-alert-circle' }}
+                  </v-icon>
+                  <div class="flex-grow-1">
+                    <div class="text-body-2 font-weight-medium">API 密钥</div>
+                    <div class="text-caption" :class="detectedApiKeys.length > 0 ? 'text-success' : 'text-error'">
+                      {{ detectedApiKeys.length > 0 ? `已检测到 ${detectedApiKeys.length} 个密钥` : '请至少输入一个 API Key' }}
+                    </div>
+                  </div>
+                  <v-chip v-if="detectedApiKeys.length > 0" size="x-small" color="success" variant="tonal">
+                    {{ detectedApiKeys.length }} 个
+                  </v-chip>
+                </div>
+
+                <!-- 渠道名称预览 -->
+                <div class="d-flex align-center ga-3">
+                  <v-icon color="primary" size="20">mdi-tag</v-icon>
+                  <div class="flex-grow-1">
+                    <div class="text-body-2 font-weight-medium">渠道名称</div>
+                    <div class="text-caption text-primary font-weight-medium">
+                      {{ generatedChannelName }}
+                    </div>
+                  </div>
+                  <v-chip size="x-small" color="primary" variant="tonal">
+                    自动生成
+                  </v-chip>
+                </div>
+
+                <!-- 渠道类型提示 -->
+                <div class="d-flex align-center ga-3">
+                  <v-icon color="info" size="20">mdi-information</v-icon>
+                  <div class="flex-grow-1">
+                    <div class="text-body-2 font-weight-medium">渠道类型</div>
+                    <div class="text-caption text-medium-emphasis">
+                      {{ props.channelType === 'responses' ? 'Responses (Codex)' : 'Claude (Messages)' }} -
+                      {{ getDefaultServiceType() }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </v-card-text>
+          </v-card>
+        </div>
+
+        <!-- 详细表单模式（原有表单） -->
+        <v-form v-else ref="formRef" @submit.prevent="handleSubmit">
           <v-row>
             <!-- 基本信息 -->
             <v-col cols="12" md="6">
               <v-text-field
                 v-model="form.name"
-                label="渠道名称"
+                label="渠道名称 *"
                 placeholder="例如：GPT-4 渠道"
                 prepend-inner-icon="mdi-tag"
                 variant="outlined"
@@ -34,7 +134,7 @@
             <v-col cols="12" md="6">
               <v-select
                 v-model="form.serviceType"
-                label="服务类型"
+                label="服务类型 *"
                 :items="serviceTypeOptions"
                 prepend-inner-icon="mdi-cog"
                 variant="outlined"
@@ -49,7 +149,7 @@
             <v-col cols="12">
               <v-text-field
                 v-model="form.baseUrl"
-                label="基础URL"
+                label="基础URL *"
                 placeholder="例如：https://api.openai.com/v1"
                 prepend-inner-icon="mdi-web"
                 variant="outlined"
@@ -195,11 +295,14 @@
 
             <!-- API密钥管理 -->
             <v-col cols="12">
-              <v-card variant="outlined" rounded="lg">
+              <v-card variant="outlined" rounded="lg" :color="form.apiKeys.length === 0 ? 'error' : undefined">
                 <v-card-title class="d-flex align-center justify-space-between pa-4 pb-2">
                   <div class="d-flex align-center ga-2">
-                    <v-icon color="primary">mdi-key</v-icon>
-                    <span class="text-body-1 font-weight-bold">API密钥管理</span>
+                    <v-icon :color="form.apiKeys.length > 0 ? 'primary' : 'error'">mdi-key</v-icon>
+                    <span class="text-body-1 font-weight-bold">API密钥管理 *</span>
+                    <v-chip v-if="form.apiKeys.length === 0" size="x-small" color="error" variant="tonal">
+                      至少需要一个密钥
+                    </v-chip>
                   </div>
                   <v-chip size="small" color="info" variant="tonal"> 可添加多个密钥用于负载均衡 </v-chip>
                 </v-card-title>
@@ -357,6 +460,17 @@
         <v-spacer />
         <v-btn variant="text" @click="handleCancel"> 取消 </v-btn>
         <v-btn
+          v-if="!isEditing && isQuickMode"
+          color="primary"
+          variant="elevated"
+          @click="handleQuickSubmit"
+          :disabled="!isQuickFormValid"
+          prepend-icon="mdi-check"
+        >
+          创建渠道
+        </v-btn>
+        <v-btn
+          v-else
           color="primary"
           variant="elevated"
           @click="handleSubmit"
@@ -387,7 +501,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'update:show': [value: boolean]
-  save: [channel: Omit<Channel, 'index' | 'latency' | 'status'>]
+  save: [channel: Omit<Channel, 'index' | 'latency' | 'status'>, options?: { isQuickAdd?: boolean }]
 }>()
 
 // 主题
@@ -395,6 +509,151 @@ const theme = useTheme()
 
 // 表单引用
 const formRef = ref()
+
+// 模式切换: 快速添加 vs 详细表单
+const isQuickMode = ref(true)
+
+// 快速添加模式的数据
+const quickInput = ref('')
+const detectedBaseUrl = ref('')
+const detectedApiKeys = ref<string[]>([])
+
+// 切换模式
+const toggleMode = () => {
+  isQuickMode.value = !isQuickMode.value
+}
+
+// 检测单个 token 是否为有效的 API Key
+const isValidApiKey = (token: string): boolean => {
+  // 常见 API Key 前缀格式
+  if (/^(sk-|key-|api-|AIza)/i.test(token)) {
+    return true
+  }
+  // 长度足够且只包含合法字符的也可能是 key
+  if (token.length >= 32 && /^[a-zA-Z0-9_-]+$/.test(token)) {
+    return true
+  }
+  return false
+}
+
+// 解析快速输入内容
+const parseQuickInput = () => {
+  // 统一按换行、空格、逗号、分号分割，然后 trim
+  const tokens = quickInput.value
+    .split(/[\n\s,;]+/)
+    .map(t => t.trim())
+    .filter(t => t.length > 0)
+
+  // 重置检测结果
+  detectedBaseUrl.value = ''
+  detectedApiKeys.value = []
+
+  for (const token of tokens) {
+    // 检测 URL (http:// 或 https:// 开头)
+    if (/^https?:\/\//i.test(token)) {
+      // 只取第一个检测到的 URL
+      if (!detectedBaseUrl.value) {
+        detectedBaseUrl.value = token.replace(/\/$/, '') // 移除末尾斜杠
+      }
+      continue
+    }
+
+    // 检测 API Key
+    if (isValidApiKey(token) && !detectedApiKeys.value.includes(token)) {
+      detectedApiKeys.value.push(token)
+    }
+  }
+}
+
+// 获取默认服务类型
+const getDefaultServiceType = (): string => {
+  if (props.channelType === 'responses') {
+    return 'Responses (原生接口)'
+  }
+  return 'Claude'
+}
+
+// 获取默认服务类型值
+const getDefaultServiceTypeValue = (): 'openai' | 'openaiold' | 'gemini' | 'claude' | 'responses' => {
+  if (props.channelType === 'responses') {
+    return 'responses'
+  }
+  return 'claude'
+}
+
+// 获取默认 Base URL
+const getDefaultBaseUrl = (): string => {
+  if (props.channelType === 'responses') {
+    return 'https://api.openai.com/v1'
+  }
+  return 'https://api.anthropic.com'
+}
+
+// 快速模式表单验证
+const isQuickFormValid = computed(() => {
+  return detectedBaseUrl.value.length > 0 && detectedApiKeys.value.length > 0
+})
+
+// 生成随机字符串
+const generateRandomString = (length: number): string => {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  let result = ''
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return result
+}
+
+// 从 URL 提取二级域名
+const extractDomain = (url: string): string => {
+  try {
+    const hostname = new URL(url).hostname
+    // 移除 www. 前缀
+    const cleanHost = hostname.replace(/^www\./, '')
+    const parts = cleanHost.split('.')
+
+    // 处理特殊情况
+    if (parts.length <= 1) {
+      // localhost 等单段域名
+      return cleanHost
+    } else if (parts.length === 2) {
+      // example.com → example
+      return parts[0]
+    } else {
+      // api.openai.com → openai (取倒数第二段)
+      return parts[parts.length - 2]
+    }
+  } catch {
+    return 'channel'
+  }
+}
+
+// 随机后缀和生成的渠道名称
+const randomSuffix = ref(generateRandomString(6))
+
+const generatedChannelName = computed(() => {
+  if (!detectedBaseUrl.value) {
+    return `channel-${randomSuffix.value}`
+  }
+  const domain = extractDomain(detectedBaseUrl.value)
+  return `${domain}-${randomSuffix.value}`
+})
+
+// 处理快速添加提交
+const handleQuickSubmit = () => {
+  if (!isQuickFormValid.value) return
+
+  const channelData = {
+    name: generatedChannelName.value,
+    serviceType: getDefaultServiceTypeValue(),
+    baseUrl: detectedBaseUrl.value,
+    apiKeys: detectedApiKeys.value,
+    modelMapping: {}
+  }
+
+  // 传递 isQuickAdd 标志，让 App.vue 知道需要进行后续处理
+  emit('save', channelData, { isQuickAdd: true })
+}
 
 // 服务类型选项 - 根据渠道类型动态显示
 const serviceTypeOptions = computed(() => {
@@ -513,7 +772,13 @@ const subtitleClasses = computed(() => {
 })
 
 const isFormValid = computed(() => {
-  return form.name.trim() && form.serviceType && form.baseUrl.trim() && isValidUrl(form.baseUrl)
+  return (
+    form.name.trim() &&
+    form.serviceType &&
+    form.baseUrl.trim() &&
+    isValidUrl(form.baseUrl) &&
+    form.apiKeys.length > 0
+  )
 })
 
 // 工具函数
@@ -567,6 +832,12 @@ const resetForm = () => {
   errors.name = ''
   errors.serviceType = ''
   errors.baseUrl = ''
+
+  // 重置快速添加模式数据
+  quickInput.value = ''
+  detectedBaseUrl.value = ''
+  detectedApiKeys.value = []
+  randomSuffix.value = generateRandomString(6)
 }
 
 const loadChannelData = (channel: Channel) => {
@@ -731,8 +1002,12 @@ watch(
   newShow => {
     if (newShow) {
       if (props.channel) {
+        // 编辑模式：使用表单模式
+        isQuickMode.value = false
         loadChannelData(props.channel)
       } else {
+        // 添加模式：默认使用快速模式
+        isQuickMode.value = true
         resetForm()
       }
     }
@@ -791,5 +1066,31 @@ onUnmounted(() => {
   font-weight: 600;
   letter-spacing: 0.2px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+}
+
+/* 快速添加模式样式 */
+.quick-input-textarea :deep(textarea) {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.detection-status-card {
+  background: rgba(var(--v-theme-surface-variant), 0.3);
+}
+
+.mode-toggle-btn {
+  text-transform: none;
+}
+
+/* 亮色模式下按钮在 primary 背景上显示白色 */
+.bg-primary .mode-toggle-btn {
+  color: white !important;
+  border-color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.bg-primary .mode-toggle-btn:hover {
+  background-color: rgba(255, 255, 255, 0.15) !important;
+  border-color: white !important;
 }
 </style>

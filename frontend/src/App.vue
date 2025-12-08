@@ -446,7 +446,7 @@ const refreshChannels = async () => {
   }
 }
 
-const saveChannel = async (channel: Omit<Channel, 'index' | 'latency' | 'status'>) => {
+const saveChannel = async (channel: Omit<Channel, 'index' | 'latency' | 'status'>, options?: { isQuickAdd?: boolean }) => {
   try {
     const isResponses = activeTab.value === 'responses'
     if (editingChannel.value) {
@@ -463,6 +463,46 @@ const saveChannel = async (channel: Omit<Channel, 'index' | 'latency' | 'status'
         await api.addChannel(channel)
       }
       showToast('渠道添加成功', 'success')
+
+      // 快速添加模式：将新渠道设为第一优先级并设置5分钟促销期
+      if (options?.isQuickAdd) {
+        await refreshChannels() // 先刷新获取新渠道的 index
+        const data = isResponses ? responsesChannelsData.value : channelsData.value
+
+        // 找到新添加的渠道（应该是列表中 index 最大的 active 状态渠道）
+        const activeChannels = data.channels?.filter(ch => ch.status !== 'disabled') || []
+        if (activeChannels.length > 0) {
+          // 新添加的渠道会分配到最大的 index
+          const newChannel = activeChannels.reduce((max, ch) => ch.index > max.index ? ch : max, activeChannels[0])
+
+          try {
+            // 1. 重新排序：将新渠道放到第一位
+            const otherIndexes = activeChannels
+              .filter(ch => ch.index !== newChannel.index)
+              .sort((a, b) => (a.priority ?? a.index) - (b.priority ?? b.index))
+              .map(ch => ch.index)
+            const newOrder = [newChannel.index, ...otherIndexes]
+
+            if (isResponses) {
+              await api.reorderResponsesChannels(newOrder)
+            } else {
+              await api.reorderChannels(newOrder)
+            }
+
+            // 2. 设置5分钟促销期（300秒）
+            if (isResponses) {
+              await api.setResponsesChannelPromotion(newChannel.index, 300)
+            } else {
+              await api.setChannelPromotion(newChannel.index, 300)
+            }
+
+            showToast(`渠道 ${channel.name} 已设为最高优先级，5分钟内优先使用`, 'info')
+          } catch (err) {
+            console.warn('设置快速添加优先级失败:', err)
+            // 不影响主流程，只是提示
+          }
+        }
+      }
     }
     showAddChannelModal.value = false
     editingChannel.value = null

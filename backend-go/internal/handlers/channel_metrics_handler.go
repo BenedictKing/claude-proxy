@@ -3,6 +3,7 @@ package handlers
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/BenedictKing/claude-proxy/internal/metrics"
 	"github.com/BenedictKing/claude-proxy/internal/scheduler"
@@ -104,4 +105,94 @@ func GetSchedulerStats(sch *scheduler.ChannelScheduler) gin.HandlerFunc {
 
 		c.JSON(200, stats)
 	}
+}
+
+// SetChannelPromotion 设置渠道促销期
+// 促销期内的渠道会被优先选择，忽略 trace 亲和性
+func SetChannelPromotion(cfgManager ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		idStr := c.Param("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "无效的渠道 ID"})
+			return
+		}
+
+		var req struct {
+			Duration int `json:"duration"` // 促销期时长（秒），0 表示清除
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": "无效的请求参数"})
+			return
+		}
+
+		// 调用配置管理器设置促销期
+		duration := time.Duration(req.Duration) * time.Second
+		if err := cfgManager.SetChannelPromotion(id, duration); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		if req.Duration <= 0 {
+			c.JSON(200, gin.H{
+				"success": true,
+				"message": "渠道促销期已清除",
+			})
+		} else {
+			c.JSON(200, gin.H{
+				"success":  true,
+				"message":  "渠道促销期已设置",
+				"duration": req.Duration,
+			})
+		}
+	}
+}
+
+// SetResponsesChannelPromotion 设置 Responses 渠道促销期
+func SetResponsesChannelPromotion(cfgManager ResponsesConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		idStr := c.Param("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "无效的渠道 ID"})
+			return
+		}
+
+		var req struct {
+			Duration int `json:"duration"` // 促销期时长（秒），0 表示清除
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": "无效的请求参数"})
+			return
+		}
+
+		duration := time.Duration(req.Duration) * time.Second
+		if err := cfgManager.SetResponsesChannelPromotion(id, duration); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		if req.Duration <= 0 {
+			c.JSON(200, gin.H{
+				"success": true,
+				"message": "Responses 渠道促销期已清除",
+			})
+		} else {
+			c.JSON(200, gin.H{
+				"success":  true,
+				"message":  "Responses 渠道促销期已设置",
+				"duration": req.Duration,
+			})
+		}
+	}
+}
+
+// ConfigManager 促销期配置管理接口
+type ConfigManager interface {
+	SetChannelPromotion(index int, duration time.Duration) error
+}
+
+// ResponsesConfigManager Responses 渠道促销期配置管理接口
+type ResponsesConfigManager interface {
+	SetResponsesChannelPromotion(index int, duration time.Duration) error
 }

@@ -25,8 +25,9 @@ type UpstreamConfig struct {
 	InsecureSkipVerify bool              `json:"insecureSkipVerify,omitempty"`
 	ModelMapping       map[string]string `json:"modelMapping,omitempty"`
 	// 多渠道调度相关字段
-	Priority int    `json:"priority"` // 渠道优先级（数字越小优先级越高，默认按索引）
-	Status   string `json:"status"`   // 渠道状态：active（正常）, suspended（暂停）, disabled（备用池）
+	Priority       int        `json:"priority"`                 // 渠道优先级（数字越小优先级越高，默认按索引）
+	Status         string     `json:"status"`                   // 渠道状态：active（正常）, suspended（暂停）, disabled（备用池）
+	PromotionUntil *time.Time `json:"promotionUntil,omitempty"` // 促销期截止时间，在此期间内优先使用此渠道（忽略trace亲和）
 }
 
 // UpstreamUpdate 用于部分更新 UpstreamConfig
@@ -40,8 +41,9 @@ type UpstreamUpdate struct {
 	InsecureSkipVerify *bool             `json:"insecureSkipVerify"`
 	ModelMapping       map[string]string `json:"modelMapping"`
 	// 多渠道调度相关字段
-	Priority *int    `json:"priority"`
-	Status   *string `json:"status"`
+	Priority       *int       `json:"priority"`
+	Status         *string    `json:"status"`
+	PromotionUntil *time.Time `json:"promotionUntil"`
 }
 
 // Config 配置结构
@@ -661,6 +663,9 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) error
 	if updates.Status != nil {
 		upstream.Status = *updates.Status
 	}
+	if updates.PromotionUntil != nil {
+		upstream.PromotionUntil = updates.PromotionUntil
+	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return err
@@ -1092,6 +1097,9 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 	if updates.Status != nil {
 		upstream.Status = *updates.Status
 	}
+	if updates.PromotionUntil != nil {
+		upstream.PromotionUntil = updates.PromotionUntil
+	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return err
@@ -1331,4 +1339,81 @@ func GetChannelPriority(upstream *UpstreamConfig, index int) int {
 		return index
 	}
 	return upstream.Priority
+}
+
+// SetChannelPromotion 设置渠道促销期
+// duration 为促销持续时间，传入 0 表示清除促销期
+func (cm *ConfigManager) SetChannelPromotion(index int, duration time.Duration) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if index < 0 || index >= len(cm.config.Upstream) {
+		return fmt.Errorf("无效的上游索引: %d", index)
+	}
+
+	if duration <= 0 {
+		cm.config.Upstream[index].PromotionUntil = nil
+		log.Printf("已清除渠道 [%d] %s 的促销期", index, cm.config.Upstream[index].Name)
+	} else {
+		promotionEnd := time.Now().Add(duration)
+		cm.config.Upstream[index].PromotionUntil = &promotionEnd
+		log.Printf("🎉 已设置渠道 [%d] %s 进入促销期，截止: %s", index, cm.config.Upstream[index].Name, promotionEnd.Format(time.RFC3339))
+	}
+
+	return cm.saveConfigLocked(cm.config)
+}
+
+// SetResponsesChannelPromotion 设置 Responses 渠道促销期
+func (cm *ConfigManager) SetResponsesChannelPromotion(index int, duration time.Duration) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if index < 0 || index >= len(cm.config.ResponsesUpstream) {
+		return fmt.Errorf("无效的 Responses 上游索引: %d", index)
+	}
+
+	if duration <= 0 {
+		cm.config.ResponsesUpstream[index].PromotionUntil = nil
+		log.Printf("已清除 Responses 渠道 [%d] %s 的促销期", index, cm.config.ResponsesUpstream[index].Name)
+	} else {
+		promotionEnd := time.Now().Add(duration)
+		cm.config.ResponsesUpstream[index].PromotionUntil = &promotionEnd
+		log.Printf("🎉 已设置 Responses 渠道 [%d] %s 进入促销期，截止: %s", index, cm.config.ResponsesUpstream[index].Name, promotionEnd.Format(time.RFC3339))
+	}
+
+	return cm.saveConfigLocked(cm.config)
+}
+
+// IsChannelInPromotion 检查渠道是否处于促销期
+func IsChannelInPromotion(upstream *UpstreamConfig) bool {
+	if upstream.PromotionUntil == nil {
+		return false
+	}
+	return time.Now().Before(*upstream.PromotionUntil)
+}
+
+// GetPromotedChannel 获取当前处于促销期的渠道索引（返回优先级最高的）
+func (cm *ConfigManager) GetPromotedChannel() (int, bool) {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	for i, upstream := range cm.config.Upstream {
+		if IsChannelInPromotion(&upstream) && GetChannelStatus(&upstream) == "active" {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
+// GetPromotedResponsesChannel 获取当前处于促销期的 Responses 渠道索引
+func (cm *ConfigManager) GetPromotedResponsesChannel() (int, bool) {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	for i, upstream := range cm.config.ResponsesUpstream {
+		if IsChannelInPromotion(&upstream) && GetChannelStatus(&upstream) == "active" {
+			return i, true
+		}
+	}
+	return -1, false
 }

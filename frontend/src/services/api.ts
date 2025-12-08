@@ -371,6 +371,24 @@ class ApiService {
   async getResponsesChannelMetrics(): Promise<ChannelMetrics[]> {
     return this.request('/responses/channels/metrics')
   }
+
+  // ============== 促销期管理 API ==============
+
+  // 设置 Messages 渠道促销期
+  async setChannelPromotion(channelId: number, durationSeconds: number): Promise<void> {
+    await this.request(`/channels/${channelId}/promotion`, {
+      method: 'POST',
+      body: JSON.stringify({ duration: durationSeconds })
+    })
+  }
+
+  // 设置 Responses 渠道促销期
+  async setResponsesChannelPromotion(channelId: number, durationSeconds: number): Promise<void> {
+    await this.request(`/responses/channels/${channelId}/promotion`, {
+      method: 'POST',
+      body: JSON.stringify({ duration: durationSeconds })
+    })
+  }
 }
 
 export const api = new ApiService()

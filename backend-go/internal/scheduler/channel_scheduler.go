@@ -52,7 +52,7 @@ type SelectionResult struct {
 }
 
 // SelectChannel 选择最佳渠道
-// 优先级: Trace亲和 > 失败率检查 > 渠道优先级顺序
+// 优先级: 促销期渠道 > Trace亲和（促销渠道失败时回退） > 渠道优先级顺序
 func (s *ChannelScheduler) SelectChannel(
 	ctx context.Context,
 	userID string,
@@ -71,7 +71,24 @@ func (s *ChannelScheduler) SelectChannel(
 	// 获取对应类型的指标管理器
 	metricsManager := s.getMetricsManager(isResponses)
 
-	// 1. 检查 Trace 亲和性
+	// 0. 检查促销期渠道（最高优先级）
+	promotedChannel := s.findPromotedChannel(activeChannels, isResponses)
+	if promotedChannel != nil && !failedChannels[promotedChannel.Index] {
+		// 促销渠道存在且未失败，检查是否健康
+		if metricsManager.IsChannelHealthy(promotedChannel.Index) {
+			upstream := s.getUpstreamByIndex(promotedChannel.Index, isResponses)
+			if upstream != nil && len(upstream.APIKeys) > 0 {
+				log.Printf("🎉 促销期优先选择渠道: [%d] %s (user: %s)", promotedChannel.Index, upstream.Name, maskUserID(userID))
+				return &SelectionResult{
+					Upstream:     upstream,
+					ChannelIndex: promotedChannel.Index,
+					Reason:       "promotion_priority",
+				}, nil
+			}
+		}
+	}
+
+	// 1. 检查 Trace 亲和性（促销渠道失败时或无促销渠道时）
 	if userID != "" {
 		if preferredIdx, ok := s.traceAffinity.GetPreferredChannel(userID); ok {
 			for _, ch := range activeChannels {
@@ -125,6 +142,21 @@ func (s *ChannelScheduler) SelectChannel(
 
 	// 3. 所有健康渠道都失败，选择失败率最低的作为降级
 	return s.selectFallbackChannel(activeChannels, failedChannels, isResponses)
+}
+
+// findPromotedChannel 查找处于促销期的渠道
+func (s *ChannelScheduler) findPromotedChannel(activeChannels []ChannelInfo, isResponses bool) *ChannelInfo {
+	for i := range activeChannels {
+		ch := &activeChannels[i]
+		if ch.Status != "active" {
+			continue
+		}
+		upstream := s.getUpstreamByIndex(ch.Index, isResponses)
+		if upstream != nil && config.IsChannelInPromotion(upstream) {
+			return ch
+		}
+	}
+	return nil
 }
 
 // selectFallbackChannel 选择降级渠道（失败率最低的）

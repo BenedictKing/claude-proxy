@@ -162,6 +162,20 @@
                     </template>
                     <v-list-item-title>移至备用池</v-list-item-title>
                   </v-list-item>
+                  <v-list-item
+                    @click="handleDeleteChannel(element)"
+                    :disabled="!canDeleteChannel(element)"
+                  >
+                    <template #prepend>
+                      <v-icon size="small" :color="canDeleteChannel(element) ? 'error' : 'grey'">mdi-delete</v-icon>
+                    </template>
+                    <v-list-item-title>
+                      删除
+                      <span v-if="!canDeleteChannel(element)" class="text-caption text-disabled ml-1">
+                        (至少保留一个)
+                      </span>
+                    </v-list-item-title>
+                  </v-list-item>
                 </v-list>
               </v-menu>
             </div>
@@ -427,6 +441,32 @@ const resumeChannel = async (channelId: number) => {
   } catch (error) {
     console.error('Failed to resume channel:', error)
   }
+}
+
+// 判断渠道是否可以删除
+// 规则：故障转移序列中至少要保留一个 active 状态的渠道
+const canDeleteChannel = (channel: Channel): boolean => {
+  // 统计当前 active 状态的渠道数量
+  const activeCount = activeChannels.value.filter(
+    ch => ch.status === 'active' || ch.status === undefined || ch.status === ''
+  ).length
+
+  // 如果要删除的是 active 渠道，且只剩一个 active，则不允许删除
+  const isActive = channel.status === 'active' || channel.status === undefined || channel.status === ''
+  if (isActive && activeCount <= 1) {
+    return false
+  }
+
+  return true
+}
+
+// 处理删除渠道
+const handleDeleteChannel = (channel: Channel) => {
+  if (!canDeleteChannel(channel)) {
+    emit('error', '无法删除：故障转移序列中至少需要保留一个活跃渠道')
+    return
+  }
+  emit('delete', channel.index)
 }
 
 // 组件挂载时加载指标
