@@ -35,6 +35,14 @@ if (import.meta.env.DEV) {
 export type ChannelStatus = 'active' | 'suspended' | 'disabled'
 
 // 渠道指标
+// 分时段统计
+export interface TimeWindowStats {
+  requestCount: number
+  successCount: number
+  failureCount: number
+  successRate: number
+}
+
 export interface ChannelMetrics {
   channelIndex: number
   requestCount: number
@@ -46,6 +54,13 @@ export interface ChannelMetrics {
   latency: number           // ms
   lastSuccessAt?: string
   lastFailureAt?: string
+  // 分时段统计 (15m, 1h, 6h, 24h)
+  timeWindows?: {
+    '15m': TimeWindowStats
+    '1h': TimeWindowStats
+    '6h': TimeWindowStats
+    '24h': TimeWindowStats
+  }
 }
 
 export interface Channel {

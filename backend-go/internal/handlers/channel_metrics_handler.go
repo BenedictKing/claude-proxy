@@ -24,6 +24,9 @@ func GetChannelMetrics(metricsManager *metrics.MetricsManager) gin.HandlerFunc {
 			failureRate := metricsManager.CalculateFailureRate(m.ChannelIndex)
 			successRate := (1 - failureRate) * 100
 
+			// 获取分时段统计
+			timeWindowStats := metricsManager.GetAllTimeWindowStats(m.ChannelIndex)
+
 			item := gin.H{
 				"channelIndex":        m.ChannelIndex,
 				"requestCount":        m.RequestCount,
@@ -33,6 +36,7 @@ func GetChannelMetrics(metricsManager *metrics.MetricsManager) gin.HandlerFunc {
 				"errorRate":           failureRate * 100,
 				"consecutiveFailures": m.ConsecutiveFailures,
 				"latency":             0, // 需要从其他地方获取
+				"timeWindows":         timeWindowStats,
 			}
 
 			if m.LastSuccessAt != nil {

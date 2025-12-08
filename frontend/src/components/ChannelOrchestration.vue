@@ -79,16 +79,41 @@
             <!-- 指标显示 -->
             <div class="channel-metrics">
               <template v-if="getChannelMetrics(element.index)">
-                <v-chip
-                  size="x-small"
-                  :color="getSuccessRateColor(getChannelMetrics(element.index)?.successRate)"
-                  variant="tonal"
-                >
-                  {{ getChannelMetrics(element.index)?.successRate?.toFixed(0) || 0 }}%
-                </v-chip>
-                <span class="text-caption text-medium-emphasis ml-2">
-                  {{ getChannelMetrics(element.index)?.requestCount || 0 }} 请求
-                </span>
+                <v-tooltip location="top" :open-delay="200">
+                  <template #activator="{ props: tooltipProps }">
+                    <div v-bind="tooltipProps" class="d-flex align-center metrics-display">
+                      <v-chip
+                        size="x-small"
+                        :color="getSuccessRateColor(get15mStats(element.index)?.successRate)"
+                        variant="tonal"
+                      >
+                        {{ get15mStats(element.index)?.successRate?.toFixed(0) || 100 }}%
+                      </v-chip>
+                      <span class="text-caption text-medium-emphasis ml-2">
+                        {{ get15mStats(element.index)?.requestCount || 0 }} 请求
+                      </span>
+                    </div>
+                  </template>
+                  <div class="metrics-tooltip">
+                    <div class="text-caption font-weight-bold mb-1">请求统计</div>
+                    <div class="metrics-tooltip-row">
+                      <span>15分钟:</span>
+                      <span>{{ get15mStats(element.index)?.requestCount || 0 }} 请求 ({{ get15mStats(element.index)?.successRate?.toFixed(0) || 100 }}%)</span>
+                    </div>
+                    <div class="metrics-tooltip-row">
+                      <span>1小时:</span>
+                      <span>{{ get1hStats(element.index)?.requestCount || 0 }} 请求 ({{ get1hStats(element.index)?.successRate?.toFixed(0) || 100 }}%)</span>
+                    </div>
+                    <div class="metrics-tooltip-row">
+                      <span>6小时:</span>
+                      <span>{{ get6hStats(element.index)?.requestCount || 0 }} 请求 ({{ get6hStats(element.index)?.successRate?.toFixed(0) || 100 }}%)</span>
+                    </div>
+                    <div class="metrics-tooltip-row">
+                      <span>24小时:</span>
+                      <span>{{ get24hStats(element.index)?.requestCount || 0 }} 请求 ({{ get24hStats(element.index)?.successRate?.toFixed(0) || 100 }}%)</span>
+                    </div>
+                  </div>
+                </v-tooltip>
               </template>
               <span v-else class="text-caption text-medium-emphasis">--</span>
             </div>
@@ -342,6 +367,23 @@ watch(() => props.channels, initActiveChannels, { immediate: true, deep: true })
 // 获取渠道指标
 const getChannelMetrics = (channelIndex: number): ChannelMetrics | undefined => {
   return metrics.value.find(m => m.channelIndex === channelIndex)
+}
+
+// 获取分时段统计的辅助方法
+const get15mStats = (channelIndex: number) => {
+  return getChannelMetrics(channelIndex)?.timeWindows?.['15m']
+}
+
+const get1hStats = (channelIndex: number) => {
+  return getChannelMetrics(channelIndex)?.timeWindows?.['1h']
+}
+
+const get6hStats = (channelIndex: number) => {
+  return getChannelMetrics(channelIndex)?.timeWindows?.['6h']
+}
+
+const get24hStats = (channelIndex: number) => {
+  return getChannelMetrics(channelIndex)?.timeWindows?.['24h']
 }
 
 // 获取成功率颜色
@@ -783,5 +825,31 @@ defineExpose({
     flex: 1;
     justify-content: flex-end;
   }
+}
+
+/* 指标显示样式 */
+.metrics-display {
+  cursor: help;
+}
+
+/* 指标 tooltip 样式 */
+.metrics-tooltip {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.metrics-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 2px 0;
+}
+
+.metrics-tooltip-row span:first-child {
+  color: rgba(var(--v-theme-on-surface), 0.7);
+}
+
+.metrics-tooltip-row span:last-child {
+  font-weight: 500;
 }
 </style>

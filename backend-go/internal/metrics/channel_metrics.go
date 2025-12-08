@@ -6,6 +6,12 @@ import (
 	"time"
 )
 
+// RequestRecord 带时间戳的请求记录
+type RequestRecord struct {
+	Timestamp time.Time
+	Success   bool
+}
+
 // ChannelMetrics 渠道指标
 type ChannelMetrics struct {
 	ChannelIndex        int        `json:"channelIndex"`
@@ -18,6 +24,16 @@ type ChannelMetrics struct {
 	CircuitBrokenAt     *time.Time `json:"circuitBrokenAt,omitempty"` // 熔断开始时间
 	// 滑动窗口记录（最近 N 次请求的结果）
 	recentResults []bool // true=success, false=failure
+	// 带时间戳的请求记录（用于分时段统计，保留24小时）
+	requestHistory []RequestRecord
+}
+
+// TimeWindowStats 分时段统计
+type TimeWindowStats struct {
+	RequestCount int64   `json:"requestCount"`
+	SuccessCount int64   `json:"successCount"`
+	FailureCount int64   `json:"failureCount"`
+	SuccessRate  float64 `json:"successRate"`
 }
 
 // MetricsManager 指标管理器
@@ -98,6 +114,9 @@ func (m *MetricsManager) RecordSuccess(channelIndex int) {
 
 	// 更新滑动窗口
 	m.appendToWindow(metrics, true)
+
+	// 记录带时间戳的请求
+	m.appendToHistory(metrics, now, true)
 }
 
 // RecordFailure 记录失败请求
@@ -121,6 +140,9 @@ func (m *MetricsManager) RecordFailure(channelIndex int) {
 		metrics.CircuitBrokenAt = &now
 		log.Printf("⚡ 渠道 [%d] 进入熔断状态（失败率: %.1f%%）", channelIndex, m.calculateFailureRateInternal(metrics)*100)
 	}
+
+	// 记录带时间戳的请求
+	m.appendToHistory(metrics, now, false)
 }
 
 // isCircuitBroken 判断是否达到熔断条件（内部方法，调用前需持有锁）
@@ -152,6 +174,74 @@ func (m *MetricsManager) appendToWindow(metrics *ChannelMetrics, success bool) {
 	// 保持窗口大小
 	if len(metrics.recentResults) > m.windowSize {
 		metrics.recentResults = metrics.recentResults[1:]
+	}
+}
+
+// appendToHistory 向历史记录添加请求（保留24小时）
+func (m *MetricsManager) appendToHistory(metrics *ChannelMetrics, timestamp time.Time, success bool) {
+	metrics.requestHistory = append(metrics.requestHistory, RequestRecord{
+		Timestamp: timestamp,
+		Success:   success,
+	})
+
+	// 清理超过24小时的记录
+	cutoff := time.Now().Add(-24 * time.Hour)
+	newStart := 0
+	for i, record := range metrics.requestHistory {
+		if record.Timestamp.After(cutoff) {
+			newStart = i
+			break
+		}
+	}
+	if newStart > 0 {
+		metrics.requestHistory = metrics.requestHistory[newStart:]
+	}
+}
+
+// GetTimeWindowStats 获取指定时间窗口内的统计
+func (m *MetricsManager) GetTimeWindowStats(channelIndex int, duration time.Duration) TimeWindowStats {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	metrics, exists := m.metrics[channelIndex]
+	if !exists {
+		return TimeWindowStats{SuccessRate: 100}
+	}
+
+	cutoff := time.Now().Add(-duration)
+	var requestCount, successCount, failureCount int64
+
+	for _, record := range metrics.requestHistory {
+		if record.Timestamp.After(cutoff) {
+			requestCount++
+			if record.Success {
+				successCount++
+			} else {
+				failureCount++
+			}
+		}
+	}
+
+	successRate := float64(100)
+	if requestCount > 0 {
+		successRate = float64(successCount) / float64(requestCount) * 100
+	}
+
+	return TimeWindowStats{
+		RequestCount: requestCount,
+		SuccessCount: successCount,
+		FailureCount: failureCount,
+		SuccessRate:  successRate,
+	}
+}
+
+// GetAllTimeWindowStats 获取所有时间窗口的统计（15m, 1h, 6h, 24h）
+func (m *MetricsManager) GetAllTimeWindowStats(channelIndex int) map[string]TimeWindowStats {
+	return map[string]TimeWindowStats{
+		"15m": m.GetTimeWindowStats(channelIndex, 15*time.Minute),
+		"1h":  m.GetTimeWindowStats(channelIndex, 1*time.Hour),
+		"6h":  m.GetTimeWindowStats(channelIndex, 6*time.Hour),
+		"24h": m.GetTimeWindowStats(channelIndex, 24*time.Hour),
 	}
 }
 
