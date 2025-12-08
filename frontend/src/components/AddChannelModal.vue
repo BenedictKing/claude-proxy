@@ -518,8 +518,22 @@ const quickInput = ref('')
 const detectedBaseUrl = ref('')
 const detectedApiKeys = ref<string[]>([])
 
-// 切换模式
+// 切换模式时，将快速模式检测到的值同步到详细表单，但不清空快速模式输入
 const toggleMode = () => {
+  if (isQuickMode.value) {
+    // 从快速模式切换到详细模式：始终用检测到的值覆盖表单
+    if (detectedBaseUrl.value) {
+      form.baseUrl = detectedBaseUrl.value
+    }
+    if (detectedApiKeys.value.length > 0) {
+      form.apiKeys = [...detectedApiKeys.value]
+    }
+    if (generatedChannelName.value) {
+      form.name = generatedChannelName.value
+    }
+    form.serviceType = getDefaultServiceTypeValue()
+  }
+  // 切换回快速模式时不做任何清理，保留 quickInput 原有内容
   isQuickMode.value = !isQuickMode.value
 }
 
