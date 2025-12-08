@@ -1,6 +1,6 @@
 <template>
   <div class="status-badge" :class="[statusClass, { 'has-metrics': showMetrics }]">
-    <v-tooltip location="top">
+    <v-tooltip location="top" content-class="status-tooltip">
       <template #activator="{ props: tooltipProps }">
         <div class="badge-content" v-bind="tooltipProps">
           <v-icon :size="iconSize" class="status-icon">{{ statusIcon }}</v-icon>
@@ -339,5 +339,24 @@ const formatTime = (dateStr: string): string => {
 
 .tooltip-content {
   max-width: 200px;
+}
+</style>
+
+<!-- 非 scoped 样式 - 用于 teleport 到 body 的 tooltip -->
+<style>
+/* Status tooltip 样式 - 复古像素主题 */
+.status-tooltip {
+  background: #f5f5f5 !important;
+  color: #1a1a1a !important;
+  border: 1px solid #333 !important;
+  border-radius: 0 !important;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.2) !important;
+  padding: 8px 12px !important;
+}
+
+.v-theme--dark .status-tooltip {
+  background: #2d2d2d !important;
+  color: #f5f5f5 !important;
+  border-color: #555 !important;
 }
 </style>
