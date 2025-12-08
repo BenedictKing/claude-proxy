@@ -17,7 +17,7 @@ COPY --from=bun-runtime /usr/local/bin/bunx /usr/local/bin/bunx
 ENV PATH="/usr/local/bin:${PATH}"
 
 # 复制项目必要文件（.dockerignore 会排除不需要的文件）
-COPY Makefile VERSION tsconfig.json ./
+COPY Makefile VERSION ./
 COPY frontend/ ./frontend/
 COPY backend-go/ ./backend-go/
 
@@ -25,10 +25,10 @@ COPY backend-go/ ./backend-go/
 RUN cd frontend && bun install
 
 # 安装 Go 后端依赖
-RUN make deps-backend
+RUN cd backend-go && go mod download
 
 # 使用 Makefile 构建整个项目（前端 + 后端）
-RUN make build-current
+RUN make build
 
 # --- 阶段 3: 运行时 ---
 FROM alpine:latest AS runtime
