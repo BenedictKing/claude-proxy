@@ -82,7 +82,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd frontend
-          bun install --frozen-lockfile
+          bun install
 
       - name: Build frontend
         run: |

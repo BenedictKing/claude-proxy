@@ -82,7 +82,7 @@ jobs:
       - name: Build frontend
         run: |
           cd frontend
-          bun install --frozen-lockfile
+          bun install
           bun run build
 
       - name: Copy frontend to backend
