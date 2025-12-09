@@ -1,0 +1,63 @@
+name: Release MacOS Build
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Build Frontend
+        run: bun install && bun run build
+        working-directory: ./frontend
+
+      - name: Copy Frontend to Backend
+        run: |
+          rm -rf backend-go/frontend/dist
+          mkdir -p backend-go/frontend/dist
+          cp -r frontend/dist/* backend-go/frontend/dist/
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+
+      - name: Build Backend arm64
+        run: |
+          go mod download
+          CGO_ENABLED=0 go build -ldflags "-s -w -X main.Version=${{ github.ref_name }} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GitCommit=${{ github.sha }}" -o claude-proxy-darwin-arm64
+        working-directory: ./backend-go
+
+      - name: Build Backend amd64
+        run: |
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w -X main.Version=${{ github.ref_name }} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GitCommit=${{ github.sha }}" -o claude-proxy-darwin-amd64
+        working-directory: ./backend-go
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            backend-go/claude-proxy-darwin-arm64
+            backend-go/claude-proxy-darwin-amd64
+          draft: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
