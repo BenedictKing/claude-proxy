@@ -164,7 +164,12 @@ func main() {
 	fmt.Printf("📋 Claude Messages: POST /v1/messages\n")
 	fmt.Printf("📋 Codex Responses: POST /v1/responses\n")
 	fmt.Printf("💚 健康检查: GET %s\n", envCfg.HealthCheckPath)
-	fmt.Printf("📊 环境: %s\n\n", envCfg.Env)
+	fmt.Printf("📊 环境: %s\n", envCfg.Env)
+	// 检查是否使用默认密码，给予提示
+	if envCfg.ProxyAccessKey == "your-proxy-access-key" {
+		fmt.Printf("🔑 访问密钥: your-proxy-access-key (默认值，建议通过 .env 文件修改)\n")
+	}
+	fmt.Printf("\n")
 
 	if err := r.Run(addr); err != nil {
 		log.Fatalf("服务器启动失败: %v", err)
