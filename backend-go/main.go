@@ -159,8 +159,8 @@ func main() {
 	if GitCommit != "unknown" {
 		fmt.Printf("🔖 Git提交: %s\n", GitCommit)
 	}
-	fmt.Printf("📍 本地地址: http://localhost:%d\n", envCfg.Port)
 	fmt.Printf("🌐 管理界面: http://localhost:%d\n", envCfg.Port)
+	fmt.Printf("📍 API地址: http://localhost:%d/v1\n", envCfg.Port)
 	fmt.Printf("📋 Claude Messages: POST /v1/messages\n")
 	fmt.Printf("📋 Codex Responses: POST /v1/responses\n")
 	fmt.Printf("💚 健康检查: GET %s\n", envCfg.HealthCheckPath)

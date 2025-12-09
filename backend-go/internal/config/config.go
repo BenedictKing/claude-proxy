@@ -117,15 +117,7 @@ func (cm *ConfigManager) loadConfig() error {
 	// 如果配置文件不存在，创建默认配置
 	if _, err := os.Stat(cm.configFile); os.IsNotExist(err) {
 		defaultConfig := Config{
-			Upstream: []UpstreamConfig{
-				{
-					Name:        "Gemini",
-					BaseURL:     "https://generativelanguage.googleapis.com/v1beta",
-					APIKeys:     []string{},
-					ServiceType: "gemini",
-					Status:      "active",
-				},
-			},
+			Upstream:                 []UpstreamConfig{},
 			CurrentUpstream:          0,
 			LoadBalance:              "failover",
 			ResponsesUpstream:        []UpstreamConfig{},
