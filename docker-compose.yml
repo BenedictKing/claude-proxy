@@ -1,12 +1,14 @@
 services:
   # Claude API 代理服务 (一体化架构: 后端 + 前端界面)
   claude-proxy:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      # 中国网络使用:
-      # dockerfile: Dockerfile_China
-      target: runtime
+    image: crpi-i19l8zl0ugidq97v.cn-hangzhou.personal.cr.aliyuncs.com/bene/claude-proxy:latest
+    # 本地构建使用以下配置（注释掉 image 行）:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    #   # 中国网络使用:
+    #   # dockerfile: Dockerfile_China
+    #   target: runtime
     container_name: claude-proxy
     ports:
       # 统一端口：前端界面 + API + 管理接口

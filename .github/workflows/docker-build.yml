@@ -3,15 +3,16 @@ name: Build Docker Image
 on:
   push:
     tags:
-      - "v*"
+      - 'v*'
+
+env:
+  REGISTRY: crpi-i19l8zl0ugidq97v.cn-hangzhou.personal.cr.aliyuncs.com
+  IMAGE_NAME: bene/claude-proxy
 
 jobs:
   build_docker_image:
     name: Build Docker Image
     runs-on: ubuntu-latest
-    permissions:
-      packages: write
-      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -22,19 +23,19 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Container Registry
+      - name: Log in to Aliyun Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ALIYUN_CR_USERNAME }}
+          password: ${{ secrets.ALIYUN_CR_PASSWORD }}
 
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: |
-            ghcr.io/${{ github.repository }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           flavor: |
             latest=false
           tags: |
@@ -45,6 +46,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
