@@ -106,15 +106,25 @@ ENABLE_WEB_UI=true
 **适合所有用户，无需安装依赖，一键启动**
 
 ```bash
-# 1. 克隆项目
+# 直接拉取预构建镜像并运行
+docker run -d \
+  --name claude-proxy \
+  -p 3000:3000 \
+  -e PROXY_ACCESS_KEY=your-super-strong-secret-key \
+  -v $(pwd)/.config:/app/.config \
+  crpi-i19l8zl0ugidq97v.cn-hangzhou.personal.cr.aliyuncs.com/bene/claude-proxy:latest
+```
+
+或使用 docker-compose：
+
+```bash
+# 1. 克隆项目（仅需 docker-compose.yml）
 git clone https://github.com/BenedictKing/claude-proxy
 cd claude-proxy
 
-# 2. 配置环境变量（重要！）
-cp backend-go/.env.example backend-go/.env
-# 编辑 backend-go/.env 设置强密钥：PROXY_ACCESS_KEY=your-super-strong-secret-key
+# 2. 修改 docker-compose.yml 中的 PROXY_ACCESS_KEY
 
-# 3. 启动服务（国内用户使用 Dockerfile_China）
+# 3. 启动服务
 docker-compose up -d
 ```
 
@@ -162,7 +172,19 @@ make help          # 查看所有可用命令
 
 ## 🐳 Docker 部署详细配置
 
-### 自定义部署
+### 镜像地址
+
+预构建镜像托管在阿里云容器镜像服务：
+
+```
+crpi-i19l8zl0ugidq97v.cn-hangzhou.personal.cr.aliyuncs.com/bene/claude-proxy:latest
+```
+
+支持 `linux/amd64` 和 `linux/arm64` 架构。
+
+### 自定义部署（本地构建）
+
+如需自定义或二次开发，可使用本地构建：
 
 ```yaml
 # docker-compose.yml
@@ -170,7 +192,7 @@ services:
   claude-proxy:
     build:
       context: .
-      dockerfile: Dockerfile_China # 国内网络使用
+      dockerfile: Dockerfile  # 国内网络使用 Dockerfile_China
     container_name: claude-proxy
     ports:
       - '3000:3000' # 统一端口
@@ -679,7 +701,7 @@ docker-compose up -d --build
 | `release-linux.yml` | 构建 Linux amd64/arm64 版本 |
 | `release-macos.yml` | 构建 macOS amd64/arm64 版本 |
 | `release-windows.yml` | 构建 Windows amd64/arm64 版本 |
-| `docker-build.yml` | 构建多平台 Docker 镜像 (ghcr.io) |
+| `docker-build.yml` | 构建多平台 Docker 镜像 (阿里云 ACR) |
 
 ### 发布新版本
 
