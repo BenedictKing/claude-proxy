@@ -65,6 +65,155 @@ make clean                # 清理构建产物
 
 ---
 
+## 🪟 Windows 环境配置
+
+Windows 用户在开发本项目时可能遇到一些工具缺失的问题，以下是常见问题的解决方案。
+
+### 问题 1: 没有 `make` 命令
+
+Windows 默认不包含 `make` 工具，有以下几种解决方案：
+
+#### 方案 A: 安装 Make (推荐)
+
+```powershell
+# 使用 Chocolatey (推荐)
+choco install make
+
+# 或使用 Scoop
+scoop install make
+
+# 或使用 winget
+winget install GnuWin32.Make
+```
+
+#### 方案 B: 直接使用 Go 命令 (无需安装 make)
+
+```powershell
+cd backend-go
+
+# 替代 make dev (需要先安装 air: go install github.com/air-verse/air@latest)
+air
+
+# 替代 make build
+go build -o claude-proxy.exe .
+
+# 替代 make run
+go run main.go
+
+# 替代 make test
+go test ./...
+
+# 替代 make fmt
+go fmt ./...
+```
+
+### 问题 2: 没有 `vite` 命令
+
+这是因为前端依赖未安装，`vite` 是项目的开发依赖。
+
+#### 解决步骤
+
+```powershell
+cd frontend
+
+# 使用 bun 安装依赖 (推荐)
+bun install
+
+# 或使用 npm
+npm install
+
+# 安装完成后运行开发服务器
+bun run dev    # 或 npm run dev
+```
+
+### Windows 完整开发环境配置
+
+#### 1. 安装包管理器 (可选但推荐)
+
+```powershell
+# 安装 Scoop (无需管理员权限)
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+irm get.scoop.sh | iex
+
+# 或安装 Chocolatey (需要管理员权限)
+Set-ExecutionPolicy Bypass -Scope Process -Force
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+```
+
+#### 2. 安装开发工具
+
+```powershell
+# 使用 Scoop
+scoop install git go bun make
+
+# 或使用 Chocolatey
+choco install git golang bun make -y
+```
+
+#### 3. 验证安装
+
+```powershell
+go version      # 应显示 go1.22+
+bun --version   # 应显示版本号
+make --version  # 应显示 GNU Make 版本
+git --version   # 应显示 git 版本
+```
+
+### Windows 快速启动流程
+
+```powershell
+# 1. 克隆项目
+git clone https://github.com/BenedictKing/claude-proxy
+cd claude-proxy
+
+# 2. 安装前端依赖
+cd frontend
+bun install    # 或 npm install
+
+# 3. 配置环境变量
+cd ../backend-go
+copy .env.example .env
+# 编辑 .env 文件设置 PROXY_ACCESS_KEY
+
+# 4. 启动后端 (选择以下方式之一)
+
+# 方式 A: 使用 make (如果已安装)
+make dev
+
+# 方式 B: 直接使用 Go
+go run main.go
+
+# 5. 另开终端，启动前端开发服务器 (如需单独开发前端)
+cd frontend
+bun run dev
+```
+
+### Windows 常见问题
+
+#### PowerShell 执行策略限制
+
+```powershell
+# 如果遇到脚本执行限制，以管理员身份运行
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+#### 端口被占用
+
+```powershell
+# 查看端口占用
+netstat -ano | findstr :3000
+
+# 终止占用进程 (替换 PID 为实际进程 ID)
+taskkill /PID <PID> /F
+```
+
+#### 路径包含空格
+
+确保项目路径不包含空格和中文字符，推荐使用如 `C:\projects\claude-proxy` 这样的路径。
+
+---
+
 ## 方式二：🔧 Node.js/Bun 开发（备用）
 
 **仅推荐用于前端开发或 JavaScript/TypeScript 调试**

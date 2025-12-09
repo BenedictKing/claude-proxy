@@ -1,0 +1,250 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v2.0.30-go)'
+        required: false
+        default: ''
+
+env:
+  GO_VERSION: '1.22'
+  BUN_VERSION: '1.1.0'
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux builds
+          - os: linux
+            arch: amd64
+            runner: ubuntu-latest
+            ext: ''
+          - os: linux
+            arch: arm64
+            runner: ubuntu-latest
+            ext: ''
+          # Windows builds
+          - os: windows
+            arch: amd64
+            runner: ubuntu-latest
+            ext: '.exe'
+          - os: windows
+            arch: arm64
+            runner: ubuntu-latest
+            ext: '.exe'
+          # macOS builds
+          - os: darwin
+            arch: amd64
+            runner: macos-latest
+            ext: ''
+          - os: darwin
+            arch: arm64
+            runner: macos-latest
+            ext: ''
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: backend-go/go.sum
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [ -n "${{ github.ref_name }}" ] && [[ "${{ github.ref_name }}" == v* ]]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION=$(cat VERSION 2>/dev/null || echo "v0.0.0-dev")
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          bun install --frozen-lockfile
+          bun run build
+
+      - name: Copy frontend to backend
+        run: |
+          rm -rf backend-go/frontend/dist
+          mkdir -p backend-go/frontend/dist
+          cp -r frontend/dist/* backend-go/frontend/dist/
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 0
+        run: |
+          cd backend-go
+          VERSION=${{ steps.version.outputs.version }}
+          BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
+          GIT_COMMIT=${{ github.sha }}
+
+          LDFLAGS="-X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT} -s -w"
+
+          OUTPUT_NAME="claude-proxy-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
+
+          go build -ldflags="${LDFLAGS}" -o "../dist/${OUTPUT_NAME}" .
+
+          echo "Built: dist/${OUTPUT_NAME}"
+          ls -la ../dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-proxy-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/claude-proxy-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+          retention-days: 7
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [ -n "${{ github.ref_name }}" ] && [[ "${{ github.ref_name }}" == v* ]]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION=$(cat VERSION 2>/dev/null || echo "v0.0.0-dev")
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+
+          # Move and compress binaries
+          for dir in artifacts/claude-proxy-*; do
+            if [ -d "$dir" ]; then
+              PLATFORM=$(basename "$dir" | sed 's/claude-proxy-//')
+              BINARY=$(ls "$dir"/claude-proxy-* 2>/dev/null | head -1)
+
+              if [ -n "$BINARY" ]; then
+                FILENAME=$(basename "$BINARY")
+
+                # Copy binary
+                cp "$BINARY" "release/$FILENAME"
+
+                # Create compressed archive
+                cd release
+                if [[ "$FILENAME" == *.exe ]]; then
+                  zip "${FILENAME%.exe}.zip" "$FILENAME"
+                else
+                  tar -czvf "${FILENAME}.tar.gz" "$FILENAME"
+                fi
+                cd ..
+              fi
+            fi
+          done
+
+          echo "Release assets:"
+          ls -la release/
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum claude-proxy-* > checksums.txt
+          cat checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          generate_release_notes: true
+          files: |
+            release/claude-proxy-*
+            release/checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    name: Build and Push Docker Image
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION="${{ github.ref_name }}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          # Extract major.minor for docker tags
+          MAJOR_MINOR=$(echo "$VERSION" | sed -E 's/^v([0-9]+\.[0-9]+).*/\1/')
+          echo "major_minor=$MAJOR_MINOR" >> $GITHUB_OUTPUT
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.major_minor }}
+            ghcr.io/${{ github.repository }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

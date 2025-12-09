@@ -201,6 +201,7 @@ vite.config.ts.timestamp-*
 # Custom
 docs/
 .claude/
+!.claude/skills/version-bump
 
 .aider*
 *.log

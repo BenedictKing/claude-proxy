@@ -1,5 +1,10 @@
 # Claude API 代理服务器
 
+[![CI](https://github.com/BenedictKing/claude-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/BenedictKing/claude-proxy/actions/workflows/ci.yml)
+[![Release](https://github.com/BenedictKing/claude-proxy/actions/workflows/release.yml/badge.svg)](https://github.com/BenedictKing/claude-proxy/actions/workflows/release.yml)
+[![GitHub release](https://img.shields.io/github/v/release/BenedictKing/claude-proxy)](https://github.com/BenedictKing/claude-proxy/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 一个高性能的 Claude API 代理服务器，支持多种上游 AI 服务提供商（OpenAI、Gemini、自定义 API），提供负载均衡、多 API 密钥管理和统一入口访问。
 
 ## 🚀 功能特性
@@ -51,8 +56,48 @@
 
 | 部署方式       | 启动时间 | 内存占用 | 适用场景           |
 | -------------- | -------- | -------- | ------------------ |
+| **📥 直接下载** | 即时     | ~20MB    | 最快上手、无需构建 |
 | **🐳 Docker**  | ~2s      | ~25MB    | 生产环境、一键部署 |
-| **🚀 Go 版本** | <100ms   | ~20MB    | 高性能、原生部署   |
+| **🚀 源码构建** | <100ms   | ~20MB    | 开发调试、自定义   |
+
+---
+
+### 方式零：📥 直接下载可执行文件（最快）
+
+**无需安装任何依赖，下载即用**
+
+前往 [Releases 页面](https://github.com/BenedictKing/claude-proxy/releases/latest) 下载适合您系统的版本：
+
+| 操作系统 | 架构 | 文件名 |
+|---------|------|--------|
+| **Windows** | x64 | `claude-proxy-windows-amd64.exe` |
+| **Windows** | ARM64 | `claude-proxy-windows-arm64.exe` |
+| **macOS** | Intel | `claude-proxy-darwin-amd64` |
+| **macOS** | Apple Silicon | `claude-proxy-darwin-arm64` |
+| **Linux** | x64 | `claude-proxy-linux-amd64` |
+| **Linux** | ARM64 | `claude-proxy-linux-arm64` |
+
+**快速启动：**
+
+```bash
+# Linux / macOS
+chmod +x claude-proxy-*
+./claude-proxy-linux-amd64  # 或对应的文件名
+
+# Windows (PowerShell)
+.\claude-proxy-windows-amd64.exe
+```
+
+**配置方式：**
+
+1. 创建 `.env` 文件（与可执行文件同目录）:
+```bash
+PROXY_ACCESS_KEY=your-super-strong-secret-key
+PORT=3000
+ENABLE_WEB_UI=true
+```
+
+2. 启动服务后访问 `http://localhost:3000`
 
 ---
 
@@ -82,9 +127,9 @@ docker-compose up -d
 
 ---
 
-### 方式二：🚀 Go 原生部署（推荐）
+### 方式二：🚀 源码构建部署
 
-**适合追求极致性能的用户，启动时间 <100ms**
+**适合追求极致性能或需要自定义的用户**
 
 ```bash
 # 1. 克隆项目
@@ -110,6 +155,8 @@ make help          # 查看所有可用命令
 ```
 
 > 📚 更多配置管理命令详见 `make help`
+
+> 🪟 **Windows 用户**: 如果遇到 `make` 或 `vite` 命令找不到的问题，请参考 [DEVELOPMENT.md#windows-环境配置](DEVELOPMENT.md#-windows-环境配置)
 
 ---
 
