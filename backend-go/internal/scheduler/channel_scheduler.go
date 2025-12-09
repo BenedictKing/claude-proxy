@@ -84,8 +84,14 @@ func (s *ChannelScheduler) SelectChannel(
 					ChannelIndex: promotedChannel.Index,
 					Reason:       "promotion_priority",
 				}, nil
+			} else if upstream != nil {
+				log.Printf("⚠️ 促销渠道 [%d] %s 无可用密钥，跳过", promotedChannel.Index, upstream.Name)
 			}
+		} else {
+			log.Printf("⚠️ 促销渠道 [%d] %s 不健康，跳过", promotedChannel.Index, promotedChannel.Name)
 		}
+	} else if promotedChannel != nil {
+		log.Printf("⚠️ 促销渠道 [%d] %s 已在本次请求中失败，跳过", promotedChannel.Index, promotedChannel.Name)
 	}
 
 	// 1. 检查 Trace 亲和性（促销渠道失败时或无促销渠道时）
@@ -152,8 +158,11 @@ func (s *ChannelScheduler) findPromotedChannel(activeChannels []ChannelInfo, isR
 			continue
 		}
 		upstream := s.getUpstreamByIndex(ch.Index, isResponses)
-		if upstream != nil && config.IsChannelInPromotion(upstream) {
-			return ch
+		if upstream != nil {
+			if config.IsChannelInPromotion(upstream) {
+				log.Printf("🎉 找到促销渠道: [%d] %s (promotionUntil: %v)", ch.Index, upstream.Name, upstream.PromotionUntil)
+				return ch
+			}
 		}
 	}
 	return nil

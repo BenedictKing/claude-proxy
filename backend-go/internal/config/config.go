@@ -1352,6 +1352,12 @@ func (cm *ConfigManager) SetChannelPromotion(index int, duration time.Duration) 
 		cm.config.Upstream[index].PromotionUntil = nil
 		log.Printf("已清除渠道 [%d] %s 的促销期", index, cm.config.Upstream[index].Name)
 	} else {
+		// 清除其他渠道的促销期（同一时间只允许一个促销渠道）
+		for i := range cm.config.Upstream {
+			if i != index && cm.config.Upstream[i].PromotionUntil != nil {
+				cm.config.Upstream[i].PromotionUntil = nil
+			}
+		}
 		promotionEnd := time.Now().Add(duration)
 		cm.config.Upstream[index].PromotionUntil = &promotionEnd
 		log.Printf("🎉 已设置渠道 [%d] %s 进入促销期，截止: %s", index, cm.config.Upstream[index].Name, promotionEnd.Format(time.RFC3339))
@@ -1373,6 +1379,12 @@ func (cm *ConfigManager) SetResponsesChannelPromotion(index int, duration time.D
 		cm.config.ResponsesUpstream[index].PromotionUntil = nil
 		log.Printf("已清除 Responses 渠道 [%d] %s 的促销期", index, cm.config.ResponsesUpstream[index].Name)
 	} else {
+		// 清除其他渠道的促销期（同一时间只允许一个促销渠道）
+		for i := range cm.config.ResponsesUpstream {
+			if i != index && cm.config.ResponsesUpstream[i].PromotionUntil != nil {
+				cm.config.ResponsesUpstream[i].PromotionUntil = nil
+			}
+		}
 		promotionEnd := time.Now().Add(duration)
 		cm.config.ResponsesUpstream[index].PromotionUntil = &promotionEnd
 		log.Printf("🎉 已设置 Responses 渠道 [%d] %s 进入促销期，截止: %s", index, cm.config.ResponsesUpstream[index].Name, promotionEnd.Format(time.RFC3339))
