@@ -44,6 +44,7 @@ jobs:
 
       - name: Build Backend amd64
         run: |
+          go mod tidy
           go mod download
           go build -ldflags "-s -w -X main.Version=${{ github.ref_name }} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GitCommit=${{ github.sha }}" -o claude-proxy-windows-amd64.exe
         working-directory: ./backend-go

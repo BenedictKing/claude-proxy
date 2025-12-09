@@ -41,6 +41,7 @@ jobs:
 
       - name: Build Backend arm64
         run: |
+          go mod tidy
           go mod download
           CGO_ENABLED=0 go build -ldflags "-s -w -X main.Version=${{ github.ref_name }} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GitCommit=${{ github.sha }}" -o claude-proxy-darwin-arm64
         working-directory: ./backend-go
