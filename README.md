@@ -668,6 +668,33 @@ git pull origin main
 docker-compose up -d --build
 ```
 
+## 🔧 CI/CD 自动化
+
+项目配置了 GitHub Actions 自动化流程：
+
+### 自动发布 (推送 tag 触发)
+
+| Workflow | 说明 |
+|----------|------|
+| `release-linux.yml` | 构建 Linux amd64/arm64 版本 |
+| `release-macos.yml` | 构建 macOS amd64/arm64 版本 |
+| `release-windows.yml` | 构建 Windows amd64/arm64 版本 |
+| `docker-build.yml` | 构建多平台 Docker 镜像 (ghcr.io) |
+
+### 发布新版本
+
+```bash
+# 1. 更新版本号
+echo "vX.Y.Z-go" > VERSION
+
+# 2. 提交并打 tag
+git add . && git commit -m "chore: bump version to vX.Y.Z-go"
+git tag vX.Y.Z-go
+git push origin main --tags
+```
+
+发布为 **draft** 模式，需在 GitHub Releases 页面手动确认发布。
+
 ## 📖 使用指南
 
 ### 命令行配置工具
