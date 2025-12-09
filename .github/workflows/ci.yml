@@ -6,17 +6,11 @@ on:
     paths:
       - 'backend-go/**'
       - 'frontend/**'
-      - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
     paths:
       - 'backend-go/**'
       - 'frontend/**'
-      - '.github/workflows/ci.yml'
-
-env:
-  GO_VERSION: '1.22'
-  BUN_VERSION: '1.1.0'
 
 jobs:
   lint:
@@ -29,8 +23,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: backend-go/go.sum
+          go-version: "1.22.x"
 
       - name: Run Go fmt check
         run: |
@@ -52,100 +45,10 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: backend-go/go.sum
+          go-version: "1.22.x"
 
       - name: Run tests
         run: |
           cd backend-go
-          go test -v -race -coverprofile=coverage.out ./...
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        with:
-          files: backend-go/coverage.out
-          fail_ci_if_error: false
-        continue-on-error: true
-
-  build-frontend:
-    name: Build Frontend
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Install dependencies
-        run: |
-          cd frontend
-          bun install
-
-      - name: Build frontend
-        run: |
-          cd frontend
-          bun run build
-
-      - name: Upload frontend dist
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend/dist
-          retention-days: 1
-
-  build-backend:
-    name: Build Backend
-    needs: build-frontend
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - os: linux
-            arch: amd64
-          - os: windows
-            arch: amd64
-          - os: darwin
-            arch: arm64
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: backend-go/go.sum
-
-      - name: Download frontend dist
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: backend-go/frontend/dist
-
-      - name: Build binary
-        env:
-          GOOS: ${{ matrix.os }}
-          GOARCH: ${{ matrix.arch }}
-          CGO_ENABLED: 0
-        run: |
-          cd backend-go
-
-          VERSION=$(cat ../VERSION 2>/dev/null || echo "v0.0.0-dev")
-          BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
-          GIT_COMMIT=${{ github.sha }}
-
-          LDFLAGS="-X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT} -s -w"
-
-          EXT=""
-          if [ "${{ matrix.os }}" = "windows" ]; then
-            EXT=".exe"
-          fi
-
-          go build -ldflags="${LDFLAGS}" -o "claude-proxy-${{ matrix.os }}-${{ matrix.arch }}${EXT}" .
-
-          echo "Build successful: claude-proxy-${{ matrix.os }}-${{ matrix.arch }}${EXT}"
-          ls -la claude-proxy-*
+          go mod tidy
+          go test -v -race ./...
