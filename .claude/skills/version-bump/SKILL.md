@@ -31,8 +31,8 @@ allowed-tools: Bash, Read, Write
 ## 项目版本文件
 
 - **位置**: `VERSION` (项目根目录)
-- **格式**: `v{major}.{minor}.{patch}-go`
-- **示例**: `v2.0.15-go`
+- **格式**: `v{major}.{minor}.{patch}`
+- **示例**: `v2.0.15`
 
 ## 执行步骤
 
@@ -46,17 +46,17 @@ cat VERSION
 
 根据用户指定的升级类型计算：
 
-| 当前版本   | 升级类型     | 新版本     |
-| ---------- | ------------ | ---------- |
-| v2.0.14-go | patch (默认) | v2.0.15-go |
-| v2.0.14-go | minor        | v2.1.0-go  |
-| v2.0.14-go | major        | v3.0.0-go  |
-| v2.0.14-go | 2.1.5        | v2.1.5-go  |
+| 当前版本 | 升级类型     | 新版本   |
+| -------- | ------------ | -------- |
+| v2.0.14  | patch (默认) | v2.0.15  |
+| v2.0.14  | minor        | v2.1.0   |
+| v2.0.14  | major        | v3.0.0   |
+| v2.0.14  | 2.1.5        | v2.1.5   |
 
 ### 3. 更新版本文件
 
 ```bash
-echo "v{新版本号}-go" > VERSION
+echo "v{新版本号}" > VERSION
 ```
 
 ### 4. 验证更新
@@ -109,8 +109,8 @@ git push origin v{新版本号}
 
 **自动执行流程**:
 
-1. 读取 VERSION: `v2.0.14-go`
-2. 计算新版本: `v2.0.15-go`
+1. 读取 VERSION: `v2.0.14`
+2. 计算新版本: `v2.0.15`
 3. 更新 VERSION 文件
 4. 执行 git commit
 
@@ -120,8 +120,8 @@ git push origin v{新版本号}
 
 **自动执行流程**:
 
-1. 读取 VERSION: `v2.0.14-go`
-2. 计算新版本: `v2.1.0-go`
+1. 读取 VERSION: `v2.0.14`
+2. 计算新版本: `v2.1.0`
 3. 更新 VERSION 文件
 4. 执行 git commit
 
@@ -131,8 +131,8 @@ git push origin v{新版本号}
 
 **自动执行流程**:
 
-1. 读取 VERSION: `v2.0.14-go`
-2. 使用指定版本: `v3.0.0-go`
+1. 读取 VERSION: `v2.0.14`
+2. 使用指定版本: `v3.0.0`
 3. 更新 VERSION 文件
 4. 执行 git commit
 
@@ -142,11 +142,11 @@ git push origin v{新版本号}
 
 **自动执行流程**:
 
-1. 读取 VERSION: `v2.0.29-go`
-2. 计算新版本: `v2.0.30-go`
+1. 读取 VERSION: `v2.0.29`
+2. 计算新版本: `v2.0.30`
 3. 更新 VERSION 文件
 4. 执行 git commit
-5. 创建 git tag: `v2.0.30-go`
+5. 创建 git tag: `v2.0.30`
 6. 推送 commit 和 tag 到远程
 7. GitHub Actions 自动触发，编译 6 平台版本并发布到 Releases
 
@@ -156,8 +156,8 @@ git push origin v{新版本号}
 
 **自动执行流程**:
 
-1. 读取当前 VERSION: `v2.0.29-go`
-2. 创建 git tag: `v2.0.29-go`
+1. 读取当前 VERSION: `v2.0.29`
+2. 创建 git tag: `v2.0.29`
 3. 推送 tag 到远程
 
 ## 输出格式
@@ -166,8 +166,8 @@ git push origin v{新版本号}
 
 ```
 版本升级完成:
-- 原版本: v2.0.14-go
-- 新版本: v2.0.15-go
+- 原版本: v2.0.14
+- 新版本: v2.0.15
 - 升级类型: patch
 
 是否提交 git? (Y/n)
@@ -177,12 +177,12 @@ git push origin v{新版本号}
 
 ```
 版本升级完成:
-- 原版本: v2.0.29-go
-- 新版本: v2.0.30-go
+- 原版本: v2.0.29
+- 新版本: v2.0.30
 - 升级类型: patch
 
 ✅ Git commit 已创建
-✅ Git tag v2.0.30-go 已创建
+✅ Git tag v2.0.30 已创建
 
 是否推送到远程仓库? (Y/n)
   - 推送后将自动触发 GitHub Actions
@@ -210,7 +210,7 @@ git push origin v{新版本号}
 
 ## 注意事项
 
-- 版本号格式必须保持 `v{x}.{y}.{z}-go` 的后缀
+- 版本号格式为 `v{x}.{y}.{z}`（无后缀）
 - 提交前会显示所有待提交的变更供用户确认
 - 如果有其他未提交的变更，会一并提交
 - 遵循 Conventional Commits 规范，使用 `chore: bump version` 格式

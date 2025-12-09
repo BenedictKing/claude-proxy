@@ -685,11 +685,11 @@ docker-compose up -d --build
 
 ```bash
 # 1. 更新版本号
-echo "vX.Y.Z-go" > VERSION
+echo "vX.Y.Z" > VERSION
 
 # 2. 提交并打 tag
-git add . && git commit -m "chore: bump version to vX.Y.Z-go"
-git tag vX.Y.Z-go
+git add . && git commit -m "chore: bump version to vX.Y.Z"
+git tag vX.Y.Z
 git push origin main --tags
 ```
 
