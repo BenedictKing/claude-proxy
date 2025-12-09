@@ -24,6 +24,14 @@ type EnvConfig struct {
 	RateLimitMaxRequests int
 	HealthCheckEnabled   bool
 	HealthCheckPath      string
+	// 日志文件相关配置
+	LogDir        string
+	LogFile       string
+	LogMaxSize    int  // 单个日志文件最大大小 (MB)
+	LogMaxBackups int  // 保留的旧日志文件最大数量
+	LogMaxAge     int  // 保留的旧日志文件最大天数
+	LogCompress   bool // 是否压缩旧日志文件
+	LogToConsole  bool // 是否同时输出到控制台
 }
 
 // NewEnvConfig 创建环境配置
@@ -52,6 +60,14 @@ func NewEnvConfig() *EnvConfig {
 		RateLimitMaxRequests: getEnvAsInt("RATE_LIMIT_MAX_REQUESTS", 100),
 		HealthCheckEnabled:   getEnv("HEALTH_CHECK_ENABLED", "true") != "false",
 		HealthCheckPath:      getEnv("HEALTH_CHECK_PATH", "/health"),
+		// 日志文件配置
+		LogDir:        getEnv("LOG_DIR", "logs"),
+		LogFile:       getEnv("LOG_FILE", "app.log"),
+		LogMaxSize:    getEnvAsInt("LOG_MAX_SIZE", 100),    // 默认 100MB
+		LogMaxBackups: getEnvAsInt("LOG_MAX_BACKUPS", 10),  // 默认保留 10 个
+		LogMaxAge:     getEnvAsInt("LOG_MAX_AGE", 30),      // 默认保留 30 天
+		LogCompress:   getEnv("LOG_COMPRESS", "true") != "false",
+		LogToConsole:  getEnv("LOG_TO_CONSOLE", "true") != "false",
 	}
 }
 

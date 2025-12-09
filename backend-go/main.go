@@ -8,6 +8,7 @@ import (
 
 	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/handlers"
+	"github.com/BenedictKing/claude-proxy/internal/logger"
 	"github.com/BenedictKing/claude-proxy/internal/metrics"
 	"github.com/BenedictKing/claude-proxy/internal/middleware"
 	"github.com/BenedictKing/claude-proxy/internal/scheduler"
@@ -30,6 +31,21 @@ func main() {
 
 	// 初始化配置管理器
 	envCfg := config.NewEnvConfig()
+
+	// 初始化日志系统（必须在其他初始化之前）
+	logCfg := &logger.Config{
+		LogDir:     envCfg.LogDir,
+		LogFile:    envCfg.LogFile,
+		MaxSize:    envCfg.LogMaxSize,
+		MaxBackups: envCfg.LogMaxBackups,
+		MaxAge:     envCfg.LogMaxAge,
+		Compress:   envCfg.LogCompress,
+		Console:    envCfg.LogToConsole,
+	}
+	if err := logger.Setup(logCfg); err != nil {
+		log.Fatalf("初始化日志系统失败: %v", err)
+	}
+
 	cfgManager, err := config.NewConfigManager(".config/config.json")
 	if err != nil {
 		log.Fatalf("初始化配置管理器失败: %v", err)
@@ -160,7 +176,7 @@ func main() {
 		fmt.Printf("🔖 Git提交: %s\n", GitCommit)
 	}
 	fmt.Printf("🌐 管理界面: http://localhost:%d\n", envCfg.Port)
-	fmt.Printf("📍 API地址: http://localhost:%d/v1\n", envCfg.Port)
+	fmt.Printf("📍 API 地址: http://localhost:%d/v1\n", envCfg.Port)
 	fmt.Printf("📋 Claude Messages: POST /v1/messages\n")
 	fmt.Printf("📋 Codex Responses: POST /v1/responses\n")
 	fmt.Printf("💚 健康检查: GET %s\n", envCfg.HealthCheckPath)
