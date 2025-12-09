@@ -176,6 +176,12 @@
                     </template>
                     <v-list-item-title>测试延迟</v-list-item-title>
                   </v-list-item>
+                  <v-list-item @click="setPromotion(element)">
+                    <template #prepend>
+                      <v-icon size="small" color="info">mdi-rocket-launch</v-icon>
+                    </template>
+                    <v-list-item-title>抢优先级 (5分钟)</v-list-item-title>
+                  </v-list-item>
                   <v-divider />
                   <v-list-item v-if="element.status === 'suspended'" @click="resumeChannel(element.index)">
                     <template #prepend>
@@ -320,6 +326,7 @@ const emit = defineEmits<{
   (e: 'ping', channelId: number): void
   (e: 'refresh'): void
   (e: 'error', message: string): void
+  (e: 'success', message: string): void
 }>()
 
 // 状态
@@ -484,6 +491,25 @@ const resumeChannel = async (channelId: number) => {
     await setChannelStatus(channelId, 'active')
   } catch (error) {
     console.error('Failed to resume channel:', error)
+  }
+}
+
+// 设置渠道促销期（抢优先级）
+const setPromotion = async (channel: Channel) => {
+  try {
+    const PROMOTION_DURATION = 300 // 5分钟
+    if (props.channelType === 'messages') {
+      await api.setChannelPromotion(channel.index, PROMOTION_DURATION)
+    } else {
+      await api.setResponsesChannelPromotion(channel.index, PROMOTION_DURATION)
+    }
+    emit('refresh')
+    // 通知用户
+    emit('success', `渠道 ${channel.name} 已设为最高优先级，5分钟内优先使用`)
+  } catch (error) {
+    console.error('Failed to set promotion:', error)
+    const errorMessage = error instanceof Error ? error.message : '未知错误'
+    emit('error', `设置优先级失败: ${errorMessage}`)
   }
 }
 

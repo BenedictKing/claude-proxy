@@ -258,6 +258,7 @@
           @ping="pingChannel"
           @refresh="refreshChannels"
           @error="showErrorToast"
+          @success="showSuccessToast"
           class="mb-6"
         />
 
@@ -431,6 +432,11 @@ const handleError = (error: unknown, defaultMessage: string) => {
 // 直接显示错误消息（供子组件事件使用）
 const showErrorToast = (message: string) => {
   showToast(message, 'error')
+}
+
+// 直接显示成功消息（供子组件事件使用）
+const showSuccessToast = (message: string) => {
+  showToast(message, 'info')
 }
 
 // 主要功能函数
@@ -1304,7 +1310,7 @@ onUnmounted(() => {
 /* 渠道名称 */
 .channel-name {
   font-size: 14px !important;
-  font-weight: 700;
+  font-weight: 700 !important;
   color: rgb(var(--v-theme-on-surface));
 }
 
@@ -1320,13 +1326,6 @@ onUnmounted(() => {
 
 .v-theme--dark .channel-name .text-caption.text-medium-emphasis {
   border-color: rgba(255, 255, 255, 0.5);
-}
-
-/* 官网跳转图标 */
-.channel-name .v-btn--icon {
-  width: 24px !important;
-  height: 24px !important;
-  opacity: 0.4;
 }
 
 /* 隐藏描述文字 */
