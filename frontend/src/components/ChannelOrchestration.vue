@@ -82,51 +82,39 @@
                 <v-tooltip location="top" :open-delay="200">
                   <template #activator="{ props: tooltipProps }">
                     <div v-bind="tooltipProps" class="d-flex align-center metrics-display">
-                      <v-chip
-                        size="x-small"
-                        :color="getSuccessRateColor(get15mStats(element.index)?.successRate)"
-                        variant="tonal"
-                      >
-                        {{ get15mStats(element.index)?.successRate?.toFixed(0) || 100 }}%
-                      </v-chip>
-                      <span class="text-caption text-medium-emphasis ml-2">
-                        {{ get15mStats(element.index)?.requestCount || 0 }} 请求
-                      </span>
+                      <!-- 15分钟有请求时显示成功率，否则显示 -- -->
+                      <template v-if="get15mStats(element.index)?.requestCount">
+                        <v-chip
+                          size="x-small"
+                          :color="getSuccessRateColor(get15mStats(element.index)?.successRate)"
+                          variant="tonal"
+                        >
+                          {{ get15mStats(element.index)?.successRate?.toFixed(0) }}%
+                        </v-chip>
+                        <span class="text-caption text-medium-emphasis ml-2">
+                          {{ get15mStats(element.index)?.requestCount }} 请求
+                        </span>
+                      </template>
+                      <span v-else class="text-caption text-medium-emphasis">--</span>
                     </div>
                   </template>
                   <div class="metrics-tooltip">
                     <div class="text-caption font-weight-bold mb-1">请求统计</div>
                     <div class="metrics-tooltip-row">
                       <span>15分钟:</span>
-                      <span
-                        >{{ get15mStats(element.index)?.requestCount || 0 }} 请求 ({{
-                          get15mStats(element.index)?.successRate?.toFixed(0) || 100
-                        }}%)</span
-                      >
+                      <span>{{ formatStats(get15mStats(element.index)) }}</span>
                     </div>
                     <div class="metrics-tooltip-row">
                       <span>1小时:</span>
-                      <span
-                        >{{ get1hStats(element.index)?.requestCount || 0 }} 请求 ({{
-                          get1hStats(element.index)?.successRate?.toFixed(0) || 100
-                        }}%)</span
-                      >
+                      <span>{{ formatStats(get1hStats(element.index)) }}</span>
                     </div>
                     <div class="metrics-tooltip-row">
                       <span>6小时:</span>
-                      <span
-                        >{{ get6hStats(element.index)?.requestCount || 0 }} 请求 ({{
-                          get6hStats(element.index)?.successRate?.toFixed(0) || 100
-                        }}%)</span
-                      >
+                      <span>{{ formatStats(get6hStats(element.index)) }}</span>
                     </div>
                     <div class="metrics-tooltip-row">
                       <span>24小时:</span>
-                      <span
-                        >{{ get24hStats(element.index)?.requestCount || 0 }} 请求 ({{
-                          get24hStats(element.index)?.successRate?.toFixed(0) || 100
-                        }}%)</span
-                      >
+                      <span>{{ formatStats(get24hStats(element.index)) }}</span>
                     </div>
                   </div>
                 </v-tooltip>
@@ -311,7 +299,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import draggable from 'vuedraggable'
-import { api, type Channel, type ChannelMetrics, type ChannelStatus } from '../services/api'
+import { api, type Channel, type ChannelMetrics, type ChannelStatus, type TimeWindowStats } from '../services/api'
 import ChannelStatusBadge from './ChannelStatusBadge.vue'
 
 const props = defineProps<{
@@ -401,6 +389,12 @@ const getSuccessRateColor = (rate?: number): string => {
   if (rate >= 90) return 'success'
   if (rate >= 70) return 'warning'
   return 'error'
+}
+
+// 格式化统计数据：有请求显示"N 请求 (X%)"，无请求显示"--"
+const formatStats = (stats?: TimeWindowStats): string => {
+  if (!stats || !stats.requestCount) return '--'
+  return `${stats.requestCount} 请求 (${stats.successRate?.toFixed(0)}%)`
 }
 
 // 获取官网 URL（优先使用 website，否则从 baseUrl 提取域名）
