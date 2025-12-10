@@ -25,8 +25,10 @@ allowed-tools: Bash, Read, Write
 
 ### 发布选项
 
-- `--tag` 或 "并打 tag"、"创建 tag": 创建 git tag 并推送（触发 GitHub Actions 自动编译发布）
-- `--push` 或 "并推送"、"push": 推送 commit 到远程仓库
+> ⚠️ **重要**: 默认情况下，版本升级后必须创建 tag 并推送！只有推送 tag 才能触发 GitHub Actions 自动编译发布。除非用户明确说"不要 tag"或"--no-tag"，否则始终创建并推送 tag。
+
+- `--no-tag` 或 "不要 tag": 不创建 git tag（仅提交版本变更）
+- `--push` 或 "并推送"、"push": 推送 commit 到远程仓库（默认行为）
 
 ## 项目版本文件
 
@@ -81,23 +83,21 @@ git add -A
 git commit -m "chore: bump version to v{新版本号}"
 ```
 
-### 7. 创建 Tag（可选）
+### 7. 创建 Tag（默认必须执行）
 
-如果用户指定创建 tag：
+> ⚠️ 除非用户明确说"不要 tag"，否则必须创建 tag！
 
 ```bash
 git tag v{新版本号}
 ```
 
-### 8. 推送到远程（可选）
-
-如果用户指定推送：
+### 8. 推送到远程（默认必须执行）
 
 ```bash
 # 推送 commit
 git push origin main
 
-# 如果有 tag，推送 tag（触发 GitHub Actions 自动编译发布）
+# 推送 tag（触发 GitHub Actions 自动编译发布）
 git push origin v{新版本号}
 ```
 
@@ -105,7 +105,7 @@ git push origin v{新版本号}
 
 ### 场景 1：默认升级 patch 版本
 
-**用户输入**: "升级版本号并提交"
+**用户输入**: "升级版本号并提交" 或 "更新版本并推送"
 
 **自动执行流程**:
 
@@ -113,6 +113,8 @@ git push origin v{新版本号}
 2. 计算新版本: `v2.0.15`
 3. 更新 VERSION 文件
 4. 执行 git commit
+5. 创建 git tag: `v2.0.15`
+6. 推送 commit 和 tag 到远程
 
 ### 场景 2：升级 minor 版本
 

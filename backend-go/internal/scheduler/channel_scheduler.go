@@ -189,6 +189,10 @@ func (s *ChannelScheduler) selectFallbackChannel(
 		if failedChannels[ch.Index] {
 			continue
 		}
+		// 跳过非 active 状态的渠道
+		if ch.Status != "active" {
+			continue
+		}
 
 		failureRate := metricsManager.CalculateFailureRate(ch.Index)
 		if failureRate < bestFailureRate {
