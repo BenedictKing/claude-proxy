@@ -24,7 +24,6 @@ Claude API 代理服务器 - 支持多上游 AI 服务（OpenAI/Gemini/Claude）
 graph TD
     A["(根) claude-proxy"] --> B["backend-go"];
     A --> C["frontend"];
-    A --> D["backend (Node.js 备用)"];
 
     B --> B1["internal/"];
     B1 --> B11["handlers/"];
@@ -74,7 +73,7 @@ docker-compose up -d
 
 ```
 claude-proxy/
-├── backend-go/                 # Go 后端 (主要)
+├── backend-go/                 # Go 后端
 │   ├── main.go                # 入口
 │   └── internal/
 │       ├── handlers/          # HTTP 处理器 (proxy.go, responses.go, config.go)
@@ -85,12 +84,11 @@ claude-proxy/
 │       ├── middleware/        # 认证、CORS
 │       ├── scheduler/         # 多渠道调度器
 │       └── metrics/           # 渠道指标监控
-├── frontend/                   # Vue 3 + Vuetify 前端
-│   └── src/
-│       ├── components/        # Vue 组件
-│       ├── services/          # API 服务
-│       └── composables/       # 组合式函数
-└── backend/                    # Node.js 备用实现
+└── frontend/                   # Vue 3 + Vuetify 前端
+    └── src/
+        ├── components/        # Vue 组件
+        ├── services/          # API 服务
+        └── composables/       # 组合式函数
 ```
 
 ## 模块索引
@@ -99,7 +97,6 @@ claude-proxy/
 |------|------|------|------|------|
 | **Go 后端** | `backend-go/` | Go 1.22 | 核心代理服务、API 路由、协议转换 | [CLAUDE.md](backend-go/CLAUDE.md) |
 | **Vue 前端** | `frontend/` | TypeScript/Vue 3 | Web 管理界面、渠道配置 | [CLAUDE.md](frontend/CLAUDE.md) |
-| **Node 后端** | `backend/` | Node.js | 备用实现（已废弃） | - |
 
 ## 核心设计模式
 
