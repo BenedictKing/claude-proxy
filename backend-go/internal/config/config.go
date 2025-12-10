@@ -614,12 +614,13 @@ func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig) error {
 }
 
 // UpdateUpstream 更新上游
-func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) error {
+// 返回值：shouldResetMetrics 表示是否需要重置渠道指标（熔断状态）
+func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shouldResetMetrics bool, err error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
 	if index < 0 || index >= len(cm.config.Upstream) {
-		return fmt.Errorf("无效的上游索引: %d", index)
+		return false, fmt.Errorf("无效的上游索引: %d", index)
 	}
 
 	upstream := &cm.config.Upstream[index]
@@ -640,6 +641,15 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) error
 		upstream.Website = *updates.Website
 	}
 	if updates.APIKeys != nil {
+		// 只有单 key 场景且 key 被更换时，才自动激活并重置熔断
+		if len(upstream.APIKeys) == 1 && len(updates.APIKeys) == 1 &&
+			upstream.APIKeys[0] != updates.APIKeys[0] {
+			shouldResetMetrics = true
+			if upstream.Status == "suspended" {
+				upstream.Status = "active"
+				log.Printf("渠道 [%d] %s 已从暂停状态自动激活（单 key 更换）", index, upstream.Name)
+			}
+		}
 		upstream.APIKeys = updates.APIKeys
 	}
 	if updates.ModelMapping != nil {
@@ -659,11 +669,11 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) error
 	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
-		return err
+		return false, err
 	}
 
 	log.Printf("已更新上游: [%d] %s", index, cm.config.Upstream[index].Name)
-	return nil
+	return shouldResetMetrics, nil
 }
 
 // RemoveUpstream 删除上游
@@ -1058,12 +1068,13 @@ func (cm *ConfigManager) AddResponsesUpstream(upstream UpstreamConfig) error {
 }
 
 // UpdateResponsesUpstream 更新 Responses 上游
-func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpdate) error {
+// 返回值：shouldResetMetrics 表示是否需要重置渠道指标（熔断状态）
+func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpdate) (shouldResetMetrics bool, err error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
 	if index < 0 || index >= len(cm.config.ResponsesUpstream) {
-		return fmt.Errorf("无效的 Responses 上游索引: %d", index)
+		return false, fmt.Errorf("无效的 Responses 上游索引: %d", index)
 	}
 
 	upstream := &cm.config.ResponsesUpstream[index]
@@ -1084,6 +1095,15 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 		upstream.Website = *updates.Website
 	}
 	if updates.APIKeys != nil {
+		// 只有单 key 场景且 key 被更换时，才自动激活并重置熔断
+		if len(upstream.APIKeys) == 1 && len(updates.APIKeys) == 1 &&
+			upstream.APIKeys[0] != updates.APIKeys[0] {
+			shouldResetMetrics = true
+			if upstream.Status == "suspended" {
+				upstream.Status = "active"
+				log.Printf("Responses 渠道 [%d] %s 已从暂停状态自动激活（单 key 更换）", index, upstream.Name)
+			}
+		}
 		upstream.APIKeys = updates.APIKeys
 	}
 	if updates.ModelMapping != nil {
@@ -1103,11 +1123,11 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
-		return err
+		return false, err
 	}
 
 	log.Printf("已更新 Responses 上游: [%d] %s", index, cm.config.ResponsesUpstream[index].Name)
-	return nil
+	return shouldResetMetrics, nil
 }
 
 // RemoveResponsesUpstream 删除 Responses 上游

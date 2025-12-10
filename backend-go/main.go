@@ -98,7 +98,7 @@ func main() {
 		// 渠道管理 (兼容前端 /api/channels 路由)
 		apiGroup.GET("/channels", handlers.GetUpstreams(cfgManager))
 		apiGroup.POST("/channels", handlers.AddUpstream(cfgManager))
-		apiGroup.PUT("/channels/:id", handlers.UpdateUpstream(cfgManager))
+		apiGroup.PUT("/channels/:id", handlers.UpdateUpstream(cfgManager, channelScheduler))
 		apiGroup.DELETE("/channels/:id", handlers.DeleteUpstream(cfgManager))
 		apiGroup.POST("/channels/:id/keys", handlers.AddApiKey(cfgManager))
 		apiGroup.DELETE("/channels/:id/keys/:apiKey", handlers.DeleteApiKey(cfgManager))
@@ -116,7 +116,7 @@ func main() {
 		// Responses 渠道管理
 		apiGroup.GET("/responses/channels", handlers.GetResponsesUpstreams(cfgManager))
 		apiGroup.POST("/responses/channels", handlers.AddResponsesUpstream(cfgManager))
-		apiGroup.PUT("/responses/channels/:id", handlers.UpdateResponsesUpstream(cfgManager))
+		apiGroup.PUT("/responses/channels/:id", handlers.UpdateResponsesUpstream(cfgManager, channelScheduler))
 		apiGroup.DELETE("/responses/channels/:id", handlers.DeleteResponsesUpstream(cfgManager))
 		apiGroup.POST("/responses/channels/:id/keys", handlers.AddResponsesApiKey(cfgManager))
 		apiGroup.DELETE("/responses/channels/:id/keys/:apiKey", handlers.DeleteResponsesApiKey(cfgManager))

@@ -9,6 +9,7 @@ import (
 
 	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/httpclient" // 新增
+	"github.com/BenedictKing/claude-proxy/internal/scheduler"
 	"github.com/gin-gonic/gin"
 )
 
@@ -69,7 +70,8 @@ func AddUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
 }
 
 // UpdateUpstream 更新上游
-func UpdateUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
+// sch 用于在单 key 更换时重置熔断状态
+func UpdateUpstream(cfgManager *config.ConfigManager, sch *scheduler.ChannelScheduler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		idStr := c.Param("id")
 		id, err := strconv.Atoi(idStr)
@@ -84,13 +86,19 @@ func UpdateUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			return
 		}
 
-		if err := cfgManager.UpdateUpstream(id, updates); err != nil {
+		shouldResetMetrics, err := cfgManager.UpdateUpstream(id, updates)
+		if err != nil {
 			if strings.Contains(err.Error(), "无效的上游索引") {
 				c.JSON(404, gin.H{"error": "Upstream not found"})
 			} else {
 				c.JSON(500, gin.H{"error": "Failed to save config"})
 			}
 			return
+		}
+
+		// 单 key 更换时重置熔断状态
+		if shouldResetMetrics {
+			sch.ResetChannelMetrics(id, false)
 		}
 
 		cfg := cfgManager.GetConfig()
@@ -412,7 +420,8 @@ func AddResponsesUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
 }
 
 // UpdateResponsesUpstream 更新 Responses 上游
-func UpdateResponsesUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
+// sch 用于在单 key 更换时重置熔断状态
+func UpdateResponsesUpstream(cfgManager *config.ConfigManager, sch *scheduler.ChannelScheduler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		idStr := c.Param("id")
 		id, err := strconv.Atoi(idStr)
@@ -427,9 +436,15 @@ func UpdateResponsesUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			return
 		}
 
-		if err := cfgManager.UpdateResponsesUpstream(id, updates); err != nil {
+		shouldResetMetrics, err := cfgManager.UpdateResponsesUpstream(id, updates)
+		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
+		}
+
+		// 单 key 更换时重置熔断状态
+		if shouldResetMetrics {
+			sch.ResetChannelMetrics(id, true)
 		}
 
 		c.JSON(200, gin.H{"message": "Responses upstream updated successfully"})
