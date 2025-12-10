@@ -1,7 +1,5 @@
 # Claude API 代理服务器
 
-[![CI](https://github.com/BenedictKing/claude-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/BenedictKing/claude-proxy/actions/workflows/ci.yml)
-[![Release](https://github.com/BenedictKing/claude-proxy/actions/workflows/release.yml/badge.svg)](https://github.com/BenedictKing/claude-proxy/actions/workflows/release.yml)
 [![GitHub release](https://img.shields.io/github/v/release/BenedictKing/claude-proxy)](https://github.com/BenedictKing/claude-proxy/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
