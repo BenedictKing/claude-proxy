@@ -1,5 +1,6 @@
 import { createVuetify } from 'vuetify'
-import { aliases as defaultAliases, mdi } from 'vuetify/iconsets/mdi-svg'
+import { h } from 'vue'
+import type { IconSet, IconProps } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 
@@ -9,7 +10,7 @@ import 'vuetify/styles'
 // 从 @mdi/js 按需导入使用的图标 (SVG)
 // 📝 维护说明: 新增图标时需要:
 //    1. 从 @mdi/js 添加导入 (驼峰命名，如 mdiNewIcon)
-//    2. 在 customAliases 中添加映射 (如 'new-icon': mdiNewIcon)
+//    2. 在 iconMap 中添加映射 (如 'new-icon': mdiNewIcon)
 //    图标查找: https://pictogrammers.com/library/mdi/
 import {
   mdiSwapVerticalBold,
@@ -52,6 +53,9 @@ import {
   mdiServerNetwork,
   mdiHeartPulse,
   mdiChevronDown,
+  mdiChevronUp,
+  mdiChevronLeft,
+  mdiChevronRight,
   mdiTune,
   mdiRotateRight,
   mdiDice6,
@@ -67,26 +71,86 @@ import {
   mdiApi,
   mdiLightningBolt,
   mdiFormTextbox,
+  mdiMenuDown,
+  mdiMenuUp,
+  mdiCheckboxMarked,
+  mdiCheckboxBlankOutline,
+  mdiMinusBox,
+  mdiCircle,
+  mdiRadioboxMarked,
+  mdiRadioboxBlank,
+  mdiStar,
+  mdiStarOutline,
+  mdiStarHalf,
+  mdiPageFirst,
+  mdiPageLast,
+  mdiUnfoldMoreHorizontal,
+  mdiLoading,
+  mdiClockOutline,
+  mdiCalendar,
+  mdiPaperclip,
+  mdiEyedropper,
 } from '@mdi/js'
 
-// 自定义图标别名映射 (mdi-xxx 字符串 -> SVG path)
-const customAliases = {
-  ...defaultAliases,
+// 图标名称到 SVG path 的映射 (使用 kebab-case)
+const iconMap: Record<string, string> = {
+  // Vuetify 内部使用的图标别名
+  'complete': mdiCheck,
+  'cancel': mdiCloseCircle,
+  'close': mdiClose,
+  'delete': mdiDelete,
+  'clear': mdiClose,
+  'success': mdiCheckCircle,
+  'info': mdiInformation,
+  'warning': mdiAlert,
+  'error': mdiAlertCircle,
+  'prev': mdiChevronLeft,
+  'next': mdiChevronRight,
+  'checkboxOn': mdiCheckboxMarked,
+  'checkboxOff': mdiCheckboxBlankOutline,
+  'checkboxIndeterminate': mdiMinusBox,
+  'delimiter': mdiCircle,
+  'sortAsc': mdiArrowUpBold,
+  'sortDesc': mdiArrowDownBold,
+  'expand': mdiChevronDown,
+  'menu': mdiMenuDown,
+  'subgroup': mdiMenuDown,
+  'dropdown': mdiMenuDown,
+  'radioOn': mdiRadioboxMarked,
+  'radioOff': mdiRadioboxBlank,
+  'edit': mdiPencil,
+  'ratingEmpty': mdiStarOutline,
+  'ratingFull': mdiStar,
+  'ratingHalf': mdiStarHalf,
+  'loading': mdiLoading,
+  'first': mdiPageFirst,
+  'last': mdiPageLast,
+  'unfold': mdiUnfoldMoreHorizontal,
+  'file': mdiPaperclip,
+  'plus': mdiPlus,
+  'minus': mdiMinusBox,
+  'calendar': mdiCalendar,
+  'treeviewCollapse': mdiMenuDown,
+  'treeviewExpand': mdiMenuUp,
+  'eyeDropper': mdiEyedropper,
+
   // 布局与导航
   'swap-vertical-bold': mdiSwapVerticalBold,
   'drag-vertical': mdiDragVertical,
   'open-in-new': mdiOpenInNew,
   'chevron-down': mdiChevronDown,
+  'chevron-up': mdiChevronUp,
+  'chevron-left': mdiChevronLeft,
+  'chevron-right': mdiChevronRight,
   'dots-vertical': mdiDotsVertical,
   'logout': mdiLogout,
   'archive-outline': mdiArchiveOutline,
+  'menu-down': mdiMenuDown,
+  'menu-up': mdiMenuUp,
 
   // 操作按钮
-  'plus': mdiPlus,
   'pencil': mdiPencil,
-  'delete': mdiDelete,
   'refresh': mdiRefresh,
-  'close': mdiClose,
   'check': mdiCheck,
   'content-copy': mdiContentCopy,
   'arrow-up-bold': mdiArrowUpBold,
@@ -127,6 +191,10 @@ const customAliases = {
   'pin-outline': mdiPinOutline,
   'lightning-bolt': mdiLightningBolt,
   'form-textbox': mdiFormTextbox,
+  'clock-outline': mdiClockOutline,
+  'calendar': mdiCalendar,
+  'paperclip': mdiPaperclip,
+  'eye-dropper': mdiEyedropper,
 
   // 主题切换
   'weather-night': mdiWeatherNight,
@@ -138,6 +206,64 @@ const customAliases = {
   'message-processing': mdiMessageProcessing,
   'diamond-stone': mdiDiamondStone,
   'api': mdiApi,
+
+  // 复选框和单选框
+  'checkbox-marked': mdiCheckboxMarked,
+  'checkbox-blank-outline': mdiCheckboxBlankOutline,
+  'minus-box': mdiMinusBox,
+  'radiobox-marked': mdiRadioboxMarked,
+  'radiobox-blank': mdiRadioboxBlank,
+
+  // 评分
+  'star': mdiStar,
+  'star-outline': mdiStarOutline,
+  'star-half': mdiStarHalf,
+
+  // 分页
+  'page-first': mdiPageFirst,
+  'page-last': mdiPageLast,
+
+  // 其他
+  'unfold-more-horizontal': mdiUnfoldMoreHorizontal,
+  'loading': mdiLoading,
+  'circle': mdiCircle,
+}
+
+// 自定义 SVG iconset - 处理 mdi-xxx 字符串格式
+const customSvgIconSet: IconSet = {
+  component: (props: IconProps) => {
+    // 获取图标名称，去掉 mdi- 前缀
+    let iconName = props.icon as string
+    if (iconName.startsWith('mdi-')) {
+      iconName = iconName.substring(4)
+    }
+
+    // 查找对应的 SVG path
+    const svgPath = iconMap[iconName]
+
+    if (!svgPath) {
+      console.warn(`[Vuetify Icon] 未找到图标: ${iconName}，请在 vuetify.ts 的 iconMap 中添加映射`)
+      return h('span', `[${iconName}]`)
+    }
+
+    return h('svg', {
+      class: 'v-icon__svg',
+      xmlns: 'http://www.w3.org/2000/svg',
+      viewBox: '0 0 24 24',
+      role: 'img',
+      'aria-hidden': 'true',
+      style: {
+        fontSize: 'inherit',
+        width: '1em',
+        height: '1em',
+      },
+    }, [
+      h('path', {
+        d: svgPath,
+        fill: 'currentColor',
+      })
+    ])
+  }
 }
 
 // 🎨 精心设计的现代化配色方案
@@ -194,9 +320,8 @@ export default createVuetify({
   directives,
   icons: {
     defaultSet: 'mdi',
-    aliases: customAliases,
     sets: {
-      mdi
+      mdi: customSvgIconSet
     }
   },
   theme: {

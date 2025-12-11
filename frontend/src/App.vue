@@ -251,7 +251,7 @@
           v-if="currentChannelsData.channels?.length"
           ref="channelOrchestrationRef"
           :channels="currentChannelsData.channels"
-          :current-channel-index="currentChannelsData.current"
+          :current-channel-index="currentChannelsData.current ?? 0"
           :channel-type="activeTab"
           @edit="editChannel"
           @delete="deleteChannel"

@@ -609,10 +609,18 @@ func handleNormalResponse(c *gin.Context, resp *http.Response, provider provider
 	}
 
 	// 如果上游没有返回 Usage，本地估算
+	// 如果 input_tokens 为 0 或 1（虚假值），也需要补全
 	if claudeResp.Usage == nil {
 		claudeResp.Usage = &types.Usage{
 			InputTokens:  utils.EstimateRequestTokens(requestBody),
 			OutputTokens: utils.EstimateResponseTokens(claudeResp.Content),
+		}
+	} else {
+		if claudeResp.Usage.InputTokens <= 1 {
+			claudeResp.Usage.InputTokens = utils.EstimateRequestTokens(requestBody)
+		}
+		if claudeResp.Usage.OutputTokens == 0 {
+			claudeResp.Usage.OutputTokens = utils.EstimateResponseTokens(claudeResp.Content)
 		}
 	}
 
@@ -683,7 +691,8 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 	flusher.Flush()
 
 	clientGone := false
-	hasUsage := false                 // 跟踪是否已收到 usage
+	hasUsage := false            // 跟踪是否已收到 usage
+	needTokenPatch := false      // 是否需要修补 token（input_tokens <= 1 或 output_tokens == 0）
 	var outputTextBuffer bytes.Buffer // 累积输出文本用于估算 token
 	for {
 		select {
@@ -713,9 +722,9 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 				return
 			}
 
-			// 使用 JSON 解析精确检测 usage 字段
+			// 使用 JSON 解析精确检测 usage 字段，并检查是否需要修补 input_tokens
 			if !hasUsage {
-				hasUsage = checkEventHasUsage(event)
+				hasUsage, needTokenPatch = checkEventUsageStatus(event)
 			}
 
 			// 提取文本内容用于估算输出 token
@@ -740,9 +749,16 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 				hasUsage = true // 防止重复注入
 			}
 
+			// 如果需要修补 token，在转发前修改事件
+			eventToSend := event
+			if needTokenPatch && hasEventWithUsage(event) {
+				eventToSend = patchTokensInEvent(event, utils.EstimateRequestTokens(requestBody), utils.EstimateTokens(outputTextBuffer.String()))
+				needTokenPatch = false // 只修补一次
+			}
+
 			// 实时转发给客户端（流式传输）
 			if !clientGone {
-				_, err := w.Write([]byte(event))
+				_, err := w.Write([]byte(eventToSend))
 				if err != nil {
 					clientGone = true // 标记客户端已断开，停止后续写入
 					errMsg := err.Error()
@@ -890,8 +906,9 @@ func buildUsageEvent(requestBody []byte, outputText string) string {
 	return fmt.Sprintf("event: message_delta\ndata: %s\n\n", eventJSON)
 }
 
-// checkEventHasUsage 使用 JSON 解析精确检测事件是否包含 usage 字段
-func checkEventHasUsage(event string) bool {
+// checkEventUsageStatus 检测事件是否包含 usage 字段，并判断是否需要修补 input_tokens/output_tokens
+// 返回: (hasUsage bool, needPatch bool)
+func checkEventUsageStatus(event string) (bool, bool) {
 	for _, line := range strings.Split(event, "\n") {
 		if !strings.HasPrefix(line, "data: ") {
 			continue
@@ -904,13 +921,66 @@ func checkEventHasUsage(event string) bool {
 		}
 
 		// 检查顶层 usage 字段
-		if hasUsageFields(data["usage"]) {
-			return true
+		if hasUsage, needInputPatch, needOutputPatch := checkUsageFieldsWithPatch(data["usage"]); hasUsage {
+			return true, needInputPatch || needOutputPatch
 		}
 
 		// 检查 message.usage（Claude 流式响应格式）
 		if msg, ok := data["message"].(map[string]interface{}); ok {
-			if hasUsageFields(msg["usage"]) {
+			if hasUsage, needInputPatch, needOutputPatch := checkUsageFieldsWithPatch(msg["usage"]); hasUsage {
+				return true, needInputPatch || needOutputPatch
+			}
+		}
+	}
+	return false, false
+}
+
+// checkUsageFieldsWithPatch 检查 usage 对象是否包含 token 字段，并判断是否需要修补
+// 返回: (hasUsage bool, needInputTokenPatch bool, needOutputTokenPatch bool)
+func checkUsageFieldsWithPatch(usage interface{}) (bool, bool, bool) {
+	if u, ok := usage.(map[string]interface{}); ok {
+		inputTokens, hasInput := u["input_tokens"]
+		outputTokens, hasOutput := u["output_tokens"]
+		if hasInput || hasOutput {
+			needInputPatch := false
+			needOutputPatch := false
+			if hasInput {
+				if v, ok := inputTokens.(float64); ok && v <= 1 {
+					needInputPatch = true
+				}
+			}
+			if hasOutput {
+				if v, ok := outputTokens.(float64); ok && v == 0 {
+					needOutputPatch = true
+				}
+			}
+			return true, needInputPatch, needOutputPatch
+		}
+	}
+	return false, false, false
+}
+
+// hasEventWithUsage 检查事件是否包含 usage 字段（用于判断是否需要修补）
+func hasEventWithUsage(event string) bool {
+	for _, line := range strings.Split(event, "\n") {
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		jsonStr := strings.TrimPrefix(line, "data: ")
+
+		var data map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+			continue
+		}
+
+		// 检查顶层 usage 字段
+		if _, ok := data["usage"].(map[string]interface{}); ok {
+			return true
+		}
+
+		// 检查 message.usage
+		if msg, ok := data["message"].(map[string]interface{}); ok {
+			if _, ok := msg["usage"].(map[string]interface{}); ok {
 				return true
 			}
 		}
@@ -918,14 +988,62 @@ func checkEventHasUsage(event string) bool {
 	return false
 }
 
-// hasUsageFields 检查 usage 对象是否包含 token 字段
-func hasUsageFields(usage interface{}) bool {
-	if u, ok := usage.(map[string]interface{}); ok {
-		_, hasInput := u["input_tokens"]
-		_, hasOutput := u["output_tokens"]
-		return hasInput || hasOutput
+// patchTokensInEvent 修补事件中的 input_tokens 和 output_tokens 字段
+func patchTokensInEvent(event string, estimatedInputTokens, estimatedOutputTokens int) string {
+	var result strings.Builder
+	lines := strings.Split(event, "\n")
+
+	for _, line := range lines {
+		if !strings.HasPrefix(line, "data: ") {
+			result.WriteString(line)
+			result.WriteString("\n")
+			continue
+		}
+
+		jsonStr := strings.TrimPrefix(line, "data: ")
+		var data map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+			result.WriteString(line)
+			result.WriteString("\n")
+			continue
+		}
+
+		// 修补顶层 usage
+		if usage, ok := data["usage"].(map[string]interface{}); ok {
+			patchUsageFields(usage, estimatedInputTokens, estimatedOutputTokens)
+		}
+
+		// 修补 message.usage
+		if msg, ok := data["message"].(map[string]interface{}); ok {
+			if usage, ok := msg["usage"].(map[string]interface{}); ok {
+				patchUsageFields(usage, estimatedInputTokens, estimatedOutputTokens)
+			}
+		}
+
+		// 重新序列化
+		patchedJSON, err := json.Marshal(data)
+		if err != nil {
+			result.WriteString(line)
+			result.WriteString("\n")
+			continue
+		}
+
+		result.WriteString("data: ")
+		result.Write(patchedJSON)
+		result.WriteString("\n")
 	}
-	return false
+
+	return result.String()
+}
+
+// patchUsageFields 修补 usage 对象中的 token 字段
+func patchUsageFields(usage map[string]interface{}, estimatedInput, estimatedOutput int) {
+	if v, ok := usage["input_tokens"].(float64); ok && v <= 1 {
+		usage["input_tokens"] = estimatedInput
+	}
+	if v, ok := usage["output_tokens"].(float64); ok && v == 0 {
+		usage["output_tokens"] = estimatedOutput
+	}
 }
 
 // isMessageStopEvent 使用 JSON 解析检测是否为 message_stop 事件

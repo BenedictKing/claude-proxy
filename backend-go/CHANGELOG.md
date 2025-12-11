@@ -1,5 +1,27 @@
 # Changelog
 
+## [v2.1.7] - 2025-12-11
+
+### Fixed - Token 计数补全：处理虚假值场景
+
+**问题背景**：
+- 某些上游服务返回 usage 但 `input_tokens` 为 0 或 1（虚假值）
+- 实际 token 计数在 `cache_creation_input_tokens` 等字段中
+- 示例：`{"input_tokens":1,"cache_creation_input_tokens":89623,...}`
+
+**解决方案**：
+- 当 `input_tokens <= 1` 时，用本地估算值覆盖
+- 当 `output_tokens == 0` 时，用本地估算值覆盖
+- 保留上游返回的其他字段（cache_creation_input_tokens 等）
+
+**具体改动**：
+1. `internal/handlers/proxy.go`
+   - `handleNormalResponse()` - 增加 input_tokens/output_tokens 虚假值检测和补全
+   - `handleStreamResponse()` - 流式响应中检测并修补虚假 token 值
+   - `checkEventUsageStatus()` - 替代 checkEventHasUsage，返回是否需要修补
+   - `patchTokensInEvent()` - 修补 SSE 事件中的 token 字段
+   - `patchUsageFields()` - 修补 usage 对象中的 token 字段
+
 ## [v2.1.6] - 2025-12-11
 
 ### Added - Messages API Token 计数补全

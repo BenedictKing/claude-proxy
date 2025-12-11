@@ -17,12 +17,9 @@ export default defineConfig(({ mode }) => {
     plugins: [
       vue(),
       vuetify({
-        autoImport: true,
+        autoImport: false, // 禁用自动导入，使用手动配置的图标
         styles: {
           configFile: 'src/styles/settings.scss'
-        },
-        theme: {
-          defaultTheme: 'light'
         }
       })
     ],

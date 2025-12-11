@@ -4,6 +4,21 @@
 
 ---
 
+## [v2.1.7] - 2025-12-11
+
+### 🐛 Bug 修复
+
+- **修复前端 MDI 图标无法显示的问题**：`vite-plugin-vuetify` 的 `autoImport` 会覆盖手动配置的 `mdi-svg` 图标设置
+  - 问题原因：`mdi-xxx` 字符串被错误地当作 SVG path 数据解析，导致控制台报错 `Expected number, "mdi-xxx"`
+  - 解决方案：创建自定义 `IconSet` 组件手动处理图标名称到 SVG path 的映射，同时保留 `vite-plugin-vuetify`（`autoImport: false`）以加载 SCSS 样式配置
+  - 修改文件：
+    - `frontend/vite.config.ts` - 设置 `autoImport: false`，保留 SCSS 配置加载
+    - `frontend/src/plugins/vuetify.ts` - 实现自定义 SVG iconset
+    - `frontend/src/App.vue` - 修复 `currentChannelIndex` prop 类型警告
+  - 优点：按需加载图标，避免打包整个字体文件，保持小体积
+
+---
+
 ## [v2.1.4] - 2025-12-11
 
 ### 🐛 Bug 修复
