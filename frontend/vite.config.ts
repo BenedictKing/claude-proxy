@@ -41,6 +41,13 @@ export default defineConfig(({ mode }) => {
         }
       }
     },
+    css: {
+      preprocessorOptions: {
+        scss: {
+          silenceDeprecations: ['import', 'global-builtin', 'if-function']
+        }
+      }
+    },
     build: {
       outDir: 'dist',
       emptyOutDir: true,
