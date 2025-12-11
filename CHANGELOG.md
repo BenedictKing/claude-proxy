@@ -4,6 +4,17 @@
 
 ---
 
+## [v2.1.4] - 2025-12-11
+
+### 🐛 Bug 修复
+
+- **修复前端渠道健康度统计不显示数据的问题**：后端 `GetChannelMetricsWithConfig` API 遗漏了 `timeWindows` 字段
+  - 问题原因：`metricsManager.ToResponse()` 已正确计算分时段统计数据，但 handler 构建 JSON 响应时未包含该字段
+  - 修复文件：`backend-go/internal/handlers/channel_metrics_handler.go:41`
+  - 影响：前端 `ChannelOrchestration.vue` 中的 15m/1h/6h/24h 成功率和请求数现在可正常显示
+
+---
+
 ## [v2.1.1] - 2025-12-11
 
 ### ✨ 新功能

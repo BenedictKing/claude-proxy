@@ -14,7 +14,7 @@
     "@mdi/js": "^7.4.47",
     "vue": "^3.5.24",
     "vuedraggable": "^4.1.0",
-    "vuetify": "^3.10.11"
+    "vuetify": "^3.11.3"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.1",
@@ -22,10 +22,10 @@
     "daisyui": "^4.9.0",
     "postcss": "^8.4.38",
     "sass-embedded": "^1.93.3",
-    "tailwindcss": "^3.4.18",
+    "tailwindcss": "^3.4.19",
     "typescript": "^5.9.3",
-    "vite": "^7.2.2",
+    "vite": "^7.2.7",
     "vite-plugin-vuetify": "^2.1.2",
-    "vue-tsc": "^3.1.4"
+    "vue-tsc": "^3.1.8"
   }
 }

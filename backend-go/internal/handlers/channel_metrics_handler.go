@@ -37,7 +37,8 @@ func GetChannelMetricsWithConfig(metricsManager *metrics.MetricsManager, cfgMana
 				"errorRate":           resp.ErrorRate,
 				"consecutiveFailures": resp.ConsecutiveFailures,
 				"latency":             resp.Latency,
-				"keyMetrics":          resp.KeyMetrics, // 各 Key 的详细指标
+				"keyMetrics":          resp.KeyMetrics,  // 各 Key 的详细指标
+				"timeWindows":         resp.TimeWindows, // 分时段统计 (15m, 1h, 6h, 24h)
 			}
 
 			if resp.LastSuccessAt != nil {
