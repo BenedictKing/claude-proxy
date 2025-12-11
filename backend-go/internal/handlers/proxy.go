@@ -613,16 +613,32 @@ func handleNormalResponse(c *gin.Context, resp *http.Response, provider provider
 	// 如果上游没有返回 Usage，本地估算
 	// 如果 input_tokens 为 0 或 1（虚假值），也需要补全
 	if claudeResp.Usage == nil {
+		estimatedInput := utils.EstimateRequestTokens(requestBody)
+		estimatedOutput := utils.EstimateResponseTokens(claudeResp.Content)
 		claudeResp.Usage = &types.Usage{
-			InputTokens:  utils.EstimateRequestTokens(requestBody),
-			OutputTokens: utils.EstimateResponseTokens(claudeResp.Content),
+			InputTokens:  estimatedInput,
+			OutputTokens: estimatedOutput,
+		}
+		if envCfg.EnableResponseLogs {
+			log.Printf("🔢 [Token补全] 上游无Usage, 本地估算: input=%d, output=%d", estimatedInput, estimatedOutput)
 		}
 	} else {
+		originalInput := claudeResp.Usage.InputTokens
+		originalOutput := claudeResp.Usage.OutputTokens
+		patched := false
 		if claudeResp.Usage.InputTokens <= 1 {
 			claudeResp.Usage.InputTokens = utils.EstimateRequestTokens(requestBody)
+			patched = true
 		}
-		if claudeResp.Usage.OutputTokens == 0 {
+		if claudeResp.Usage.OutputTokens <= 1 {
 			claudeResp.Usage.OutputTokens = utils.EstimateResponseTokens(claudeResp.Content)
+			patched = true
+		}
+		if envCfg.EnableResponseLogs {
+			if patched {
+				log.Printf("🔢 [Token补全] 虚假值: input=%d→%d, output=%d→%d",
+					originalInput, claudeResp.Usage.InputTokens, originalOutput, claudeResp.Usage.OutputTokens)
+			}
 		}
 	}
 
@@ -736,13 +752,20 @@ func processStreamEvents(c *gin.Context, w gin.ResponseWriter, flusher http.Flus
 
 // processStreamEvent 处理单个流事件
 func processStreamEvent(c *gin.Context, w gin.ResponseWriter, flusher http.Flusher, event string, ctx *streamContext, envCfg *config.EnvConfig, requestBody []byte) {
-	// 检测 usage 状态
-	if !ctx.hasUsage {
-		ctx.hasUsage, ctx.needTokenPatch = checkEventUsageStatus(event)
-	}
-
-	// 提取文本用于估算 token
+	// 提取文本用于估算 token（必须在检测 usage 之前，确保累积内容）
 	extractTextFromEvent(event, &ctx.outputTextBuffer)
+
+	// 检测 usage 状态（只在首次检测到时记录是否需要修补）
+	if !ctx.hasUsage {
+		hasUsage, needPatch := checkEventUsageStatus(event, envCfg.EnableResponseLogs)
+		if hasUsage {
+			ctx.hasUsage = true
+			ctx.needTokenPatch = needPatch
+			if envCfg.EnableResponseLogs && needPatch && !isMessageDeltaEvent(event) {
+				log.Printf("🔢 [Stream-Token] 检测到虚假值, 延迟到流结束修补")
+			}
+		}
+	}
 
 	// 日志缓存
 	if ctx.loggingEnabled {
@@ -754,19 +777,31 @@ func processStreamEvent(c *gin.Context, w gin.ResponseWriter, flusher http.Flush
 		}
 	}
 
-	// 在 message_stop 前注入 usage
+	// 在 message_stop 前注入 usage（上游完全没有 usage 的情况）
 	if !ctx.hasUsage && !ctx.clientGone && isMessageStopEvent(event) {
 		usageEvent := buildUsageEvent(requestBody, ctx.outputTextBuffer.String())
+		if envCfg.EnableResponseLogs {
+			log.Printf("🔢 [Stream-Token注入] 上游无usage, 注入本地估算事件")
+		}
 		w.Write([]byte(usageEvent))
 		flusher.Flush()
 		ctx.hasUsage = true
 	}
 
-	// 修补 token
+	// 修补 token（在 message_delta 或 message_stop 时修补，确保内容已完整累积）
 	eventToSend := event
 	if ctx.needTokenPatch && hasEventWithUsage(event) {
-		eventToSend = patchTokensInEvent(event, utils.EstimateRequestTokens(requestBody), utils.EstimateTokens(ctx.outputTextBuffer.String()))
-		ctx.needTokenPatch = false
+		// 只在流结束事件（message_delta 或 message_stop）时修补
+		if isMessageDeltaEvent(event) || isMessageStopEvent(event) {
+			estimatedInput := utils.EstimateRequestTokens(requestBody)
+			estimatedOutput := utils.EstimateTokens(ctx.outputTextBuffer.String())
+			if envCfg.EnableResponseLogs {
+				log.Printf("🔢 [Stream-Token修补] 估算值: input=%d, output=%d, 累积内容长度=%d",
+					estimatedInput, estimatedOutput, ctx.outputTextBuffer.Len())
+			}
+			eventToSend = patchTokensInEvent(event, estimatedInput, estimatedOutput)
+			ctx.needTokenPatch = false
+		}
 	}
 
 	// 转发给客户端
@@ -911,7 +946,7 @@ func buildUsageEvent(requestBody []byte, outputText string) string {
 
 // checkEventUsageStatus 检测事件是否包含 usage 字段，并判断是否需要修补 input_tokens/output_tokens
 // 返回: (hasUsage bool, needPatch bool)
-func checkEventUsageStatus(event string) (bool, bool) {
+func checkEventUsageStatus(event string, enableLog bool) (bool, bool) {
 	for _, line := range strings.Split(event, "\n") {
 		if !strings.HasPrefix(line, "data: ") {
 			continue
@@ -925,13 +960,27 @@ func checkEventUsageStatus(event string) (bool, bool) {
 
 		// 检查顶层 usage 字段
 		if hasUsage, needInputPatch, needOutputPatch := checkUsageFieldsWithPatch(data["usage"]); hasUsage {
-			return true, needInputPatch || needOutputPatch
+			needPatch := needInputPatch || needOutputPatch
+			if enableLog {
+				if usage, ok := data["usage"].(map[string]interface{}); ok {
+					log.Printf("🔢 [Stream-Token检测] 顶层usage: input=%v, output=%v, 需补全=%v",
+						usage["input_tokens"], usage["output_tokens"], needPatch)
+				}
+			}
+			return true, needPatch
 		}
 
 		// 检查 message.usage（Claude 流式响应格式）
 		if msg, ok := data["message"].(map[string]interface{}); ok {
 			if hasUsage, needInputPatch, needOutputPatch := checkUsageFieldsWithPatch(msg["usage"]); hasUsage {
-				return true, needInputPatch || needOutputPatch
+				needPatch := needInputPatch || needOutputPatch
+				if enableLog {
+					if usage, ok := msg["usage"].(map[string]interface{}); ok {
+						log.Printf("🔢 [Stream-Token检测] message.usage: input=%v, output=%v, 需补全=%v",
+							usage["input_tokens"], usage["output_tokens"], needPatch)
+					}
+				}
+				return true, needPatch
 			}
 		}
 	}
@@ -953,7 +1002,7 @@ func checkUsageFieldsWithPatch(usage interface{}) (bool, bool, bool) {
 				}
 			}
 			if hasOutput {
-				if v, ok := outputTokens.(float64); ok && v == 0 {
+				if v, ok := outputTokens.(float64); ok && v <= 1 {
 					needOutputPatch = true
 				}
 			}
@@ -1044,7 +1093,7 @@ func patchUsageFields(usage map[string]interface{}, estimatedInput, estimatedOut
 	if v, ok := usage["input_tokens"].(float64); ok && v <= 1 {
 		usage["input_tokens"] = estimatedInput
 	}
-	if v, ok := usage["output_tokens"].(float64); ok && v == 0 {
+	if v, ok := usage["output_tokens"].(float64); ok && v <= 1 {
 		usage["output_tokens"] = estimatedOutput
 	}
 }
@@ -1069,6 +1118,27 @@ func isMessageStopEvent(event string) bool {
 		}
 
 		if data["type"] == "message_stop" {
+			return true
+		}
+	}
+	return false
+}
+
+// isMessageDeltaEvent 检测是否为 message_delta 事件（流结束时包含最终 usage）
+func isMessageDeltaEvent(event string) bool {
+	if strings.Contains(event, "event: message_delta") {
+		return true
+	}
+	for _, line := range strings.Split(event, "\n") {
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		jsonStr := strings.TrimPrefix(line, "data: ")
+		var data map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+			continue
+		}
+		if data["type"] == "message_delta" {
 			return true
 		}
 	}

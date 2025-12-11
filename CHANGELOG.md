@@ -4,6 +4,26 @@
 
 ---
 
+## [v2.1.10] - 2025-12-11
+
+### 🐛 Bug 修复
+
+- **修复流式响应 Token 计数补全逻辑**
+  - 问题：上游返回 `output_tokens=1`（虚假值）时未触发补全，因为之前只检测 `== 0`
+  - 问题：`message_start` 事件检测到虚假值后立即修补，但此时 `outputTextBuffer` 为空导致估算为 0
+  - 修复：将 `output_tokens` 补全条件从 `== 0` 改为 `<= 1`（与 `input_tokens` 一致）
+  - 修复：延迟到 `message_delta` 或 `message_stop` 事件时修补，确保内容已完整累积
+  - 新增 `isMessageDeltaEvent()` 函数检测流结束事件
+
+### 🔧 改进
+
+- **Token 补全日志改进**
+  - 新增详细的 Token 检测和补全日志（仅在 `EnableResponseLogs=true` 时输出）
+  - 日志标签：`[Token补全]`、`[Stream-Token检测]`、`[Stream-Token修补]`
+  - 所有新增日志使用 `EnableResponseLogs` 开关，避免生产环境日志过多
+
+---
+
 ## [v2.1.9] - 2025-12-11
 
 ### 🧹 代码重构
