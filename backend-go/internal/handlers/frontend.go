@@ -76,9 +76,9 @@ func ServeFrontend(r *gin.Engine, frontendFS embed.FS) {
 func isAPIPath(path string) bool {
 	// API 路由前缀列表
 	apiPrefixes := []string{
-		"/v1/",      // Claude API 代理端点
-		"/api/",     // Web 管理界面 API
-		"/admin/",   // 管理端点
+		"/v1/",    // Claude API 代理端点
+		"/api/",   // Web 管理界面 API
+		"/admin/", // 管理端点
 	}
 
 	for _, prefix := range apiPrefixes {

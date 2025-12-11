@@ -57,8 +57,8 @@ func ProxyHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager, ch
 			// 多渠道模式：使用调度器
 			handleMultiChannelProxy(c, envCfg, cfgManager, channelScheduler, bodyBytes, claudeReq, userID, startTime)
 		} else {
-			// 单渠道模式：使用现有逻辑
-			handleSingleChannelProxy(c, envCfg, cfgManager, bodyBytes, claudeReq, startTime)
+			// 单渠道模式：使用现有逻辑（也记录指标）
+			handleSingleChannelProxy(c, envCfg, cfgManager, channelScheduler, bodyBytes, claudeReq, startTime)
 		}
 	})
 }
@@ -113,18 +113,19 @@ func handleMultiChannelProxy(
 				channelIndex, upstream.Name, selection.Reason, channelAttempt+1, maxChannelAttempts)
 		}
 
-		// 尝试使用该渠道的所有 key
-		success, failoverErr := tryChannelWithAllKeys(c, envCfg, cfgManager, upstream, bodyBytes, claudeReq, startTime)
+		// 尝试使用该渠道的所有 key，返回成功使用的 key
+		success, successKey, failoverErr := tryChannelWithAllKeys(c, envCfg, cfgManager, channelScheduler, upstream, bodyBytes, claudeReq, startTime, false)
 
 		if success {
-			// 记录成功，更新 Trace 亲和
-			channelScheduler.RecordSuccess(channelIndex, false)
+			// 记录成功的 key，更新 Trace 亲和
+			if successKey != "" {
+				channelScheduler.RecordSuccess(upstream.BaseURL, successKey, false)
+			}
 			channelScheduler.SetTraceAffinity(userID, channelIndex)
 			return
 		}
 
-		// 渠道失败，记录并尝试下一个
-		channelScheduler.RecordFailure(channelIndex, false)
+		// 渠道所有 key 都失败，标记渠道失败
 		failedChannels[channelIndex] = true
 
 		if failoverErr != nil {
@@ -155,35 +156,49 @@ func handleMultiChannelProxy(
 			errMsg = lastError.Error()
 		}
 		c.JSON(503, gin.H{
-			"error": "所有渠道都不可用",
+			"error":   "所有渠道都不可用",
 			"details": errMsg,
 		})
 	}
 }
 
 // tryChannelWithAllKeys 尝试使用渠道的所有密钥
-// 返回 (success bool, lastFailoverError *struct{Status int; Body []byte})
+// 返回 (success bool, successKey string, lastFailoverError *struct{Status int; Body []byte})
 func tryChannelWithAllKeys(
 	c *gin.Context,
 	envCfg *config.EnvConfig,
 	cfgManager *config.ConfigManager,
+	channelScheduler *scheduler.ChannelScheduler,
 	upstream *config.UpstreamConfig,
 	bodyBytes []byte,
 	claudeReq types.ClaudeRequest,
 	startTime time.Time,
-) (bool, *struct{ Status int; Body []byte }) {
+	isResponses bool,
+) (bool, string, *struct {
+	Status int
+	Body   []byte
+}) {
 	if len(upstream.APIKeys) == 0 {
-		return false, nil
+		return false, "", nil
 	}
 
 	provider := providers.GetProvider(upstream.ServiceType)
 	if provider == nil {
-		return false, nil
+		return false, "", nil
+	}
+
+	// 获取指标管理器用于检查熔断状态
+	metricsManager := channelScheduler.GetMessagesMetricsManager()
+	if isResponses {
+		metricsManager = channelScheduler.GetResponsesMetricsManager()
 	}
 
 	maxRetries := len(upstream.APIKeys)
 	failedKeys := make(map[string]bool)
-	var lastFailoverError *struct{ Status int; Body []byte }
+	var lastFailoverError *struct {
+		Status int
+		Body   []byte
+	}
 	deprioritizeCandidates := make(map[string]bool)
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
@@ -195,6 +210,13 @@ func tryChannelWithAllKeys(
 			break
 		}
 
+		// 检查该 Key 是否处于熔断状态，跳过熔断的 Key
+		if metricsManager.ShouldSuspendKey(upstream.BaseURL, apiKey) {
+			failedKeys[apiKey] = true
+			log.Printf("⚡ 跳过熔断中的 Key: %s", maskAPIKey(apiKey))
+			continue
+		}
+
 		if envCfg.ShouldLog("info") {
 			log.Printf("🔑 使用API密钥: %s (尝试 %d/%d)", maskAPIKey(apiKey), attempt+1, maxRetries)
 		}
@@ -203,6 +225,8 @@ func tryChannelWithAllKeys(
 		providerReq, _, err := provider.ConvertToProviderRequest(c, upstream, apiKey)
 		if err != nil {
 			failedKeys[apiKey] = true
+			// 记录该 key 失败
+			channelScheduler.RecordFailure(upstream.BaseURL, apiKey, isResponses)
 			continue
 		}
 
@@ -211,6 +235,8 @@ func tryChannelWithAllKeys(
 		if err != nil {
 			failedKeys[apiKey] = true
 			cfgManager.MarkKeyAsFailed(apiKey)
+			// 记录该 key 失败
+			channelScheduler.RecordFailure(upstream.BaseURL, apiKey, isResponses)
 			log.Printf("⚠️ API密钥失败: %v", err)
 			continue
 		}
@@ -225,9 +251,14 @@ func tryChannelWithAllKeys(
 			if shouldFailover {
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey)
+				// 记录该 key 失败
+				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, isResponses)
 				log.Printf("⚠️ API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
 
-				lastFailoverError = &struct{ Status int; Body []byte }{
+				lastFailoverError = &struct {
+					Status int
+					Body   []byte
+				}{
 					Status: resp.StatusCode,
 					Body:   respBodyBytes,
 				}
@@ -238,9 +269,9 @@ func tryChannelWithAllKeys(
 				continue
 			}
 
-			// 非 failover 错误，直接返回
+			// 非 failover 错误，直接返回（请求已处理但不算成功）
 			c.Data(resp.StatusCode, "application/json", respBodyBytes)
-			return true, nil // 返回 true 表示请求已处理（虽然是错误响应）
+			return true, "", nil // 返回 true 表示请求已处理，但 successKey 为空表示不记录成功
 		}
 
 		// 处理成功响应
@@ -255,10 +286,10 @@ func tryChannelWithAllKeys(
 		} else {
 			handleNormalResponse(c, resp, provider, envCfg, startTime)
 		}
-		return true, nil
+		return true, apiKey, nil
 	}
 
-	return false, lastFailoverError
+	return false, "", lastFailoverError
 }
 
 // handleSingleChannelProxy 处理单渠道代理请求（现有逻辑）
@@ -266,6 +297,7 @@ func handleSingleChannelProxy(
 	c *gin.Context,
 	envCfg *config.EnvConfig,
 	cfgManager *config.ConfigManager,
+	channelScheduler *scheduler.ChannelScheduler,
 	bodyBytes []byte,
 	claudeReq types.ClaudeRequest,
 	startTime time.Time,
@@ -306,6 +338,9 @@ func handleSingleChannelProxy(
 	}
 	deprioritizeCandidates := make(map[string]bool)
 
+	// 获取指标管理器用于检查熔断状态
+	metricsManager := channelScheduler.GetMessagesMetricsManager()
+
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		// 恢复请求体
 		c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
@@ -314,6 +349,13 @@ func handleSingleChannelProxy(
 		if err != nil {
 			lastError = err
 			break
+		}
+
+		// 检查该 Key 是否处于熔断状态，跳过熔断的 Key
+		if metricsManager.ShouldSuspendKey(upstream.BaseURL, apiKey) {
+			failedKeys[apiKey] = true
+			log.Printf("⚡ 跳过熔断中的 Key: %s", maskAPIKey(apiKey))
+			continue
 		}
 
 		if envCfg.ShouldLog("info") {
@@ -326,6 +368,7 @@ func handleSingleChannelProxy(
 		if err != nil {
 			lastError = err
 			failedKeys[apiKey] = true
+			channelScheduler.RecordFailure(upstream.BaseURL, apiKey, false)
 			if originalBodyBytes != nil {
 				lastOriginalBodyBytes = originalBodyBytes
 			}
@@ -364,6 +407,7 @@ func handleSingleChannelProxy(
 			lastError = err
 			failedKeys[apiKey] = true
 			cfgManager.MarkKeyAsFailed(apiKey)
+			channelScheduler.RecordFailure(upstream.BaseURL, apiKey, false)
 			log.Printf("⚠️ API密钥失败: %v", err)
 			continue
 		}
@@ -379,6 +423,7 @@ func handleSingleChannelProxy(
 				lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey)
+				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, false)
 
 				log.Printf("⚠️ API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
 				if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
@@ -424,6 +469,8 @@ func handleSingleChannelProxy(
 		}
 
 		// 处理成功响应
+		channelScheduler.RecordSuccess(upstream.BaseURL, apiKey, false)
+
 		if len(deprioritizeCandidates) > 0 {
 			for key := range deprioritizeCandidates {
 				if err := cfgManager.DeprioritizeAPIKey(key); err != nil {

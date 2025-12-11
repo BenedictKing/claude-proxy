@@ -7,7 +7,7 @@ import (
 )
 
 func TestTruncateJSONIntelligently(t *testing.T) {
-	tests := []struct{
+	tests := []struct {
 		name           string
 		input          interface{}
 		maxTextLength  int

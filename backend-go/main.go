@@ -110,7 +110,7 @@ func main() {
 		apiGroup.PATCH("/channels/:id/status", handlers.SetChannelStatus(cfgManager))
 		apiGroup.POST("/channels/:id/resume", handlers.ResumeChannel(channelScheduler, false))
 		apiGroup.POST("/channels/:id/promotion", handlers.SetChannelPromotion(cfgManager))
-		apiGroup.GET("/channels/metrics", handlers.GetChannelMetrics(messagesMetricsManager))
+		apiGroup.GET("/channels/metrics", handlers.GetChannelMetricsWithConfig(messagesMetricsManager, cfgManager, false))
 		apiGroup.GET("/channels/scheduler/stats", handlers.GetSchedulerStats(channelScheduler))
 
 		// Responses 渠道管理
@@ -129,7 +129,7 @@ func main() {
 		apiGroup.PATCH("/responses/channels/:id/status", handlers.SetResponsesChannelStatus(cfgManager))
 		apiGroup.POST("/responses/channels/:id/resume", handlers.ResumeChannel(channelScheduler, true))
 		apiGroup.POST("/responses/channels/:id/promotion", handlers.SetResponsesChannelPromotion(cfgManager))
-		apiGroup.GET("/responses/channels/metrics", handlers.GetResponsesChannelMetrics(responsesMetricsManager))
+		apiGroup.GET("/responses/channels/metrics", handlers.GetChannelMetricsWithConfig(responsesMetricsManager, cfgManager, true))
 
 		// 负载均衡
 		apiGroup.PUT("/loadbalance", handlers.UpdateLoadBalance(cfgManager))

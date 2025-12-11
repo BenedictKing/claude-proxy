@@ -57,16 +57,16 @@ type OpenAIRequest struct {
 
 // OpenAIMessage OpenAI 消息
 type OpenAIMessage struct {
-	Role       string          `json:"role"`
-	Content    interface{}     `json:"content"` // string 或 null
+	Role       string           `json:"role"`
+	Content    interface{}      `json:"content"` // string 或 null
 	ToolCalls  []OpenAIToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string          `json:"tool_call_id,omitempty"`
+	ToolCallID string           `json:"tool_call_id,omitempty"`
 }
 
 // OpenAIToolCall OpenAI 工具调用
 type OpenAIToolCall struct {
-	ID       string                `json:"id"`
-	Type     string                `json:"type"`
+	ID       string                 `json:"id"`
+	Type     string                 `json:"type"`
 	Function OpenAIToolCallFunction `json:"function"`
 }
 
@@ -78,8 +78,8 @@ type OpenAIToolCallFunction struct {
 
 // OpenAITool OpenAI 工具定义
 type OpenAITool struct {
-	Type     string                `json:"type"`
-	Function OpenAIToolFunction    `json:"function"`
+	Type     string             `json:"type"`
+	Function OpenAIToolFunction `json:"function"`
 }
 
 // OpenAIToolFunction OpenAI 工具函数
@@ -91,9 +91,9 @@ type OpenAIToolFunction struct {
 
 // OpenAIResponse OpenAI 响应
 type OpenAIResponse struct {
-	ID      string          `json:"id"`
-	Choices []OpenAIChoice  `json:"choices"`
-	Usage   *Usage          `json:"usage,omitempty"`
+	ID      string         `json:"id"`
+	Choices []OpenAIChoice `json:"choices"`
+	Usage   *Usage         `json:"usage,omitempty"`
 }
 
 // OpenAIChoice OpenAI 选择
@@ -104,9 +104,9 @@ type OpenAIChoice struct {
 
 // Usage 使用情况统计
 type Usage struct {
-	InputTokens  int `json:"input_tokens,omitempty"`
-	OutputTokens int `json:"output_tokens,omitempty"`
-	PromptTokens int `json:"prompt_tokens,omitempty"`
+	InputTokens      int `json:"input_tokens,omitempty"`
+	OutputTokens     int `json:"output_tokens,omitempty"`
+	PromptTokens     int `json:"prompt_tokens,omitempty"`
 	CompletionTokens int `json:"completion_tokens,omitempty"`
 }
 

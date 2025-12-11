@@ -5,38 +5,129 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/metrics"
 	"github.com/BenedictKing/claude-proxy/internal/scheduler"
 	"github.com/gin-gonic/gin"
 )
 
-// GetChannelMetrics 获取渠道指标
-func GetChannelMetrics(metricsManager *metrics.MetricsManager) gin.HandlerFunc {
+// GetChannelMetricsWithConfig 获取渠道指标（需要配置管理器来获取 baseURL 和 keys）
+func GetChannelMetricsWithConfig(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager, isResponses bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		allMetrics := metricsManager.GetAllMetrics()
+		cfg := cfgManager.GetConfig()
+		var upstreams []config.UpstreamConfig
+		if isResponses {
+			upstreams = cfg.ResponsesUpstream
+		} else {
+			upstreams = cfg.Upstream
+		}
 
-		// 转换为 API 响应格式
+		result := make([]gin.H, 0, len(upstreams))
+		for i, upstream := range upstreams {
+			// 使用新的聚合方法获取渠道指标
+			resp := metricsManager.ToResponse(i, upstream.BaseURL, upstream.APIKeys, 0)
+
+			item := gin.H{
+				"channelIndex":        i,
+				"channelName":         upstream.Name,
+				"requestCount":        resp.RequestCount,
+				"successCount":        resp.SuccessCount,
+				"failureCount":        resp.FailureCount,
+				"successRate":         resp.SuccessRate,
+				"errorRate":           resp.ErrorRate,
+				"consecutiveFailures": resp.ConsecutiveFailures,
+				"latency":             resp.Latency,
+				"keyMetrics":          resp.KeyMetrics, // 各 Key 的详细指标
+			}
+
+			if resp.LastSuccessAt != nil {
+				item["lastSuccessAt"] = *resp.LastSuccessAt
+			}
+			if resp.LastFailureAt != nil {
+				item["lastFailureAt"] = *resp.LastFailureAt
+			}
+			if resp.CircuitBrokenAt != nil {
+				item["circuitBrokenAt"] = *resp.CircuitBrokenAt
+			}
+
+			result = append(result, item)
+		}
+
+		c.JSON(200, result)
+	}
+}
+
+// GetAllKeyMetrics 获取所有 Key 的原始指标
+func GetAllKeyMetrics(metricsManager *metrics.MetricsManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		allMetrics := metricsManager.GetAllKeyMetrics()
+
 		result := make([]gin.H, 0, len(allMetrics))
 		for _, m := range allMetrics {
 			if m == nil {
 				continue
 			}
-			failureRate := metricsManager.CalculateFailureRate(m.ChannelIndex)
-			successRate := (1 - failureRate) * 100
 
-			// 获取分时段统计
-			timeWindowStats := metricsManager.GetAllTimeWindowStats(m.ChannelIndex)
+			successRate := float64(100)
+			if m.RequestCount > 0 {
+				successRate = float64(m.SuccessCount) / float64(m.RequestCount) * 100
+			}
 
 			item := gin.H{
-				"channelIndex":        m.ChannelIndex,
+				"metricsKey":          m.MetricsKey,
+				"baseUrl":             m.BaseURL,
+				"keyMask":             m.KeyMask,
 				"requestCount":        m.RequestCount,
 				"successCount":        m.SuccessCount,
 				"failureCount":        m.FailureCount,
 				"successRate":         successRate,
-				"errorRate":           failureRate * 100,
 				"consecutiveFailures": m.ConsecutiveFailures,
-				"latency":             0, // 需要从其他地方获取
-				"timeWindows":         timeWindowStats,
+			}
+
+			if m.LastSuccessAt != nil {
+				item["lastSuccessAt"] = m.LastSuccessAt.Format("2006-01-02T15:04:05Z07:00")
+			}
+			if m.LastFailureAt != nil {
+				item["lastFailureAt"] = m.LastFailureAt.Format("2006-01-02T15:04:05Z07:00")
+			}
+			if m.CircuitBrokenAt != nil {
+				item["circuitBrokenAt"] = m.CircuitBrokenAt.Format("2006-01-02T15:04:05Z07:00")
+			}
+
+			result = append(result, item)
+		}
+
+		c.JSON(200, result)
+	}
+}
+
+// GetChannelMetrics 获取渠道指标（兼容旧 API，返回空数据）
+// Deprecated: 使用 GetChannelMetricsWithConfig 代替
+func GetChannelMetrics(metricsManager *metrics.MetricsManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 返回所有 Key 的指标
+		allMetrics := metricsManager.GetAllKeyMetrics()
+
+		result := make([]gin.H, 0, len(allMetrics))
+		for _, m := range allMetrics {
+			if m == nil {
+				continue
+			}
+
+			successRate := float64(100)
+			if m.RequestCount > 0 {
+				successRate = float64(m.SuccessCount) / float64(m.RequestCount) * 100
+			}
+
+			item := gin.H{
+				"metricsKey":          m.MetricsKey,
+				"baseUrl":             m.BaseURL,
+				"keyMask":             m.KeyMask,
+				"requestCount":        m.RequestCount,
+				"successCount":        m.SuccessCount,
+				"failureCount":        m.FailureCount,
+				"successRate":         successRate,
+				"consecutiveFailures": m.ConsecutiveFailures,
 			}
 
 			if m.LastSuccessAt != nil {
@@ -57,7 +148,7 @@ func GetChannelMetrics(metricsManager *metrics.MetricsManager) gin.HandlerFunc {
 }
 
 // GetResponsesChannelMetrics 获取 Responses 渠道指标
-// 传入 Responses 专用的 MetricsManager 实例
+// Deprecated: 使用 GetChannelMetricsWithConfig 代替
 func GetResponsesChannelMetrics(metricsManager *metrics.MetricsManager) gin.HandlerFunc {
 	return GetChannelMetrics(metricsManager)
 }
@@ -73,7 +164,7 @@ func ResumeChannel(sch *scheduler.ChannelScheduler, isResponses bool) gin.Handle
 			return
 		}
 
-		// 重置渠道指标
+		// 重置渠道所有 Key 的指标
 		sch.ResetChannelMetrics(id, isResponses)
 
 		c.JSON(200, gin.H{

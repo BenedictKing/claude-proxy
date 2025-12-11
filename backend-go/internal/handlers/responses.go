@@ -108,15 +108,18 @@ func handleMultiChannelResponses(
 				channelIndex, upstream.Name, selection.Reason, channelAttempt+1, maxChannelAttempts)
 		}
 
-		success, failoverErr := tryResponsesChannelWithAllKeys(c, envCfg, cfgManager, sessionManager, upstream, bodyBytes, responsesReq, startTime)
+		success, successKey, failoverErr := tryResponsesChannelWithAllKeys(c, envCfg, cfgManager, channelScheduler, sessionManager, upstream, bodyBytes, responsesReq, startTime)
 
 		if success {
-			channelScheduler.RecordSuccess(channelIndex, true)
+			// 记录成功的 key，更新 Trace 亲和
+			if successKey != "" {
+				channelScheduler.RecordSuccess(upstream.BaseURL, successKey, true)
+			}
 			channelScheduler.SetTraceAffinity(userID, channelIndex)
 			return
 		}
 
-		channelScheduler.RecordFailure(channelIndex, true)
+		// 渠道所有 key 都失败，标记渠道失败
 		failedChannels[channelIndex] = true
 
 		if failoverErr != nil {
@@ -153,25 +156,33 @@ func handleMultiChannelResponses(
 }
 
 // tryResponsesChannelWithAllKeys 尝试使用 Responses 渠道的所有密钥
+// 返回 (success bool, successKey string, lastFailoverError *struct{Status int; Body []byte})
 func tryResponsesChannelWithAllKeys(
 	c *gin.Context,
 	envCfg *config.EnvConfig,
 	cfgManager *config.ConfigManager,
+	channelScheduler *scheduler.ChannelScheduler,
 	sessionManager *session.SessionManager,
 	upstream *config.UpstreamConfig,
 	bodyBytes []byte,
 	responsesReq types.ResponsesRequest,
 	startTime time.Time,
-) (bool, *struct{ Status int; Body []byte }) {
+) (bool, string, *struct {
+	Status int
+	Body   []byte
+}) {
 	if len(upstream.APIKeys) == 0 {
-		return false, nil
+		return false, "", nil
 	}
 
 	provider := &providers.ResponsesProvider{SessionManager: sessionManager}
 
 	maxRetries := len(upstream.APIKeys)
 	failedKeys := make(map[string]bool)
-	var lastFailoverError *struct{ Status int; Body []byte }
+	var lastFailoverError *struct {
+		Status int
+		Body   []byte
+	}
 	deprioritizeCandidates := make(map[string]bool)
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
@@ -189,6 +200,8 @@ func tryResponsesChannelWithAllKeys(
 		providerReq, _, err := provider.ConvertToProviderRequest(c, upstream, apiKey)
 		if err != nil {
 			failedKeys[apiKey] = true
+			// 记录该 key 失败
+			channelScheduler.RecordFailure(upstream.BaseURL, apiKey, true)
 			continue
 		}
 
@@ -196,6 +209,8 @@ func tryResponsesChannelWithAllKeys(
 		if err != nil {
 			failedKeys[apiKey] = true
 			cfgManager.MarkKeyAsFailed(apiKey)
+			// 记录该 key 失败
+			channelScheduler.RecordFailure(upstream.BaseURL, apiKey, true)
 			log.Printf("⚠️ [Responses] API密钥失败: %v", err)
 			continue
 		}
@@ -209,9 +224,14 @@ func tryResponsesChannelWithAllKeys(
 			if shouldFailover {
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey)
+				// 记录该 key 失败
+				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, true)
 				log.Printf("⚠️ [Responses] API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
 
-				lastFailoverError = &struct{ Status int; Body []byte }{
+				lastFailoverError = &struct {
+					Status int
+					Body   []byte
+				}{
 					Status: resp.StatusCode,
 					Body:   respBodyBytes,
 				}
@@ -222,8 +242,9 @@ func tryResponsesChannelWithAllKeys(
 				continue
 			}
 
+			// 非 failover 错误，直接返回（请求已处理但不算成功）
 			c.Data(resp.StatusCode, "application/json", respBodyBytes)
-			return true, nil
+			return true, "", nil // successKey 为空表示不记录成功
 		}
 
 		if len(deprioritizeCandidates) > 0 {
@@ -233,10 +254,10 @@ func tryResponsesChannelWithAllKeys(
 		}
 
 		handleResponsesSuccess(c, resp, provider, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, bodyBytes)
-		return true, nil
+		return true, apiKey, nil
 	}
 
-	return false, lastFailoverError
+	return false, "", lastFailoverError
 }
 
 // handleSingleChannelResponses 处理单渠道 Responses 请求（现有逻辑）

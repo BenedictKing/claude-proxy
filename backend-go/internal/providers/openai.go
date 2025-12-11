@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/types"
 	"github.com/BenedictKing/claude-proxy/internal/utils"
+	"github.com/gin-gonic/gin"
 )
 
 // OpenAIProvider OpenAI 提供商
@@ -563,11 +563,11 @@ func processToolUsePart(id, name string, input interface{}, index int) []string 
 
 	// content_block_start
 	startEvent := map[string]interface{}{
-		"type": "content_block_start",
+		"type":  "content_block_start",
 		"index": index,
 		"content_block": map[string]interface{}{
 			"type": "tool_use",
-			"id": id,
+			"id":   id,
 			"name": name,
 		},
 	}
@@ -577,10 +577,10 @@ func processToolUsePart(id, name string, input interface{}, index int) []string 
 	// content_block_delta
 	inputJSON, _ := json.Marshal(input)
 	deltaEvent := map[string]interface{}{
-		"type": "content_block_delta",
+		"type":  "content_block_delta",
 		"index": index,
 		"delta": map[string]string{
-			"type": "input_json_delta",
+			"type":         "input_json_delta",
 			"partial_json": string(inputJSON),
 		},
 	}
@@ -589,7 +589,7 @@ func processToolUsePart(id, name string, input interface{}, index int) []string 
 
 	// content_block_stop
 	stopEvent := map[string]interface{}{
-		"type": "content_block_stop",
+		"type":  "content_block_stop",
 		"index": index,
 	}
 	stopJSON, _ := json.Marshal(stopEvent)

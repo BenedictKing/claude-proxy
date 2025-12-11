@@ -1,0 +1,57 @@
+# Changelog
+
+## [Unreleased] - 2025-12-11
+
+### Changed - 指标系统重构：从渠道索引绑定改为 Key 级别绑定
+
+**问题背景**：
+- 新建的促销渠道被标记为"不健康"，尽管是全新的 API Key
+- 根因：指标绑定到 channel index，而非 `BaseURL + APIKey` 组合
+
+**解决方案**：
+- 指标键改为 `hash(baseURL + "|" + apiKey)` 的前 16 位
+- 每个 Key 独立追踪：请求数、成功/失败数、连续失败数、熔断状态
+- 渠道健康状态通过聚合其所有活跃 Key 的指标计算
+
+**具体改动**：
+1. `internal/metrics/channel_metrics.go`
+   - 新增 `KeyMetrics` 结构体
+   - `RecordSuccess/RecordFailure` 改为接收 `(baseURL, apiKey)` 参数
+   - 新增 `cleanupStaleKeys()` 清理 48 小时无活动的 Key
+   - 修复 `appendToHistoryKey` 内存泄漏（所有记录过期时未清空）
+   - `ToResponse` 中 `ConsecutiveFailures` 改用 max 而非 sum
+
+2. `internal/handlers/proxy.go` / `responses.go`
+   - 按 Key 记录失败，而非按渠道
+
+3. `internal/handlers/channel_metrics_handler.go`
+   - 新增 `GetChannelMetricsWithConfig` 聚合处理器
+
+4. `main.go`
+   - 路由绑定到新的 handler
+
+### Fixed - Codex Review 发现的问题
+
+1. **熔断器未生效** (`proxy.go:213-218`)
+   - 在 `tryChannelWithAllKeys` 中调用 `ShouldSuspendKey()` 跳过熔断的 Key
+
+2. **单渠道路径缺少指标记录** (`proxy.go:361, 400, 416, 462`)
+   - `handleSingleChannelProxy` 添加 `channelScheduler` 参数
+   - 在转换失败、发送失败、failover、成功时记录指标
+
+3. **非 failover 错误被计为成功** (`proxy.go:274`)
+   - 返回 `successKey=""` 表示不记录成功指标
+
+4. **`GetChannelAggregatedMetrics` 中 `ConsecutiveFailures` 用 sum** (`channel_metrics.go:379-401`)
+   - 改用 max 聚合，与 `ToResponse` 保持一致
+
+5. **单渠道路径缺少熔断检查** (`proxy.go:341-359`)
+   - `handleSingleChannelProxy` 添加 `ShouldSuspendKey()` 检查，跳过熔断的 Key
+
+6. **`responses.go` 非 failover 错误被计为成功** (`responses.go:247`)
+   - 与 `proxy.go` 保持一致，返回 `successKey=""` 不记录成功
+
+7. **恢复 `timeWindows` 字段** (`channel_metrics.go:613, 721-773`)
+   - `MetricsResponse` 添加 `TimeWindows` 字段
+   - `ToResponse` 中计算聚合的分时段统计
+   - 前端兼容性保持

@@ -33,10 +33,10 @@ func TestCompactContentArray(t *testing.T) {
 				"role": "assistant",
 				"content": []interface{}{
 					map[string]interface{}{
-						"type": "tool_result",
+						"type":        "tool_result",
 						"tool_use_id": "toolu_123",
-						"content": "Temperature: 18°C, Clear sky",
-						"is_error": false,
+						"content":     "Temperature: 18°C, Clear sky",
+						"is_error":    false,
 					},
 				},
 			},
@@ -62,7 +62,7 @@ func TestCompactContentArray(t *testing.T) {
 
 	// 验证tools数组被紧凑显示（单行或少量换行）
 	if strings.Contains(result, `"tools": ["Tool1", "Tool2", "Tool3"]`) ||
-	   strings.Contains(result, `"tools": [
+		strings.Contains(result, `"tools": [
   "Tool1", "Tool2", "Tool3"
 ]`) {
 		t.Log("✓ tools数组被紧凑显示")
@@ -193,8 +193,8 @@ func TestNoTruncationInMiddleOfJSON(t *testing.T) {
 
 		// 应该在换行符后截断
 		if !strings.HasSuffix(strings.TrimSpace(beforeTruncate), "\n") &&
-		   !strings.HasSuffix(beforeTruncate, "}") &&
-		   !strings.HasSuffix(beforeTruncate, "]") {
+			!strings.HasSuffix(beforeTruncate, "}") &&
+			!strings.HasSuffix(beforeTruncate, "]") {
 			// 允许截断点不完美，但至少不应该在字符串中间
 			if !strings.Contains(beforeTruncate[len(beforeTruncate)-20:], "\n") {
 				t.Error("截断位置不在合适的边界")
@@ -267,8 +267,8 @@ func TestCodexResponsesFormat(t *testing.T) {
 				},
 			},
 			map[string]interface{}{
-				"type": "reasoning",
-				"content": nil,
+				"type":              "reasoning",
+				"content":           nil,
 				"encrypted_content": "gAAAAABpG_GLKdJFoKhQfJKcN5k9efb8cQRy3md40ZemIZlJMlmuGgxhTjUtFPwmTAToAwIDtPsPMoOxV8SwDDLohrOqLqUMNEBgFV3ZBNgbNamdzu_jRW7JiFFpB8supDB4lIWyIhvh6HwuHP-8it62DBcdKp9U_V1GuSsP96C8GacKBEEyUmmcHbAcgXj341PxsVpiLx3y5xS18kXTXafmVK_EATeun9vLZ-A9m2BbbEfXoC4zb1AfUGQ_46sZyYXZNWr-v3gbbRkPug4Hq8j4d8vHMmDqNHGDuuScL5r63obEnrrhdTl9dbpOeSgIm7ag-fzmdofyP4I4XKx_SUxaEbTbWbHxunTYpA4lZy04Qw0b85TTvY62G6hcik5i-l5b6LgU0LTycR9lp_LE8OnAswvjLT3HQz6tFzZM288H1vWykftDb-eCyOX4pXn7WP4HFFNp_GvoVy1RPGJh_QbVxKAZCYiv0_7AaSjpv1_RS8EYbssy...",
 				"summary": []interface{}{
 					map[string]interface{}{

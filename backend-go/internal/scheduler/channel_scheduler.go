@@ -75,20 +75,21 @@ func (s *ChannelScheduler) SelectChannel(
 	promotedChannel := s.findPromotedChannel(activeChannels, isResponses)
 	if promotedChannel != nil && !failedChannels[promotedChannel.Index] {
 		// 促销渠道存在且未失败，检查是否健康
-		if metricsManager.IsChannelHealthy(promotedChannel.Index) {
-			upstream := s.getUpstreamByIndex(promotedChannel.Index, isResponses)
-			if upstream != nil && len(upstream.APIKeys) > 0 {
+		upstream := s.getUpstreamByIndex(promotedChannel.Index, isResponses)
+		if upstream != nil && len(upstream.APIKeys) > 0 {
+			if metricsManager.IsChannelHealthyWithKeys(upstream.BaseURL, upstream.APIKeys) {
 				log.Printf("🎉 促销期优先选择渠道: [%d] %s (user: %s)", promotedChannel.Index, upstream.Name, maskUserID(userID))
 				return &SelectionResult{
 					Upstream:     upstream,
 					ChannelIndex: promotedChannel.Index,
 					Reason:       "promotion_priority",
 				}, nil
-			} else if upstream != nil {
-				log.Printf("⚠️ 促销渠道 [%d] %s 无可用密钥，跳过", promotedChannel.Index, upstream.Name)
+			} else {
+				failureRate := metricsManager.CalculateChannelFailureRate(upstream.BaseURL, upstream.APIKeys)
+				log.Printf("⚠️ 促销渠道 [%d] %s 不健康（失败率: %.1f%%），跳过", promotedChannel.Index, upstream.Name, failureRate*100)
 			}
-		} else {
-			log.Printf("⚠️ 促销渠道 [%d] %s 不健康，跳过", promotedChannel.Index, promotedChannel.Name)
+		} else if upstream != nil {
+			log.Printf("⚠️ 促销渠道 [%d] %s 无可用密钥，跳过", promotedChannel.Index, upstream.Name)
 		}
 	} else if promotedChannel != nil {
 		log.Printf("⚠️ 促销渠道 [%d] %s 已在本次请求中失败，跳过", promotedChannel.Index, promotedChannel.Name)
@@ -105,16 +106,14 @@ func (s *ChannelScheduler) SelectChannel(
 						continue
 					}
 					// 检查渠道是否健康
-					if metricsManager.IsChannelHealthy(preferredIdx) {
-						upstream := s.getUpstreamByIndex(preferredIdx, isResponses)
-						if upstream != nil {
-							log.Printf("🎯 Trace亲和选择渠道: [%d] %s (user: %s)", preferredIdx, upstream.Name, maskUserID(userID))
-							return &SelectionResult{
-								Upstream:     upstream,
-								ChannelIndex: preferredIdx,
-								Reason:       "trace_affinity",
-							}, nil
-						}
+					upstream := s.getUpstreamByIndex(preferredIdx, isResponses)
+					if upstream != nil && metricsManager.IsChannelHealthyWithKeys(upstream.BaseURL, upstream.APIKeys) {
+						log.Printf("🎯 Trace亲和选择渠道: [%d] %s (user: %s)", preferredIdx, upstream.Name, maskUserID(userID))
+						return &SelectionResult{
+							Upstream:     upstream,
+							ChannelIndex: preferredIdx,
+							Reason:       "trace_affinity",
+						}, nil
 					}
 				}
 			}
@@ -134,22 +133,24 @@ func (s *ChannelScheduler) SelectChannel(
 			continue
 		}
 
-		// 跳过失败率过高的渠道（已熔断或即将熔断）
-		if !metricsManager.IsChannelHealthy(ch.Index) {
-			log.Printf("⚠️ 跳过不健康渠道: [%d] %s (失败率: %.1f%%)",
-				ch.Index, ch.Name, metricsManager.CalculateFailureRate(ch.Index)*100)
+		upstream := s.getUpstreamByIndex(ch.Index, isResponses)
+		if upstream == nil || len(upstream.APIKeys) == 0 {
 			continue
 		}
 
-		upstream := s.getUpstreamByIndex(ch.Index, isResponses)
-		if upstream != nil && len(upstream.APIKeys) > 0 {
-			log.Printf("✅ 选择渠道: [%d] %s (优先级: %d)", ch.Index, upstream.Name, ch.Priority)
-			return &SelectionResult{
-				Upstream:     upstream,
-				ChannelIndex: ch.Index,
-				Reason:       "priority_order",
-			}, nil
+		// 跳过失败率过高的渠道（已熔断或即将熔断）
+		if !metricsManager.IsChannelHealthyWithKeys(upstream.BaseURL, upstream.APIKeys) {
+			failureRate := metricsManager.CalculateChannelFailureRate(upstream.BaseURL, upstream.APIKeys)
+			log.Printf("⚠️ 跳过不健康渠道: [%d] %s (失败率: %.1f%%)", ch.Index, ch.Name, failureRate*100)
+			continue
 		}
+
+		log.Printf("✅ 选择渠道: [%d] %s (优先级: %d)", ch.Index, upstream.Name, ch.Priority)
+		return &SelectionResult{
+			Upstream:     upstream,
+			ChannelIndex: ch.Index,
+			Reason:       "priority_order",
+		}, nil
 	}
 
 	// 3. 所有健康渠道都失败，选择失败率最低的作为降级
@@ -182,6 +183,7 @@ func (s *ChannelScheduler) selectFallbackChannel(
 ) (*SelectionResult, error) {
 	metricsManager := s.getMetricsManager(isResponses)
 	var bestChannel *ChannelInfo
+	var bestUpstream *config.UpstreamConfig
 	bestFailureRate := float64(2) // 初始化为不可能的值
 
 	for i := range activeChannels {
@@ -194,24 +196,27 @@ func (s *ChannelScheduler) selectFallbackChannel(
 			continue
 		}
 
-		failureRate := metricsManager.CalculateFailureRate(ch.Index)
+		upstream := s.getUpstreamByIndex(ch.Index, isResponses)
+		if upstream == nil || len(upstream.APIKeys) == 0 {
+			continue
+		}
+
+		failureRate := metricsManager.CalculateChannelFailureRate(upstream.BaseURL, upstream.APIKeys)
 		if failureRate < bestFailureRate {
 			bestFailureRate = failureRate
 			bestChannel = ch
+			bestUpstream = upstream
 		}
 	}
 
-	if bestChannel != nil {
-		upstream := s.getUpstreamByIndex(bestChannel.Index, isResponses)
-		if upstream != nil {
-			log.Printf("⚠️ 降级选择渠道: [%d] %s (失败率: %.1f%%)",
-				bestChannel.Index, upstream.Name, bestFailureRate*100)
-			return &SelectionResult{
-				Upstream:     upstream,
-				ChannelIndex: bestChannel.Index,
-				Reason:       "fallback",
-			}, nil
-		}
+	if bestChannel != nil && bestUpstream != nil {
+		log.Printf("⚠️ 降级选择渠道: [%d] %s (失败率: %.1f%%)",
+			bestChannel.Index, bestUpstream.Name, bestFailureRate*100)
+		return &SelectionResult{
+			Upstream:     bestUpstream,
+			ChannelIndex: bestChannel.Index,
+			Reason:       "fallback",
+		}, nil
 	}
 
 	return nil, fmt.Errorf("所有渠道都不可用")
@@ -288,14 +293,14 @@ func (s *ChannelScheduler) getUpstreamByIndex(index int, isResponses bool) *conf
 	return nil
 }
 
-// RecordSuccess 记录渠道成功
-func (s *ChannelScheduler) RecordSuccess(channelIndex int, isResponses bool) {
-	s.getMetricsManager(isResponses).RecordSuccess(channelIndex)
+// RecordSuccess 记录渠道成功（使用 baseURL + apiKey）
+func (s *ChannelScheduler) RecordSuccess(baseURL, apiKey string, isResponses bool) {
+	s.getMetricsManager(isResponses).RecordSuccess(baseURL, apiKey)
 }
 
-// RecordFailure 记录渠道失败
-func (s *ChannelScheduler) RecordFailure(channelIndex int, isResponses bool) {
-	s.getMetricsManager(isResponses).RecordFailure(channelIndex)
+// RecordFailure 记录渠道失败（使用 baseURL + apiKey）
+func (s *ChannelScheduler) RecordFailure(baseURL, apiKey string, isResponses bool) {
+	s.getMetricsManager(isResponses).RecordFailure(baseURL, apiKey)
 }
 
 // SetTraceAffinity 设置 Trace 亲和
@@ -327,9 +332,22 @@ func (s *ChannelScheduler) GetTraceAffinityManager() *session.TraceAffinityManag
 	return s.traceAffinity
 }
 
-// ResetChannelMetrics 重置渠道指标（用于恢复熔断）
+// ResetChannelMetrics 重置渠道所有 Key 的指标（用于恢复熔断）
 func (s *ChannelScheduler) ResetChannelMetrics(channelIndex int, isResponses bool) {
-	s.getMetricsManager(isResponses).Reset(channelIndex)
+	upstream := s.getUpstreamByIndex(channelIndex, isResponses)
+	if upstream == nil {
+		return
+	}
+	metricsManager := s.getMetricsManager(isResponses)
+	for _, apiKey := range upstream.APIKeys {
+		metricsManager.ResetKey(upstream.BaseURL, apiKey)
+	}
+	log.Printf("🔄 渠道 [%d] %s 的所有 Key 指标已重置", channelIndex, upstream.Name)
+}
+
+// ResetKeyMetrics 重置单个 Key 的指标
+func (s *ChannelScheduler) ResetKeyMetrics(baseURL, apiKey string, isResponses bool) {
+	s.getMetricsManager(isResponses).ResetKey(baseURL, apiKey)
 }
 
 // GetActiveChannelCount 获取活跃渠道数量

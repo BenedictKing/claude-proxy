@@ -9,10 +9,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/types"
 	"github.com/BenedictKing/claude-proxy/internal/utils"
+	"github.com/gin-gonic/gin"
 )
 
 // ClaudeProvider Claude 提供商（直接透传）
