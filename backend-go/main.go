@@ -72,8 +72,10 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	// 创建路由器
-	r := gin.Default()
+	// 创建路由器（使用自定义 Logger，根据 QUIET_POLLING_LOGS 配置过滤轮询日志）
+	r := gin.New()
+	r.Use(middleware.FilteredLogger(envCfg))
+	r.Use(gin.Recovery())
 
 	// 配置 CORS
 	r.Use(middleware.CORSMiddleware(envCfg))

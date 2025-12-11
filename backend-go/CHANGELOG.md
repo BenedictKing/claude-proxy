@@ -1,6 +1,36 @@
 # Changelog
 
-## [Unreleased] - 2025-12-11
+## [v2.1.2] - 2025-12-11
+
+### Changed - Gin Logger 过滤：减少 /api/channels 轮询日志噪音
+
+**问题背景**：
+- 前端 Web UI 每隔几秒轮询 `/api/channels`、`/api/channels/metrics`、`/api/channels/scheduler/stats`
+- 这些请求产生大量 `[GIN]` 日志，淹没了真正重要的 API 调用日志（如 `/v1/messages`）
+
+**解决方案**：
+- 新增 `internal/middleware/logger.go`，使用 Gin 官方 `gin.LoggerWithConfig` + `Skip` 函数
+- 通过 `QUIET_POLLING_LOGS` 环境变量控制（默认 true，开启过滤）
+- 仅过滤 GET 请求，POST/PUT/DELETE 管理操作始终记录日志以保留审计跟踪
+
+**具体改动**：
+1. `internal/middleware/logger.go` - 新增 FilteredLogger 中间件
+2. `internal/config/env.go` - `QUIET_POLLING_LOGS` 环境变量（默认 true）
+3. `main.go` - 将 `gin.Default()` 改为 `gin.New()` + `FilteredLogger(envCfg)` + `Recovery()`
+
+**使用方式**：
+```bash
+# 默认已启用轮询日志过滤
+
+# 如需显示所有日志（调试用），在 .env 文件中设置：
+QUIET_POLLING_LOGS=false
+```
+
+## [v2.1.1] - 2025-12-11
+
+### Changed - 版本号更新
+
+## [v2.1.0] - 2025-12-11
 
 ### Changed - 指标系统重构：从渠道索引绑定改为 Key 级别绑定
 
