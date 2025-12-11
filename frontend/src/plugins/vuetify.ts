@@ -1,11 +1,144 @@
 import { createVuetify } from 'vuetify'
-import { aliases, mdi } from 'vuetify/iconsets/mdi'
+import { aliases as defaultAliases, mdi } from 'vuetify/iconsets/mdi-svg'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 
 // 引入样式
 import 'vuetify/styles'
-import '@mdi/font/css/materialdesignicons.css'
+
+// 从 @mdi/js 按需导入使用的图标 (SVG)
+// 📝 维护说明: 新增图标时需要:
+//    1. 从 @mdi/js 添加导入 (驼峰命名，如 mdiNewIcon)
+//    2. 在 customAliases 中添加映射 (如 'new-icon': mdiNewIcon)
+//    图标查找: https://pictogrammers.com/library/mdi/
+import {
+  mdiSwapVerticalBold,
+  mdiPlayCircle,
+  mdiDragVertical,
+  mdiOpenInNew,
+  mdiKey,
+  mdiRefresh,
+  mdiDotsVertical,
+  mdiPencil,
+  mdiSpeedometer,
+  mdiRocketLaunch,
+  mdiPauseCircle,
+  mdiStopCircle,
+  mdiDelete,
+  mdiPlaylistRemove,
+  mdiArchiveOutline,
+  mdiPlus,
+  mdiCheckCircle,
+  mdiAlertCircle,
+  mdiHelpCircle,
+  mdiCloseCircle,
+  mdiTag,
+  mdiInformation,
+  mdiCog,
+  mdiWeb,
+  mdiShieldAlert,
+  mdiText,
+  mdiSwapHorizontal,
+  mdiArrowRight,
+  mdiClose,
+  mdiArrowUpBold,
+  mdiArrowDownBold,
+  mdiCheck,
+  mdiContentCopy,
+  mdiAlert,
+  mdiWeatherNight,
+  mdiWhiteBalanceSunny,
+  mdiLogout,
+  mdiServerNetwork,
+  mdiHeartPulse,
+  mdiChevronDown,
+  mdiTune,
+  mdiRotateRight,
+  mdiDice6,
+  mdiBackupRestore,
+  mdiKeyPlus,
+  mdiPin,
+  mdiPinOutline,
+  mdiKeyChain,
+  mdiRobot,
+  mdiRobotOutline,
+  mdiMessageProcessing,
+  mdiDiamondStone,
+  mdiApi,
+  mdiLightningBolt,
+  mdiFormTextbox,
+} from '@mdi/js'
+
+// 自定义图标别名映射 (mdi-xxx 字符串 -> SVG path)
+const customAliases = {
+  ...defaultAliases,
+  // 布局与导航
+  'swap-vertical-bold': mdiSwapVerticalBold,
+  'drag-vertical': mdiDragVertical,
+  'open-in-new': mdiOpenInNew,
+  'chevron-down': mdiChevronDown,
+  'dots-vertical': mdiDotsVertical,
+  'logout': mdiLogout,
+  'archive-outline': mdiArchiveOutline,
+
+  // 操作按钮
+  'plus': mdiPlus,
+  'pencil': mdiPencil,
+  'delete': mdiDelete,
+  'refresh': mdiRefresh,
+  'close': mdiClose,
+  'check': mdiCheck,
+  'content-copy': mdiContentCopy,
+  'arrow-up-bold': mdiArrowUpBold,
+  'arrow-down-bold': mdiArrowDownBold,
+  'arrow-right': mdiArrowRight,
+  'swap-horizontal': mdiSwapHorizontal,
+  'rotate-right': mdiRotateRight,
+  'backup-restore': mdiBackupRestore,
+
+  // 状态图标
+  'play-circle': mdiPlayCircle,
+  'pause-circle': mdiPauseCircle,
+  'stop-circle': mdiStopCircle,
+  'check-circle': mdiCheckCircle,
+  'alert-circle': mdiAlertCircle,
+  'close-circle': mdiCloseCircle,
+  'help-circle': mdiHelpCircle,
+  'alert': mdiAlert,
+
+  // 功能图标
+  'key': mdiKey,
+  'key-plus': mdiKeyPlus,
+  'key-chain': mdiKeyChain,
+  'speedometer': mdiSpeedometer,
+  'rocket-launch': mdiRocketLaunch,
+  'playlist-remove': mdiPlaylistRemove,
+  'tag': mdiTag,
+  'information': mdiInformation,
+  'cog': mdiCog,
+  'web': mdiWeb,
+  'shield-alert': mdiShieldAlert,
+  'text': mdiText,
+  'tune': mdiTune,
+  'dice-6': mdiDice6,
+  'heart-pulse': mdiHeartPulse,
+  'server-network': mdiServerNetwork,
+  'pin': mdiPin,
+  'pin-outline': mdiPinOutline,
+  'lightning-bolt': mdiLightningBolt,
+  'form-textbox': mdiFormTextbox,
+
+  // 主题切换
+  'weather-night': mdiWeatherNight,
+  'white-balance-sunny': mdiWhiteBalanceSunny,
+
+  // 服务类型图标
+  'robot': mdiRobot,
+  'robot-outline': mdiRobotOutline,
+  'message-processing': mdiMessageProcessing,
+  'diamond-stone': mdiDiamondStone,
+  'api': mdiApi,
+}
 
 // 🎨 精心设计的现代化配色方案
 // Light Theme - 清新专业，柔和渐变
@@ -61,7 +194,7 @@ export default createVuetify({
   directives,
   icons: {
     defaultSet: 'mdi',
-    aliases,
+    aliases: customAliases,
     sets: {
       mdi
     }

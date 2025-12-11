@@ -11,7 +11,6 @@
     "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "@mdi/font": "^7.4.47",
     "@mdi/js": "^7.4.47",
     "vue": "^3.5.24",
     "vuedraggable": "^4.1.0",
