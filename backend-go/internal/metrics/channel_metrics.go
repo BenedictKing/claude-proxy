@@ -82,8 +82,8 @@ func NewMetricsManager() *MetricsManager {
 
 // NewMetricsManagerWithConfig 创建带配置的指标管理器
 func NewMetricsManagerWithConfig(windowSize int, failureThreshold float64) *MetricsManager {
-	if windowSize <= 0 {
-		windowSize = 10
+	if windowSize < 3 {
+		windowSize = 3 // 最小 3
 	}
 	if failureThreshold <= 0 || failureThreshold > 1 {
 		failureThreshold = 0.5
@@ -185,7 +185,8 @@ func (m *MetricsManager) RecordFailure(baseURL, apiKey string) {
 
 // isKeyCircuitBroken 判断 Key 是否达到熔断条件（内部方法，调用前需持有锁）
 func (m *MetricsManager) isKeyCircuitBroken(metrics *KeyMetrics) bool {
-	minRequests := m.windowSize / 2
+	// 最小请求数保护：至少 max(3, windowSize/2) 次请求才判断熔断
+	minRequests := max(3, m.windowSize/2)
 	if len(metrics.recentResults) < minRequests {
 		return false
 	}
@@ -275,6 +276,12 @@ func (m *MetricsManager) IsChannelHealthyWithKeys(baseURL string, activeKeys []s
 	// 没有任何记录，默认健康
 	if len(totalResults) == 0 {
 		return true
+	}
+
+	// 最小请求数保护：至少 max(3, windowSize/2) 次请求才判断健康状态
+	minRequests := max(3, m.windowSize/2)
+	if len(totalResults) < minRequests {
+		return true // 请求数不足，默认健康
 	}
 
 	// 计算聚合失败率
@@ -838,8 +845,8 @@ func (m *MetricsManager) ShouldSuspendKey(baseURL, apiKey string) bool {
 		return false
 	}
 
-	// 至少有一定数量的请求才判断
-	minRequests := m.windowSize / 2
+	// 最小请求数保护：至少 max(3, windowSize/2) 次请求才判断
+	minRequests := max(3, m.windowSize/2)
 	if len(metrics.recentResults) < minRequests {
 		return false
 	}

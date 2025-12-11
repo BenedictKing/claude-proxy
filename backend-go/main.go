@@ -60,8 +60,8 @@ func main() {
 	log.Printf("✅ 会话管理器已初始化")
 
 	// 初始化多渠道调度器（Messages 和 Responses 使用独立的指标管理器）
-	messagesMetricsManager := metrics.NewMetricsManager()
-	responsesMetricsManager := metrics.NewMetricsManager()
+	messagesMetricsManager := metrics.NewMetricsManagerWithConfig(envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold)
+	responsesMetricsManager := metrics.NewMetricsManagerWithConfig(envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold)
 	traceAffinityManager := session.NewTraceAffinityManager()
 	channelScheduler := scheduler.NewChannelScheduler(cfgManager, messagesMetricsManager, responsesMetricsManager, traceAffinityManager)
 	log.Printf("✅ 多渠道调度器已初始化 (失败率阈值: %.0f%%, 滑动窗口: %d)",

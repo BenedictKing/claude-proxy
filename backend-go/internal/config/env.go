@@ -25,6 +25,9 @@ type EnvConfig struct {
 	RateLimitMaxRequests int
 	HealthCheckEnabled   bool
 	HealthCheckPath      string
+	// 指标配置
+	MetricsWindowSize       int     // 滑动窗口大小
+	MetricsFailureThreshold float64 // 失败率阈值
 	// 日志文件相关配置
 	LogDir        string
 	LogFile       string
@@ -62,6 +65,9 @@ func NewEnvConfig() *EnvConfig {
 		RateLimitMaxRequests: getEnvAsInt("RATE_LIMIT_MAX_REQUESTS", 100),
 		HealthCheckEnabled:   getEnv("HEALTH_CHECK_ENABLED", "true") != "false",
 		HealthCheckPath:      getEnv("HEALTH_CHECK_PATH", "/health"),
+		// 指标配置
+		MetricsWindowSize:       getEnvAsInt("METRICS_WINDOW_SIZE", 10),
+		MetricsFailureThreshold: getEnvAsFloat("METRICS_FAILURE_THRESHOLD", 0.5),
 		// 日志文件配置
 		LogDir:        getEnv("LOG_DIR", "logs"),
 		LogFile:       getEnv("LOG_FILE", "app.log"),
@@ -118,6 +124,16 @@ func getEnvAsInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intValue, err := strconv.Atoi(value); err == nil {
 			return intValue
+		}
+	}
+	return defaultValue
+}
+
+// getEnvAsFloat 获取环境变量并转换为浮点数
+func getEnvAsFloat(key string, defaultValue float64) float64 {
+	if value := os.Getenv(key); value != "" {
+		if floatValue, err := strconv.ParseFloat(value, 64); err == nil {
+			return floatValue
 		}
 	}
 	return defaultValue
