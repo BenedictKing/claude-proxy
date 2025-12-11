@@ -116,21 +116,7 @@ func (cm *ConfigManager) loadConfig() error {
 
 	// 如果配置文件不存在，创建默认配置
 	if _, err := os.Stat(cm.configFile); os.IsNotExist(err) {
-		defaultConfig := Config{
-			Upstream:                 []UpstreamConfig{},
-			CurrentUpstream:          0,
-			LoadBalance:              "failover",
-			ResponsesUpstream:        []UpstreamConfig{},
-			CurrentResponsesUpstream: 0,
-			ResponsesLoadBalance:     "failover",
-		}
-
-		// 确保目录存在
-		if err := os.MkdirAll(filepath.Dir(cm.configFile), 0755); err != nil {
-			return err
-		}
-
-		return cm.saveConfigLocked(defaultConfig)
+		return cm.createDefaultConfig()
 	}
 
 	// 读取配置文件
@@ -143,86 +129,11 @@ func (cm *ConfigManager) loadConfig() error {
 		return err
 	}
 
-	// 兼容旧配置：如果 ResponsesLoadBalance 为空则回退到主配置
-	if cm.config.LoadBalance == "" {
-		cm.config.LoadBalance = "failover"
-	}
-	if cm.config.ResponsesLoadBalance == "" {
-		cm.config.ResponsesLoadBalance = cm.config.LoadBalance
-	}
+	// 兼容旧配置
+	cm.applyConfigDefaults()
 
-	// 兼容旧格式：检测是否需要迁移（旧格式无 status 字段或 status 为空）
-	needMigrationUpstream := false
-	needMigrationResponses := false
-
-	// 检查 Messages 渠道是否需要迁移
-	if len(cm.config.Upstream) > 0 {
-		hasStatusField := false
-		for _, up := range cm.config.Upstream {
-			if up.Status != "" {
-				hasStatusField = true
-				break
-			}
-		}
-		if !hasStatusField {
-			needMigrationUpstream = true
-		}
-	}
-
-	// 检查 Responses 渠道是否需要迁移
-	if len(cm.config.ResponsesUpstream) > 0 {
-		hasStatusField := false
-		for _, up := range cm.config.ResponsesUpstream {
-			if up.Status != "" {
-				hasStatusField = true
-				break
-			}
-		}
-		if !hasStatusField {
-			needMigrationResponses = true
-		}
-	}
-
-	if needMigrationUpstream || needMigrationResponses {
-		log.Printf("检测到旧格式配置，正在迁移到新格式...")
-
-		// Messages 渠道迁移
-		if needMigrationUpstream && len(cm.config.Upstream) > 0 {
-			currentIdx := cm.config.CurrentUpstream
-			if currentIdx < 0 || currentIdx >= len(cm.config.Upstream) {
-				currentIdx = 0
-			}
-			// 设置所有渠道的 status 状态
-			for i := range cm.config.Upstream {
-				if i == currentIdx {
-					cm.config.Upstream[i].Status = "active"
-				} else {
-					cm.config.Upstream[i].Status = "disabled"
-				}
-			}
-			log.Printf("Messages 渠道 [%d] %s 已设置为 active，其他 %d 个渠道已设为 disabled",
-				currentIdx, cm.config.Upstream[currentIdx].Name, len(cm.config.Upstream)-1)
-		}
-
-		// Responses 渠道迁移
-		if needMigrationResponses && len(cm.config.ResponsesUpstream) > 0 {
-			currentIdx := cm.config.CurrentResponsesUpstream
-			if currentIdx < 0 || currentIdx >= len(cm.config.ResponsesUpstream) {
-				currentIdx = 0
-			}
-			// 设置所有渠道的 status 状态
-			for i := range cm.config.ResponsesUpstream {
-				if i == currentIdx {
-					cm.config.ResponsesUpstream[i].Status = "active"
-				} else {
-					cm.config.ResponsesUpstream[i].Status = "disabled"
-				}
-			}
-			log.Printf("Responses 渠道 [%d] %s 已设置为 active，其他 %d 个渠道已设为 disabled",
-				currentIdx, cm.config.ResponsesUpstream[currentIdx].Name, len(cm.config.ResponsesUpstream)-1)
-		}
-
-		// 保存迁移后的配置（saveConfigLocked 会自动清理废弃字段）
+	// 兼容旧格式：检测是否需要迁移
+	if cm.migrateOldFormat() {
 		if err := cm.saveConfigLocked(cm.config); err != nil {
 			log.Printf("保存迁移后的配置失败: %v", err)
 			return err
@@ -231,8 +142,7 @@ func (cm *ConfigManager) loadConfig() error {
 	}
 
 	// 自检：没有配置 key 的渠道自动暂停
-	needSave := cm.validateChannelKeys()
-	if needSave {
+	if cm.validateChannelKeys() {
 		if err := cm.saveConfigLocked(cm.config); err != nil {
 			log.Printf("保存自检后的配置失败: %v", err)
 			return err
@@ -240,6 +150,87 @@ func (cm *ConfigManager) loadConfig() error {
 	}
 
 	return nil
+}
+
+// createDefaultConfig 创建默认配置
+func (cm *ConfigManager) createDefaultConfig() error {
+	defaultConfig := Config{
+		Upstream:                 []UpstreamConfig{},
+		CurrentUpstream:          0,
+		LoadBalance:              "failover",
+		ResponsesUpstream:        []UpstreamConfig{},
+		CurrentResponsesUpstream: 0,
+		ResponsesLoadBalance:     "failover",
+	}
+
+	if err := os.MkdirAll(filepath.Dir(cm.configFile), 0755); err != nil {
+		return err
+	}
+
+	return cm.saveConfigLocked(defaultConfig)
+}
+
+// applyConfigDefaults 应用配置默认值
+func (cm *ConfigManager) applyConfigDefaults() {
+	if cm.config.LoadBalance == "" {
+		cm.config.LoadBalance = "failover"
+	}
+	if cm.config.ResponsesLoadBalance == "" {
+		cm.config.ResponsesLoadBalance = cm.config.LoadBalance
+	}
+}
+
+// migrateOldFormat 迁移旧格式配置，返回是否有迁移
+func (cm *ConfigManager) migrateOldFormat() bool {
+	needMigration := false
+
+	// 迁移 Messages 渠道
+	if cm.migrateUpstreams(cm.config.Upstream, cm.config.CurrentUpstream, "Messages") {
+		needMigration = true
+	}
+
+	// 迁移 Responses 渠道
+	if cm.migrateUpstreams(cm.config.ResponsesUpstream, cm.config.CurrentResponsesUpstream, "Responses") {
+		needMigration = true
+	}
+
+	if needMigration {
+		log.Printf("检测到旧格式配置，正在迁移到新格式...")
+	}
+
+	return needMigration
+}
+
+// migrateUpstreams 迁移单个渠道列表
+func (cm *ConfigManager) migrateUpstreams(upstreams []UpstreamConfig, currentIdx int, name string) bool {
+	if len(upstreams) == 0 {
+		return false
+	}
+
+	// 检查是否已有 status 字段
+	for _, up := range upstreams {
+		if up.Status != "" {
+			return false
+		}
+	}
+
+	// 需要迁移
+	if currentIdx < 0 || currentIdx >= len(upstreams) {
+		currentIdx = 0
+	}
+
+	for i := range upstreams {
+		if i == currentIdx {
+			upstreams[i].Status = "active"
+		} else {
+			upstreams[i].Status = "disabled"
+		}
+	}
+
+	log.Printf("%s 渠道 [%d] %s 已设置为 active，其他 %d 个渠道已设为 disabled",
+		name, currentIdx, upstreams[currentIdx].Name, len(upstreams)-1)
+
+	return true
 }
 
 // validateChannelKeys 自检渠道密钥配置

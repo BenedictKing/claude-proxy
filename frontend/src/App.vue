@@ -769,7 +769,9 @@ const handleAuthSubmit = async () => {
     authKeyInput.value = ''
 
     // 记录认证成功(前端日志)
-    console.info('✅ 认证成功 - 时间:', new Date().toISOString())
+    if (import.meta.env.DEV) {
+      console.info('✅ 认证成功 - 时间:', new Date().toISOString())
+    }
   } catch (error: any) {
     // 认证失败
     authAttempts.value++

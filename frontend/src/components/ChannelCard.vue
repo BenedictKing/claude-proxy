@@ -312,15 +312,6 @@ const getServiceChipColor = () => {
   return colorMap[props.channel.serviceType] || 'primary'
 }
 
-// 获取延迟对应的颜色
-const getLatencyColor = () => {
-  if (!props.channel.latency) return 'surface-variant'
-  
-  if (props.channel.latency < 200) return 'success'
-  if (props.channel.latency < 500) return 'warning'
-  return 'error'
-}
-
 // 获取状态对应的颜色
 const getStatusColor = () => {
   const colorMap: Record<string, string> = {

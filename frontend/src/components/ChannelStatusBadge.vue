@@ -84,7 +84,6 @@ const statusConfig = computed(() => {
 })
 
 const statusIcon = computed(() => statusConfig.value.icon)
-const statusColor = computed(() => statusConfig.value.color)
 const statusLabel = computed(() => statusConfig.value.label)
 const statusClass = computed(() => statusConfig.value.class)
 

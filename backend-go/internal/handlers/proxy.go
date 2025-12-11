@@ -664,23 +664,8 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 		return
 	}
 
-	// 先转发上游响应头（透明代理）
-	utils.ForwardResponseHeaders(resp.Header, c.Writer)
-
-	// 设置 SSE 响应头（可能覆盖上游的 Content-Type）
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("Connection", "keep-alive")
-	c.Header("X-Accel-Buffering", "no")
-
-	c.Status(200)
-
-	var logBuffer bytes.Buffer
-	var synthesizer *utils.StreamSynthesizer
-	streamLoggingEnabled := envCfg.IsDevelopment() && envCfg.EnableResponseLogs
-	if streamLoggingEnabled {
-		synthesizer = utils.NewStreamSynthesizer(upstream.ServiceType)
-	}
+	// 设置响应头
+	setupStreamHeaders(c, resp)
 
 	w := c.Writer
 	flusher, ok := w.(http.Flusher)
@@ -690,114 +675,154 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 	}
 	flusher.Flush()
 
-	clientGone := false
-	hasUsage := false            // 跟踪是否已收到 usage
-	needTokenPatch := false      // 是否需要修补 token（input_tokens <= 1 或 output_tokens == 0）
-	var outputTextBuffer bytes.Buffer // 累积输出文本用于估算 token
+	// 初始化流处理上下文
+	ctx := newStreamContext(envCfg, upstream)
+
+	// 事件循环
+	processStreamEvents(c, w, flusher, eventChan, errChan, ctx, envCfg, startTime, requestBody)
+}
+
+// setupStreamHeaders 设置流式响应头
+func setupStreamHeaders(c *gin.Context, resp *http.Response) {
+	utils.ForwardResponseHeaders(resp.Header, c.Writer)
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	c.Status(200)
+}
+
+// streamContext 流处理上下文
+type streamContext struct {
+	logBuffer        bytes.Buffer
+	outputTextBuffer bytes.Buffer
+	synthesizer      *utils.StreamSynthesizer
+	loggingEnabled   bool
+	clientGone       bool
+	hasUsage         bool
+	needTokenPatch   bool
+}
+
+func newStreamContext(envCfg *config.EnvConfig, upstream *config.UpstreamConfig) *streamContext {
+	ctx := &streamContext{
+		loggingEnabled: envCfg.IsDevelopment() && envCfg.EnableResponseLogs,
+	}
+	if ctx.loggingEnabled {
+		ctx.synthesizer = utils.NewStreamSynthesizer(upstream.ServiceType)
+	}
+	return ctx
+}
+
+// processStreamEvents 处理流事件循环
+func processStreamEvents(c *gin.Context, w gin.ResponseWriter, flusher http.Flusher, eventChan <-chan string, errChan <-chan error, ctx *streamContext, envCfg *config.EnvConfig, startTime time.Time, requestBody []byte) {
 	for {
 		select {
 		case event, ok := <-eventChan:
 			if !ok {
-				// 通道关闭，流式传输结束
-				if envCfg.EnableResponseLogs {
-					responseTime := time.Since(startTime).Milliseconds()
-					log.Printf("⏱️ 流式响应完成: %dms", responseTime)
-
-					// 打印完整的响应内容
-					if envCfg.IsDevelopment() {
-						if synthesizer != nil {
-							synthesizedContent := synthesizer.GetSynthesizedContent()
-							parseFailed := synthesizer.IsParseFailed()
-							if synthesizedContent != "" && !parseFailed {
-								log.Printf("🛰️  上游流式响应合成内容:\n%s", strings.TrimSpace(synthesizedContent))
-							} else if logBuffer.Len() > 0 {
-								log.Printf("🛰️  上游流式响应原始内容:\n%s", logBuffer.String())
-							}
-						} else if logBuffer.Len() > 0 {
-							// synthesizer为nil时，直接打印原始内容
-							log.Printf("🛰️  上游流式响应原始内容:\n%s", logBuffer.String())
-						}
-					}
-				}
+				logStreamCompletion(ctx, envCfg, startTime)
 				return
 			}
-
-			// 使用 JSON 解析精确检测 usage 字段，并检查是否需要修补 input_tokens
-			if !hasUsage {
-				hasUsage, needTokenPatch = checkEventUsageStatus(event)
-			}
-
-			// 提取文本内容用于估算输出 token
-			extractTextFromEvent(event, &outputTextBuffer)
-
-			// 缓存事件用于最后的日志输出
-			if streamLoggingEnabled {
-				logBuffer.WriteString(event)
-				if synthesizer != nil {
-					lines := strings.Split(event, "\n")
-					for _, line := range lines {
-						synthesizer.ProcessLine(line)
-					}
-				}
-			}
-
-			// 检测 message_stop 事件，在其之前注入 usage（如果需要）
-			if !hasUsage && !clientGone && isMessageStopEvent(event) {
-				usageEvent := buildUsageEvent(requestBody, outputTextBuffer.String())
-				w.Write([]byte(usageEvent))
-				flusher.Flush()
-				hasUsage = true // 防止重复注入
-			}
-
-			// 如果需要修补 token，在转发前修改事件
-			eventToSend := event
-			if needTokenPatch && hasEventWithUsage(event) {
-				eventToSend = patchTokensInEvent(event, utils.EstimateRequestTokens(requestBody), utils.EstimateTokens(outputTextBuffer.String()))
-				needTokenPatch = false // 只修补一次
-			}
-
-			// 实时转发给客户端（流式传输）
-			if !clientGone {
-				_, err := w.Write([]byte(eventToSend))
-				if err != nil {
-					clientGone = true // 标记客户端已断开，停止后续写入
-					errMsg := err.Error()
-					if strings.Contains(errMsg, "broken pipe") || strings.Contains(errMsg, "connection reset") {
-						if envCfg.ShouldLog("info") {
-							log.Printf("ℹ️ 客户端中断连接 (正常行为)，继续接收上游数据...")
-						}
-					} else {
-						log.Printf("⚠️ 流式传输写入错误: %v", err)
-					}
-					// 注意：这里不再return，而是继续循环以耗尽eventChan
-				} else {
-					flusher.Flush()
-				}
-			}
+			processStreamEvent(c, w, flusher, event, ctx, envCfg, requestBody)
 
 		case err, ok := <-errChan:
 			if !ok {
-				// errChan关闭，但这不一定意味着流结束，继续等待eventChan
 				continue
 			}
 			if err != nil {
-				// 真的有错误发生
 				log.Printf("💥 流式传输错误: %v", err)
-
-				// 打印已接收到的部分响应
-				if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
-					if synthesizer != nil {
-						synthesizedContent := synthesizer.GetSynthesizedContent()
-						if synthesizedContent != "" && !synthesizer.IsParseFailed() {
-							log.Printf("🛰️  上游流式响应合成内容 (部分):\n%s", strings.TrimSpace(synthesizedContent))
-						} else if logBuffer.Len() > 0 {
-							log.Printf("🛰️  上游流式响应原始内容 (部分):\n%s", logBuffer.String())
-						}
-					}
-				}
+				logPartialResponse(ctx, envCfg)
 				return
 			}
 		}
+	}
+}
+
+// processStreamEvent 处理单个流事件
+func processStreamEvent(c *gin.Context, w gin.ResponseWriter, flusher http.Flusher, event string, ctx *streamContext, envCfg *config.EnvConfig, requestBody []byte) {
+	// 检测 usage 状态
+	if !ctx.hasUsage {
+		ctx.hasUsage, ctx.needTokenPatch = checkEventUsageStatus(event)
+	}
+
+	// 提取文本用于估算 token
+	extractTextFromEvent(event, &ctx.outputTextBuffer)
+
+	// 日志缓存
+	if ctx.loggingEnabled {
+		ctx.logBuffer.WriteString(event)
+		if ctx.synthesizer != nil {
+			for _, line := range strings.Split(event, "\n") {
+				ctx.synthesizer.ProcessLine(line)
+			}
+		}
+	}
+
+	// 在 message_stop 前注入 usage
+	if !ctx.hasUsage && !ctx.clientGone && isMessageStopEvent(event) {
+		usageEvent := buildUsageEvent(requestBody, ctx.outputTextBuffer.String())
+		w.Write([]byte(usageEvent))
+		flusher.Flush()
+		ctx.hasUsage = true
+	}
+
+	// 修补 token
+	eventToSend := event
+	if ctx.needTokenPatch && hasEventWithUsage(event) {
+		eventToSend = patchTokensInEvent(event, utils.EstimateRequestTokens(requestBody), utils.EstimateTokens(ctx.outputTextBuffer.String()))
+		ctx.needTokenPatch = false
+	}
+
+	// 转发给客户端
+	if !ctx.clientGone {
+		if _, err := w.Write([]byte(eventToSend)); err != nil {
+			ctx.clientGone = true
+			if !isClientDisconnectError(err) {
+				log.Printf("⚠️ 流式传输写入错误: %v", err)
+			} else if envCfg.ShouldLog("info") {
+				log.Printf("ℹ️ 客户端中断连接 (正常行为)，继续接收上游数据...")
+			}
+		} else {
+			flusher.Flush()
+		}
+	}
+}
+
+// isClientDisconnectError 判断是否为客户端断开连接错误
+func isClientDisconnectError(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "broken pipe") || strings.Contains(msg, "connection reset")
+}
+
+// logStreamCompletion 记录流完成日志
+func logStreamCompletion(ctx *streamContext, envCfg *config.EnvConfig, startTime time.Time) {
+	if !envCfg.EnableResponseLogs {
+		return
+	}
+	log.Printf("⏱️ 流式响应完成: %dms", time.Since(startTime).Milliseconds())
+
+	if envCfg.IsDevelopment() {
+		logSynthesizedContent(ctx)
+	}
+}
+
+// logPartialResponse 记录部分响应日志
+func logPartialResponse(ctx *streamContext, envCfg *config.EnvConfig) {
+	if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
+		logSynthesizedContent(ctx)
+	}
+}
+
+// logSynthesizedContent 记录合成内容
+func logSynthesizedContent(ctx *streamContext) {
+	if ctx.synthesizer != nil {
+		content := ctx.synthesizer.GetSynthesizedContent()
+		if content != "" && !ctx.synthesizer.IsParseFailed() {
+			log.Printf("🛰️  上游流式响应合成内容:\n%s", strings.TrimSpace(content))
+			return
+		}
+	}
+	if ctx.logBuffer.Len() > 0 {
+		log.Printf("🛰️  上游流式响应原始内容:\n%s", ctx.logBuffer.String())
 	}
 }
 

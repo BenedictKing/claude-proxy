@@ -1,6 +1,6 @@
 import { createVuetify } from 'vuetify'
 import { h } from 'vue'
-import type { IconSet, IconProps } from 'vuetify'
+import type { IconSet, IconProps, ThemeDefinition } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 
@@ -192,7 +192,6 @@ const iconMap: Record<string, string> = {
   'lightning-bolt': mdiLightningBolt,
   'form-textbox': mdiFormTextbox,
   'clock-outline': mdiClockOutline,
-  'calendar': mdiCalendar,
   'paperclip': mdiPaperclip,
   'eye-dropper': mdiEyedropper,
 
@@ -225,7 +224,6 @@ const iconMap: Record<string, string> = {
 
   // 其他
   'unfold-more-horizontal': mdiUnfoldMoreHorizontal,
-  'loading': mdiLoading,
   'circle': mdiCircle,
 }
 
@@ -242,7 +240,9 @@ const customSvgIconSet: IconSet = {
     const svgPath = iconMap[iconName]
 
     if (!svgPath) {
-      console.warn(`[Vuetify Icon] 未找到图标: ${iconName}，请在 vuetify.ts 的 iconMap 中添加映射`)
+      if (import.meta.env.DEV) {
+        console.warn(`[Vuetify Icon] 未找到图标: ${iconName}，请在 vuetify.ts 的 iconMap 中添加映射`)
+      }
       return h('span', `[${iconName}]`)
     }
 
@@ -268,7 +268,7 @@ const customSvgIconSet: IconSet = {
 
 // 🎨 精心设计的现代化配色方案
 // Light Theme - 清新专业，柔和渐变
-const lightTheme = {
+const lightTheme: ThemeDefinition = {
   dark: false,
   colors: {
     // 主色调 - 现代蓝紫渐变感
@@ -292,7 +292,7 @@ const lightTheme = {
 }
 
 // Dark Theme - 深邃优雅，护眼舒适
-const darkTheme = {
+const darkTheme: ThemeDefinition = {
   dark: true,
   colors: {
     // 主色调 - 亮度适中，不刺眼

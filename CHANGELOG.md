@@ -4,6 +4,27 @@
 
 ---
 
+## [v2.1.8] - 2025-12-11
+
+### 🧹 代码重构
+
+- **重构过长方法，提升代码可读性和可维护性**
+  - `config/config.go:loadConfig` (130行 → 5个函数)：
+    - 提取 `createDefaultConfig()` - 创建默认配置
+    - 提取 `applyConfigDefaults()` - 应用配置默认值
+    - 提取 `migrateOldFormat()` - 旧格式迁移检测
+    - 提取 `migrateUpstreams()` - 单渠道列表迁移（消除重复代码）
+  - `handlers/proxy.go:handleStreamResponse` (145行 → 10个函数)：
+    - 引入 `streamContext` 结构体封装流状态
+    - 提取 `setupStreamHeaders()` - 设置响应头
+    - 提取 `processStreamEvents()` - 事件循环
+    - 提取 `processStreamEvent()` - 单事件处理
+    - 提取日志辅助函数：`logStreamCompletion()`, `logPartialResponse()`, `logSynthesizedContent()`
+    - 提取 `isClientDisconnectError()` - 断连错误判断
+  - 遵循 SOLID/KISS/DRY 原则
+
+---
+
 ## [v2.1.7] - 2025-12-11
 
 ### 🐛 Bug 修复
