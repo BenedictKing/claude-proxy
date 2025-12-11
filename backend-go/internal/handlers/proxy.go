@@ -773,13 +773,13 @@ func processStreamEvent(c *gin.Context, w gin.ResponseWriter, flusher http.Flush
 	// 检测并收集 usage（借鉴 new-api 的设计，持续从流事件中收集 token 统计）
 	// message_start: 获取 input_tokens 和 cache tokens
 	// message_delta: 获取最终的 output_tokens，如果 input_tokens > 0 则更新
-	hasUsage, needPatch, usageData := checkEventUsageStatus(event, envCfg.EnableResponseLogs)
+	hasUsage, needPatch, usageData := checkEventUsageStatus(event, envCfg.EnableResponseLogs && envCfg.ShouldLog("debug"))
 	if hasUsage {
 		// 首次检测到 usage
 		if !ctx.hasUsage {
 			ctx.hasUsage = true
 			ctx.needTokenPatch = needPatch
-			if envCfg.EnableResponseLogs && needPatch && !isMessageDeltaEvent(event) {
+			if envCfg.EnableResponseLogs && envCfg.ShouldLog("debug") && needPatch && !isMessageDeltaEvent(event) {
 				log.Printf("🔢 [Stream-Token] 检测到虚假值, 延迟到流结束修补")
 			}
 		}
@@ -811,7 +811,7 @@ func processStreamEvent(c *gin.Context, w gin.ResponseWriter, flusher http.Flush
 	// 在 message_stop 前注入 usage（上游完全没有 usage 的情况）
 	if !ctx.hasUsage && !ctx.clientGone && isMessageStopEvent(event) {
 		usageEvent := buildUsageEvent(requestBody, ctx.outputTextBuffer.String())
-		if envCfg.EnableResponseLogs {
+		if envCfg.EnableResponseLogs && envCfg.ShouldLog("debug") {
 			log.Printf("🔢 [Stream-Token注入] 上游无usage, 注入本地估算事件")
 		}
 		w.Write([]byte(usageEvent))
@@ -835,7 +835,7 @@ func processStreamEvent(c *gin.Context, w gin.ResponseWriter, flusher http.Flush
 			}
 			// 传递已收集的缓存 token 信息，避免从最终事件中读取（最终事件通常不含缓存字段）
 			hasCacheTokens := ctx.collectedUsage.CacheCreationInputTokens > 0 || ctx.collectedUsage.CacheReadInputTokens > 0
-			eventToSend = patchTokensInEvent(event, inputTokens, outputTokens, hasCacheTokens, envCfg.EnableResponseLogs)
+			eventToSend = patchTokensInEvent(event, inputTokens, outputTokens, hasCacheTokens, envCfg.EnableResponseLogs && envCfg.ShouldLog("debug"))
 			ctx.needTokenPatch = false
 		}
 	}
