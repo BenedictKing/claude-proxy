@@ -77,13 +77,36 @@ func WebAuthMiddleware(envCfg *config.EnvConfig, cfgManager *config.ConfigManage
 			}
 
 			// 认证成功 - 记录日志(可选，根据日志级别)
-			if envCfg.ShouldLog("info") {
+			// 如果启用了 QuietPollingLogs，则静默轮询端点日志
+			if envCfg.ShouldLog("info") && !(envCfg.QuietPollingLogs && isPollingEndpoint(path)) {
 				log.Printf("✅ [认证成功] IP: %s | Path: %s | Time: %s", clientIP, path, timestamp)
 			}
 		}
 
 		c.Next()
 	}
+}
+
+// isPollingEndpoint 判断是否为轮询端点（前缀匹配，兼容 query string 和尾部斜杠）
+func isPollingEndpoint(path string) bool {
+	// 移除 query string
+	if idx := strings.Index(path, "?"); idx != -1 {
+		path = path[:idx]
+	}
+	// 移除尾部斜杠
+	path = strings.TrimSuffix(path, "/")
+
+	pollingPaths := []string{
+		"/api/channels",
+		"/api/channels/metrics",
+		"/api/channels/scheduler/stats",
+	}
+	for _, p := range pollingPaths {
+		if path == p {
+			return true
+		}
+	}
+	return false
 }
 
 // isStaticResource 判断是否为静态资源

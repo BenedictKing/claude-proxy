@@ -61,20 +61,33 @@ cat VERSION
 echo "v{新版本号}" > VERSION
 ```
 
-### 4. 验证更新
+### 4. 更新 CHANGELOG.md
+
+将 `[Unreleased]` 替换为新版本号和当前日期：
+
+```markdown
+# 替换前
+## [Unreleased]
+
+# 替换后
+## [v{新版本号}] - YYYY-MM-DD
+```
+
+### 5. 验证更新
 
 ```bash
 cat VERSION
+cat CHANGELOG.md | head -20
 ```
 
-### 5. 查看 git 状态
+### 6. 查看 git 状态
 
 ```bash
 git status
 git diff --stat
 ```
 
-### 6. 提交变更
+### 7. 提交变更
 
 询问用户确认提交信息后执行：
 
@@ -83,7 +96,7 @@ git add -A
 git commit -m "chore: bump version to v{新版本号}"
 ```
 
-### 7. 创建 Tag（默认必须执行）
+### 8. 创建 Tag（默认必须执行）
 
 > ⚠️ 除非用户明确说"不要 tag"，否则必须创建 tag！
 
@@ -91,7 +104,7 @@ git commit -m "chore: bump version to v{新版本号}"
 git tag v{新版本号}
 ```
 
-### 8. 推送到远程（默认必须执行）
+### 9. 推送到远程（默认必须执行）
 
 ```bash
 # 推送 commit

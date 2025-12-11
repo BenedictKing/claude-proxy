@@ -15,6 +15,7 @@ type EnvConfig struct {
 	LogLevel             string
 	EnableRequestLogs    bool
 	EnableResponseLogs   bool
+	QuietPollingLogs     bool // 静默轮询端点日志
 	RequestTimeout       int
 	MaxConcurrentReqs    int
 	EnableCORS           bool
@@ -51,6 +52,7 @@ func NewEnvConfig() *EnvConfig {
 		LogLevel:             getEnv("LOG_LEVEL", "info"),
 		EnableRequestLogs:    getEnv("ENABLE_REQUEST_LOGS", "true") != "false",
 		EnableResponseLogs:   getEnv("ENABLE_RESPONSE_LOGS", "true") != "false",
+		QuietPollingLogs:     getEnv("QUIET_POLLING_LOGS", "false") == "true",
 		RequestTimeout:       getEnvAsInt("REQUEST_TIMEOUT", 300000),
 		MaxConcurrentReqs:    getEnvAsInt("MAX_CONCURRENT_REQUESTS", 100),
 		EnableCORS:           getEnv("ENABLE_CORS", "true") != "false",
