@@ -104,10 +104,12 @@ type OpenAIChoice struct {
 
 // Usage 使用情况统计
 type Usage struct {
-	InputTokens      int `json:"input_tokens,omitempty"`
-	OutputTokens     int `json:"output_tokens,omitempty"`
-	PromptTokens     int `json:"prompt_tokens,omitempty"`
-	CompletionTokens int `json:"completion_tokens,omitempty"`
+	InputTokens              int `json:"input_tokens,omitempty"`
+	OutputTokens             int `json:"output_tokens,omitempty"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
+	PromptTokens             int `json:"prompt_tokens,omitempty"`
+	CompletionTokens         int `json:"completion_tokens,omitempty"`
 }
 
 // ProviderRequest 提供商请求（通用）

@@ -612,6 +612,7 @@ func handleNormalResponse(c *gin.Context, resp *http.Response, provider provider
 
 	// 如果上游没有返回 Usage，本地估算
 	// 如果 input_tokens 为 0 或 1（虚假值），也需要补全
+	// 但如果有 cache_creation_input_tokens 或 cache_read_input_tokens，则 input_tokens 为 0/1 是正常的
 	if claudeResp.Usage == nil {
 		estimatedInput := utils.EstimateRequestTokens(requestBody)
 		estimatedOutput := utils.EstimateResponseTokens(claudeResp.Content)
@@ -626,7 +627,12 @@ func handleNormalResponse(c *gin.Context, resp *http.Response, provider provider
 		originalInput := claudeResp.Usage.InputTokens
 		originalOutput := claudeResp.Usage.OutputTokens
 		patched := false
-		if claudeResp.Usage.InputTokens <= 1 {
+
+		// 检查是否有缓存 token（如果有，input_tokens 为 0/1 是正常的）
+		hasCacheTokens := claudeResp.Usage.CacheCreationInputTokens > 0 || claudeResp.Usage.CacheReadInputTokens > 0
+
+		// 只有在没有缓存 token 的情况下才补全 input_tokens
+		if claudeResp.Usage.InputTokens <= 1 && !hasCacheTokens {
 			claudeResp.Usage.InputTokens = utils.EstimateRequestTokens(requestBody)
 			patched = true
 		}
@@ -636,9 +642,14 @@ func handleNormalResponse(c *gin.Context, resp *http.Response, provider provider
 		}
 		if envCfg.EnableResponseLogs {
 			if patched {
-				log.Printf("🔢 [Token补全] 虚假值: input=%d→%d, output=%d→%d",
+				log.Printf("🔢 [Token补全] 虚假值: InputTokens=%d→%d, OutputTokens=%d→%d",
 					originalInput, claudeResp.Usage.InputTokens, originalOutput, claudeResp.Usage.OutputTokens)
 			}
+			// 记录完整的 token 信息
+			log.Printf("🔢 [Token统计] InputTokens=%d, OutputTokens=%d, CacheCreationInputTokens=%d, CacheReadInputTokens=%d, PromptTokens=%d, CompletionTokens=%d",
+				claudeResp.Usage.InputTokens, claudeResp.Usage.OutputTokens,
+				claudeResp.Usage.CacheCreationInputTokens, claudeResp.Usage.CacheReadInputTokens,
+				claudeResp.Usage.PromptTokens, claudeResp.Usage.CompletionTokens)
 		}
 	}
 
@@ -714,6 +725,10 @@ type streamContext struct {
 	clientGone       bool
 	hasUsage         bool
 	needTokenPatch   bool
+	// 累积的 token 统计（从流事件中收集，借鉴 new-api 的设计）
+	// message_start: 获取 input_tokens 和 cache tokens
+	// message_delta: 获取最终的 output_tokens，如果 input_tokens > 0 则更新
+	collectedUsage collectedUsageData
 }
 
 func newStreamContext(envCfg *config.EnvConfig, upstream *config.UpstreamConfig) *streamContext {
@@ -755,15 +770,31 @@ func processStreamEvent(c *gin.Context, w gin.ResponseWriter, flusher http.Flush
 	// 提取文本用于估算 token（必须在检测 usage 之前，确保累积内容）
 	extractTextFromEvent(event, &ctx.outputTextBuffer)
 
-	// 检测 usage 状态（只在首次检测到时记录是否需要修补）
-	if !ctx.hasUsage {
-		hasUsage, needPatch := checkEventUsageStatus(event, envCfg.EnableResponseLogs)
-		if hasUsage {
+	// 检测并收集 usage（借鉴 new-api 的设计，持续从流事件中收集 token 统计）
+	// message_start: 获取 input_tokens 和 cache tokens
+	// message_delta: 获取最终的 output_tokens，如果 input_tokens > 0 则更新
+	hasUsage, needPatch, usageData := checkEventUsageStatus(event, envCfg.EnableResponseLogs)
+	if hasUsage {
+		// 首次检测到 usage
+		if !ctx.hasUsage {
 			ctx.hasUsage = true
 			ctx.needTokenPatch = needPatch
 			if envCfg.EnableResponseLogs && needPatch && !isMessageDeltaEvent(event) {
 				log.Printf("🔢 [Stream-Token] 检测到虚假值, 延迟到流结束修补")
 			}
+		}
+		// 累积收集 usage 数据（借鉴 new-api：input_tokens > 0 时更新，output_tokens 取最新）
+		if usageData.InputTokens > 0 {
+			ctx.collectedUsage.InputTokens = usageData.InputTokens
+		}
+		if usageData.OutputTokens > 0 {
+			ctx.collectedUsage.OutputTokens = usageData.OutputTokens
+		}
+		if usageData.CacheCreationInputTokens > 0 {
+			ctx.collectedUsage.CacheCreationInputTokens = usageData.CacheCreationInputTokens
+		}
+		if usageData.CacheReadInputTokens > 0 {
+			ctx.collectedUsage.CacheReadInputTokens = usageData.CacheReadInputTokens
 		}
 	}
 
@@ -793,13 +824,18 @@ func processStreamEvent(c *gin.Context, w gin.ResponseWriter, flusher http.Flush
 	if ctx.needTokenPatch && hasEventWithUsage(event) {
 		// 只在流结束事件（message_delta 或 message_stop）时修补
 		if isMessageDeltaEvent(event) || isMessageStopEvent(event) {
-			estimatedInput := utils.EstimateRequestTokens(requestBody)
-			estimatedOutput := utils.EstimateTokens(ctx.outputTextBuffer.String())
-			if envCfg.EnableResponseLogs {
-				log.Printf("🔢 [Stream-Token修补] 估算值: input=%d, output=%d, 累积内容长度=%d",
-					estimatedInput, estimatedOutput, ctx.outputTextBuffer.Len())
+			// 优先使用收集到的真实 token 值，否则使用估算值（借鉴 new-api 的容错设计）
+			inputTokens := ctx.collectedUsage.InputTokens
+			if inputTokens == 0 {
+				inputTokens = utils.EstimateRequestTokens(requestBody)
 			}
-			eventToSend = patchTokensInEvent(event, estimatedInput, estimatedOutput)
+			outputTokens := ctx.collectedUsage.OutputTokens
+			if outputTokens == 0 {
+				outputTokens = utils.EstimateTokens(ctx.outputTextBuffer.String())
+			}
+			// 传递已收集的缓存 token 信息，避免从最终事件中读取（最终事件通常不含缓存字段）
+			hasCacheTokens := ctx.collectedUsage.CacheCreationInputTokens > 0 || ctx.collectedUsage.CacheReadInputTokens > 0
+			eventToSend = patchTokensInEvent(event, inputTokens, outputTokens, hasCacheTokens, envCfg.EnableResponseLogs)
 			ctx.needTokenPatch = false
 		}
 	}
@@ -928,6 +964,17 @@ func shouldRetryWithNextKey(statusCode int, bodyBytes []byte) (bool, bool) {
 	return false, false
 }
 
+// logUsageDetection 统一格式输出 usage 检测日志
+func logUsageDetection(location string, usage map[string]interface{}, needPatch bool) {
+	inputTokens := usage["input_tokens"]
+	outputTokens := usage["output_tokens"]
+	cacheCreation, _ := usage["cache_creation_input_tokens"].(float64)
+	cacheRead, _ := usage["cache_read_input_tokens"].(float64)
+
+	log.Printf("🔢 [Stream-Token检测] %s: InputTokens=%v, OutputTokens=%v, CacheCreation=%.0f, CacheRead=%.0f, 需补全=%v",
+		location, inputTokens, outputTokens, cacheCreation, cacheRead, needPatch)
+}
+
 // buildUsageEvent 构建带 usage 的 message_delta SSE 事件
 func buildUsageEvent(requestBody []byte, outputText string) string {
 	inputTokens := utils.EstimateRequestTokens(requestBody)
@@ -944,9 +991,35 @@ func buildUsageEvent(requestBody []byte, outputText string) string {
 	return fmt.Sprintf("event: message_delta\ndata: %s\n\n", eventJSON)
 }
 
+// collectedUsageData 从流事件中收集的 usage 数据
+type collectedUsageData struct {
+	InputTokens              int
+	OutputTokens             int
+	CacheCreationInputTokens int
+	CacheReadInputTokens     int
+}
+
+// extractUsageFromMap 从 usage map 中提取 token 数据
+func extractUsageFromMap(usage map[string]interface{}) collectedUsageData {
+	var data collectedUsageData
+	if v, ok := usage["input_tokens"].(float64); ok {
+		data.InputTokens = int(v)
+	}
+	if v, ok := usage["output_tokens"].(float64); ok {
+		data.OutputTokens = int(v)
+	}
+	if v, ok := usage["cache_creation_input_tokens"].(float64); ok {
+		data.CacheCreationInputTokens = int(v)
+	}
+	if v, ok := usage["cache_read_input_tokens"].(float64); ok {
+		data.CacheReadInputTokens = int(v)
+	}
+	return data
+}
+
 // checkEventUsageStatus 检测事件是否包含 usage 字段，并判断是否需要修补 input_tokens/output_tokens
-// 返回: (hasUsage bool, needPatch bool)
-func checkEventUsageStatus(event string, enableLog bool) (bool, bool) {
+// 返回: (hasUsage bool, needPatch bool, usageData collectedUsageData)
+func checkEventUsageStatus(event string, enableLog bool) (bool, bool, collectedUsageData) {
 	for _, line := range strings.Split(event, "\n") {
 		if !strings.HasPrefix(line, "data: ") {
 			continue
@@ -958,37 +1031,40 @@ func checkEventUsageStatus(event string, enableLog bool) (bool, bool) {
 			continue
 		}
 
-		// 检查顶层 usage 字段
+		// 检查顶层 usage 字段（通常在 message_delta 事件）
 		if hasUsage, needInputPatch, needOutputPatch := checkUsageFieldsWithPatch(data["usage"]); hasUsage {
 			needPatch := needInputPatch || needOutputPatch
-			if enableLog {
-				if usage, ok := data["usage"].(map[string]interface{}); ok {
-					log.Printf("🔢 [Stream-Token检测] 顶层usage: input=%v, output=%v, 需补全=%v",
-						usage["input_tokens"], usage["output_tokens"], needPatch)
+			var usageData collectedUsageData
+			if usage, ok := data["usage"].(map[string]interface{}); ok {
+				if enableLog {
+					logUsageDetection("顶层usage", usage, needPatch)
 				}
+				usageData = extractUsageFromMap(usage)
 			}
-			return true, needPatch
+			return true, needPatch, usageData
 		}
 
-		// 检查 message.usage（Claude 流式响应格式）
+		// 检查 message.usage（Claude message_start 事件格式）
 		if msg, ok := data["message"].(map[string]interface{}); ok {
 			if hasUsage, needInputPatch, needOutputPatch := checkUsageFieldsWithPatch(msg["usage"]); hasUsage {
 				needPatch := needInputPatch || needOutputPatch
-				if enableLog {
-					if usage, ok := msg["usage"].(map[string]interface{}); ok {
-						log.Printf("🔢 [Stream-Token检测] message.usage: input=%v, output=%v, 需补全=%v",
-							usage["input_tokens"], usage["output_tokens"], needPatch)
+				var usageData collectedUsageData
+				if usage, ok := msg["usage"].(map[string]interface{}); ok {
+					if enableLog {
+						logUsageDetection("message.usage", usage, needPatch)
 					}
+					usageData = extractUsageFromMap(usage)
 				}
-				return true, needPatch
+				return true, needPatch, usageData
 			}
 		}
 	}
-	return false, false
+	return false, false, collectedUsageData{}
 }
 
 // checkUsageFieldsWithPatch 检查 usage 对象是否包含 token 字段，并判断是否需要修补
 // 返回: (hasUsage bool, needInputTokenPatch bool, needOutputTokenPatch bool)
+// 注意：如果有 cache_creation_input_tokens 或 cache_read_input_tokens，则 input_tokens 为 0/1 是正常的
 func checkUsageFieldsWithPatch(usage interface{}) (bool, bool, bool) {
 	if u, ok := usage.(map[string]interface{}); ok {
 		inputTokens, hasInput := u["input_tokens"]
@@ -996,8 +1072,15 @@ func checkUsageFieldsWithPatch(usage interface{}) (bool, bool, bool) {
 		if hasInput || hasOutput {
 			needInputPatch := false
 			needOutputPatch := false
+
+			// 检查是否有缓存 token（如果有，input_tokens 为 0/1 是正常的）
+			cacheCreation, _ := u["cache_creation_input_tokens"].(float64)
+			cacheRead, _ := u["cache_read_input_tokens"].(float64)
+			hasCacheTokens := cacheCreation > 0 || cacheRead > 0
+
 			if hasInput {
-				if v, ok := inputTokens.(float64); ok && v <= 1 {
+				// 只有在没有缓存 token 的情况下才标记需要补全 input_tokens
+				if v, ok := inputTokens.(float64); ok && v <= 1 && !hasCacheTokens {
 					needInputPatch = true
 				}
 			}
@@ -1041,7 +1124,8 @@ func hasEventWithUsage(event string) bool {
 }
 
 // patchTokensInEvent 修补事件中的 input_tokens 和 output_tokens 字段
-func patchTokensInEvent(event string, estimatedInputTokens, estimatedOutputTokens int) string {
+// hasCacheTokens: 从 ctx.collectedUsage 传入，判断是否为缓存请求（不能从当前事件读取，因为最终事件通常不含缓存字段）
+func patchTokensInEvent(event string, estimatedInputTokens, estimatedOutputTokens int, hasCacheTokens bool, enableLog bool) string {
 	var result strings.Builder
 	lines := strings.Split(event, "\n")
 
@@ -1062,13 +1146,13 @@ func patchTokensInEvent(event string, estimatedInputTokens, estimatedOutputToken
 
 		// 修补顶层 usage
 		if usage, ok := data["usage"].(map[string]interface{}); ok {
-			patchUsageFields(usage, estimatedInputTokens, estimatedOutputTokens)
+			patchUsageFieldsWithLog(usage, estimatedInputTokens, estimatedOutputTokens, hasCacheTokens, enableLog, "顶层usage")
 		}
 
 		// 修补 message.usage
 		if msg, ok := data["message"].(map[string]interface{}); ok {
 			if usage, ok := msg["usage"].(map[string]interface{}); ok {
-				patchUsageFields(usage, estimatedInputTokens, estimatedOutputTokens)
+				patchUsageFieldsWithLog(usage, estimatedInputTokens, estimatedOutputTokens, hasCacheTokens, enableLog, "message.usage")
 			}
 		}
 
@@ -1088,13 +1172,38 @@ func patchTokensInEvent(event string, estimatedInputTokens, estimatedOutputToken
 	return result.String()
 }
 
-// patchUsageFields 修补 usage 对象中的 token 字段
-func patchUsageFields(usage map[string]interface{}, estimatedInput, estimatedOutput int) {
-	if v, ok := usage["input_tokens"].(float64); ok && v <= 1 {
+// patchUsageFieldsWithLog 修补 usage 对象中的 token 字段，并输出日志
+// hasCacheTokens: 从 ctx.collectedUsage 传入（而非从当前事件读取），因为最终事件通常不含缓存字段
+func patchUsageFieldsWithLog(usage map[string]interface{}, estimatedInput, estimatedOutput int, hasCacheTokens bool, enableLog bool, location string) {
+	originalInput := usage["input_tokens"]
+	originalOutput := usage["output_tokens"]
+	inputPatched := false
+	outputPatched := false
+
+	// 从当前事件读取缓存 token（仅用于日志输出，不用于判断是否补全）
+	cacheCreation, _ := usage["cache_creation_input_tokens"].(float64)
+	cacheRead, _ := usage["cache_read_input_tokens"].(float64)
+	promptTokens, _ := usage["prompt_tokens"].(float64)
+	completionTokens, _ := usage["completion_tokens"].(float64)
+
+	// 只有在没有缓存 token 的情况下才补全 input_tokens（hasCacheTokens 由调用方从 ctx.collectedUsage 传入）
+	if v, ok := usage["input_tokens"].(float64); ok && v <= 1 && !hasCacheTokens {
 		usage["input_tokens"] = estimatedInput
+		inputPatched = true
 	}
 	if v, ok := usage["output_tokens"].(float64); ok && v <= 1 {
 		usage["output_tokens"] = estimatedOutput
+		outputPatched = true
+	}
+
+	if enableLog {
+		if inputPatched || outputPatched {
+			log.Printf("🔢 [Stream-Token补全] %s: InputTokens=%v→%v, OutputTokens=%v→%v",
+				location, originalInput, usage["input_tokens"], originalOutput, usage["output_tokens"])
+		}
+		// 记录完整的 token 信息
+		log.Printf("🔢 [Stream-Token统计] %s: InputTokens=%v, OutputTokens=%v, CacheCreationInputTokens=%.0f, CacheReadInputTokens=%.0f, PromptTokens=%.0f, CompletionTokens=%.0f",
+			location, usage["input_tokens"], usage["output_tokens"], cacheCreation, cacheRead, promptTokens, completionTokens)
 	}
 }
 
@@ -1174,6 +1283,51 @@ func extractTextFromEvent(event string, buf *bytes.Buffer) {
 			if text, ok := cb["text"].(string); ok {
 				buf.WriteString(text)
 			}
+		}
+	}
+}
+
+// CountTokensHandler 处理 /v1/messages/count_tokens 请求
+// 支持两种模式：
+// 1. 代理模式：转发到上游获取精确计数（需要上游支持）
+// 2. 本地估算模式：使用本地算法快速估算（默认）
+func CountTokensHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager, channelScheduler *scheduler.ChannelScheduler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 认证
+		middleware.ProxyAuthMiddleware(envCfg)(c)
+		if c.IsAborted() {
+			return
+		}
+
+		// 读取请求体
+		bodyBytes, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Failed to read request body"})
+			return
+		}
+
+		// 解析请求
+		var req struct {
+			Model    string      `json:"model"`
+			System   interface{} `json:"system"`
+			Messages interface{} `json:"messages"`
+			Tools    interface{} `json:"tools"`
+		}
+		if err := json.Unmarshal(bodyBytes, &req); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid JSON"})
+			return
+		}
+
+		// 本地估算 token 数量
+		inputTokens := utils.EstimateRequestTokens(bodyBytes)
+
+		// 返回 Claude API 兼容的响应格式
+		c.JSON(200, gin.H{
+			"input_tokens": inputTokens,
+		})
+
+		if envCfg.EnableResponseLogs {
+			log.Printf("🔢 [CountTokens] 本地估算: model=%s, input_tokens=%d", req.Model, inputTokens)
 		}
 	}
 }

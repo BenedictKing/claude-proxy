@@ -143,6 +143,7 @@ func main() {
 
 	// 代理端点 - 统一入口
 	r.POST("/v1/messages", handlers.ProxyHandler(envCfg, cfgManager, channelScheduler))
+	r.POST("/v1/messages/count_tokens", handlers.CountTokensHandler(envCfg, cfgManager, channelScheduler))
 
 	// Responses API 端点
 	r.POST("/v1/responses", handlers.ResponsesHandler(envCfg, cfgManager, sessionManager, channelScheduler))
