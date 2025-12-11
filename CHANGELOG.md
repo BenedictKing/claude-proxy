@@ -4,6 +4,20 @@
 
 ---
 
+## [v2.1.9] - 2025-12-11
+
+### 🧹 代码重构
+
+- **修复代码质量问题**
+  - `handlers/proxy.go:280` - 添加 `DeprioritizeAPIKey` 错误日志，避免静默忽略
+  - `handlers/proxy.go:629-643` - 使用 `c.Request.Context()` 替代已废弃的 `CloseNotify()`，修复潜在 goroutine 泄漏
+  - **DRY 重构**: 删除 3 处重复的 `maskAPIKey` 函数，统一使用 `utils.MaskAPIKey`
+    - 删除 `config/config.go:989-1005`
+    - 删除 `handlers/proxy.go:897-913`
+    - 删除 `metrics/channel_metrics.go:111-116`
+
+---
+
 ## [v2.1.8] - 2025-12-11
 
 ### 🧹 代码重构

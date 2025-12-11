@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BenedictKing/claude-proxy/internal/utils"
+
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -465,7 +467,7 @@ func (cm *ConfigManager) getNextAPIKeyWithStrategy(upstream *UpstreamConfig, fai
 			cm.mu.RUnlock()
 
 			if oldestFailedKey != "" {
-				log.Printf("⚠️ 所有密钥都失效,尝试最早失败的密钥: %s", maskAPIKey(oldestFailedKey))
+				log.Printf("⚠️ 所有密钥都失效,尝试最早失败的密钥: %s", utils.MaskAPIKey(oldestFailedKey))
 				return oldestFailedKey, nil
 			}
 		}
@@ -481,13 +483,13 @@ func (cm *ConfigManager) getNextAPIKeyWithStrategy(upstream *UpstreamConfig, fai
 		index := (*requestCounter - 1) % len(availableKeys)
 		selectedKey := availableKeys[index]
 		cm.mu.Unlock()
-		log.Printf("轮询选择密钥 %s (%d/%d)", maskAPIKey(selectedKey), index+1, len(availableKeys))
+		log.Printf("轮询选择密钥 %s (%d/%d)", utils.MaskAPIKey(selectedKey), index+1, len(availableKeys))
 		return selectedKey, nil
 
 	case "random":
 		index := rand.Intn(len(availableKeys))
 		selectedKey := availableKeys[index]
-		log.Printf("随机选择密钥 %s (%d/%d)", maskAPIKey(selectedKey), index+1, len(availableKeys))
+		log.Printf("随机选择密钥 %s (%d/%d)", utils.MaskAPIKey(selectedKey), index+1, len(availableKeys))
 		return selectedKey, nil
 
 	case "failover":
@@ -502,7 +504,7 @@ func (cm *ConfigManager) getNextAPIKeyWithStrategy(upstream *UpstreamConfig, fai
 				break
 			}
 		}
-		log.Printf("故障转移选择密钥 %s (%d/%d)", maskAPIKey(selectedKey), keyIndex, len(upstream.APIKeys))
+		log.Printf("故障转移选择密钥 %s (%d/%d)", utils.MaskAPIKey(selectedKey), keyIndex, len(upstream.APIKeys))
 		return selectedKey, nil
 	}
 }
@@ -529,7 +531,7 @@ func (cm *ConfigManager) MarkKeyAsFailed(apiKey string) {
 	}
 
 	log.Printf("标记API密钥失败: %s (失败次数: %d, 恢复时间: %v)",
-		maskAPIKey(apiKey), failure.FailureCount, recoveryTime)
+		utils.MaskAPIKey(apiKey), failure.FailureCount, recoveryTime)
 }
 
 // isKeyFailed 检查密钥是否失败
@@ -566,7 +568,7 @@ func (cm *ConfigManager) cleanupExpiredFailures() {
 
 			if now.Sub(failure.Timestamp) > recoveryTime {
 				delete(cm.failedKeysCache, key)
-				log.Printf("API密钥 %s 已从失败列表中恢复", maskAPIKey(key))
+				log.Printf("API密钥 %s 已从失败列表中恢复", utils.MaskAPIKey(key))
 			}
 		}
 		cm.mu.Unlock()
@@ -579,7 +581,7 @@ func (cm *ConfigManager) clearFailedKeysForUpstream(upstream *UpstreamConfig) {
 	for _, key := range upstream.APIKeys {
 		if _, exists := cm.failedKeysCache[key]; exists {
 			delete(cm.failedKeysCache, key)
-			log.Printf("已清理被删除渠道 %s 的失败密钥记录: %s", upstream.Name, maskAPIKey(key))
+			log.Printf("已清理被删除渠道 %s 的失败密钥记录: %s", upstream.Name, utils.MaskAPIKey(key))
 		}
 	}
 }
@@ -813,7 +815,7 @@ func (cm *ConfigManager) DeprioritizeAPIKey(apiKey string) error {
 			// 移动到末尾
 			upstream.APIKeys = append(upstream.APIKeys[:index], upstream.APIKeys[index+1:]...)
 			upstream.APIKeys = append(upstream.APIKeys, apiKey)
-			log.Printf("已将API密钥移动到末尾以降低优先级: %s (渠道: %s)", maskAPIKey(apiKey), upstream.Name)
+			log.Printf("已将API密钥移动到末尾以降低优先级: %s (渠道: %s)", utils.MaskAPIKey(apiKey), upstream.Name)
 			return cm.saveConfigLocked(cm.config)
 		}
 	}
@@ -833,7 +835,7 @@ func (cm *ConfigManager) DeprioritizeAPIKey(apiKey string) error {
 			// 移动到末尾
 			upstream.APIKeys = append(upstream.APIKeys[:index], upstream.APIKeys[index+1:]...)
 			upstream.APIKeys = append(upstream.APIKeys, apiKey)
-			log.Printf("已将API密钥移动到末尾以降低优先级: %s (Responses渠道: %s)", maskAPIKey(apiKey), upstream.Name)
+			log.Printf("已将API密钥移动到末尾以降低优先级: %s (Responses渠道: %s)", utils.MaskAPIKey(apiKey), upstream.Name)
 			return cm.saveConfigLocked(cm.config)
 		}
 	}
@@ -983,25 +985,6 @@ func RedirectModel(model string, upstream *UpstreamConfig) string {
 	}
 
 	return model
-}
-
-// maskAPIKey 掩码API密钥（与 TS 版本保持一致）
-func maskAPIKey(key string) string {
-	if key == "" {
-		return ""
-	}
-
-	length := len(key)
-	if length <= 10 {
-		// 短密钥：保留前3位和后2位
-		if length <= 5 {
-			return "***"
-		}
-		return key[:3] + "***" + key[length-2:]
-	}
-
-	// 长密钥：保留前8位和后5位
-	return key[:8] + "***" + key[length-5:]
 }
 
 // Close 关闭配置管理器

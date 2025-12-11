@@ -213,12 +213,12 @@ func tryChannelWithAllKeys(
 		// 检查该 Key 是否处于熔断状态，跳过熔断的 Key
 		if metricsManager.ShouldSuspendKey(upstream.BaseURL, apiKey) {
 			failedKeys[apiKey] = true
-			log.Printf("⚡ 跳过熔断中的 Key: %s", maskAPIKey(apiKey))
+			log.Printf("⚡ 跳过熔断中的 Key: %s", utils.MaskAPIKey(apiKey))
 			continue
 		}
 
 		if envCfg.ShouldLog("info") {
-			log.Printf("🔑 使用API密钥: %s (尝试 %d/%d)", maskAPIKey(apiKey), attempt+1, maxRetries)
+			log.Printf("🔑 使用API密钥: %s (尝试 %d/%d)", utils.MaskAPIKey(apiKey), attempt+1, maxRetries)
 		}
 
 		// 转换请求
@@ -277,7 +277,9 @@ func tryChannelWithAllKeys(
 		// 处理成功响应
 		if len(deprioritizeCandidates) > 0 {
 			for key := range deprioritizeCandidates {
-				_ = cfgManager.DeprioritizeAPIKey(key)
+				if err := cfgManager.DeprioritizeAPIKey(key); err != nil {
+					log.Printf("⚠️ 密钥降级失败: %v", err)
+				}
 			}
 		}
 
@@ -354,13 +356,13 @@ func handleSingleChannelProxy(
 		// 检查该 Key 是否处于熔断状态，跳过熔断的 Key
 		if metricsManager.ShouldSuspendKey(upstream.BaseURL, apiKey) {
 			failedKeys[apiKey] = true
-			log.Printf("⚡ 跳过熔断中的 Key: %s", maskAPIKey(apiKey))
+			log.Printf("⚡ 跳过熔断中的 Key: %s", utils.MaskAPIKey(apiKey))
 			continue
 		}
 
 		if envCfg.ShouldLog("info") {
 			log.Printf("🎯 使用上游: %s - %s (尝试 %d/%d)", upstream.Name, upstream.BaseURL, attempt+1, maxRetries)
-			log.Printf("🔑 使用API密钥: %s", maskAPIKey(apiKey))
+			log.Printf("🔑 使用API密钥: %s", utils.MaskAPIKey(apiKey))
 		}
 
 		// 转换请求
@@ -624,21 +626,16 @@ func handleNormalResponse(c *gin.Context, resp *http.Response, provider provider
 		}
 	}
 
-	// 监听响应关闭事件(客户端断开连接)
-	closeNotify := c.Writer.CloseNotify()
+	// 监听客户端断开连接
+	ctx := c.Request.Context()
 	go func() {
-		select {
-		case <-closeNotify:
-			// 检查响应是否已完成
-			if !c.Writer.Written() {
-				if envCfg.EnableResponseLogs {
-					responseTime := time.Since(startTime).Milliseconds()
-					log.Printf("⏱️ 响应中断: %dms, 状态: %d", responseTime, resp.StatusCode)
-				}
+		<-ctx.Done()
+		// 检查响应是否已完成
+		if !c.Writer.Written() {
+			if envCfg.EnableResponseLogs {
+				responseTime := time.Since(startTime).Milliseconds()
+				log.Printf("⏱️ 响应中断: %dms, 状态: %d", responseTime, resp.StatusCode)
 			}
-		case <-time.After(10 * time.Second):
-			// 超时退出goroutine,避免泄漏
-			return
 		}
 	}()
 
@@ -894,25 +891,6 @@ func shouldRetryWithNextKey(statusCode int, bodyBytes []byte) (bool, bool) {
 	}
 
 	return false, false
-}
-
-// maskAPIKey 掩码API密钥（与 TS 版本保持一致）
-func maskAPIKey(key string) string {
-	if key == "" {
-		return ""
-	}
-
-	length := len(key)
-	if length <= 10 {
-		// 短密钥：保留前3位和后2位
-		if length <= 5 {
-			return "***"
-		}
-		return key[:3] + "***" + key[length-2:]
-	}
-
-	// 长密钥：保留前8位和后5位
-	return key[:8] + "***" + key[length-5:]
 }
 
 // buildUsageEvent 构建带 usage 的 message_delta SSE 事件

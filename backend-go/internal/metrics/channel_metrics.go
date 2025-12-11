@@ -6,6 +6,8 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"github.com/BenedictKing/claude-proxy/internal/utils"
 )
 
 // RequestRecord 带时间戳的请求记录
@@ -107,14 +109,6 @@ func generateMetricsKey(baseURL, apiKey string) string {
 	return hex.EncodeToString(h.Sum(nil))[:16] // 取前16位作为键
 }
 
-// maskAPIKey 脱敏 API Key
-func maskAPIKey(key string) string {
-	if len(key) <= 8 {
-		return "****"
-	}
-	return key[:4] + "****" + key[len(key)-4:]
-}
-
 // getOrCreateKey 获取或创建 Key 指标
 func (m *MetricsManager) getOrCreateKey(baseURL, apiKey string) *KeyMetrics {
 	metricsKey := generateMetricsKey(baseURL, apiKey)
@@ -124,7 +118,7 @@ func (m *MetricsManager) getOrCreateKey(baseURL, apiKey string) *KeyMetrics {
 	metrics := &KeyMetrics{
 		MetricsKey:    metricsKey,
 		BaseURL:       baseURL,
-		KeyMask:       maskAPIKey(apiKey),
+		KeyMask:       utils.MaskAPIKey(apiKey),
 		recentResults: make([]bool, 0, m.windowSize),
 	}
 	m.keyMetrics[metricsKey] = metrics

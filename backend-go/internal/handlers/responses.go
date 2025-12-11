@@ -194,7 +194,7 @@ func tryResponsesChannelWithAllKeys(
 		}
 
 		if envCfg.ShouldLog("info") {
-			log.Printf("🔑 [Responses] 使用API密钥: %s (尝试 %d/%d)", maskAPIKey(apiKey), attempt+1, maxRetries)
+			log.Printf("🔑 [Responses] 使用API密钥: %s (尝试 %d/%d)", utils.MaskAPIKey(apiKey), attempt+1, maxRetries)
 		}
 
 		providerReq, _, err := provider.ConvertToProviderRequest(c, upstream, apiKey)
@@ -311,7 +311,7 @@ func handleSingleChannelResponses(
 
 		if envCfg.ShouldLog("info") {
 			log.Printf("🎯 使用 Responses 上游: %s - %s (尝试 %d/%d)", upstream.Name, upstream.BaseURL, attempt+1, maxRetries)
-			log.Printf("🔑 使用API密钥: %s", maskAPIKey(apiKey))
+			log.Printf("🔑 使用API密钥: %s", utils.MaskAPIKey(apiKey))
 		}
 
 		providerReq, originalBodyBytes, err := provider.ConvertToProviderRequest(c, upstream, apiKey)
