@@ -282,9 +282,9 @@ func tryChannelWithAllKeys(
 		}
 
 		if claudeReq.Stream {
-			handleStreamResponse(c, resp, provider, envCfg, startTime, upstream)
+			handleStreamResponse(c, resp, provider, envCfg, startTime, upstream, bodyBytes)
 		} else {
-			handleNormalResponse(c, resp, provider, envCfg, startTime)
+			handleNormalResponse(c, resp, provider, envCfg, startTime, bodyBytes)
 		}
 		return true, apiKey, nil
 	}
@@ -480,9 +480,9 @@ func handleSingleChannelProxy(
 		}
 
 		if claudeReq.Stream {
-			handleStreamResponse(c, resp, provider, envCfg, startTime, upstream)
+			handleStreamResponse(c, resp, provider, envCfg, startTime, upstream, bodyBytes)
 		} else {
-			handleNormalResponse(c, resp, provider, envCfg, startTime)
+			handleNormalResponse(c, resp, provider, envCfg, startTime, bodyBytes)
 		}
 		return
 	}
@@ -566,7 +566,7 @@ func sendRequest(req *http.Request, upstream *config.UpstreamConfig, envCfg *con
 }
 
 // handleNormalResponse 处理非流式响应
-func handleNormalResponse(c *gin.Context, resp *http.Response, provider providers.Provider, envCfg *config.EnvConfig, startTime time.Time) {
+func handleNormalResponse(c *gin.Context, resp *http.Response, provider providers.Provider, envCfg *config.EnvConfig, startTime time.Time, requestBody []byte) {
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
@@ -608,6 +608,14 @@ func handleNormalResponse(c *gin.Context, resp *http.Response, provider provider
 		return
 	}
 
+	// 如果上游没有返回 Usage，本地估算
+	if claudeResp.Usage == nil {
+		claudeResp.Usage = &types.Usage{
+			InputTokens:  utils.EstimateRequestTokens(requestBody),
+			OutputTokens: utils.EstimateResponseTokens(claudeResp.Content),
+		}
+	}
+
 	// 监听响应关闭事件(客户端断开连接)
 	closeNotify := c.Writer.CloseNotify()
 	go func() {
@@ -639,7 +647,7 @@ func handleNormalResponse(c *gin.Context, resp *http.Response, provider provider
 }
 
 // handleStreamResponse 处理流式响应
-func handleStreamResponse(c *gin.Context, resp *http.Response, provider providers.Provider, envCfg *config.EnvConfig, startTime time.Time, upstream *config.UpstreamConfig) {
+func handleStreamResponse(c *gin.Context, resp *http.Response, provider providers.Provider, envCfg *config.EnvConfig, startTime time.Time, upstream *config.UpstreamConfig, requestBody []byte) {
 	defer resp.Body.Close()
 
 	eventChan, errChan, err := provider.HandleStreamResponse(resp.Body)
@@ -675,6 +683,8 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 	flusher.Flush()
 
 	clientGone := false
+	hasUsage := false                 // 跟踪是否已收到 usage
+	var outputTextBuffer bytes.Buffer // 累积输出文本用于估算 token
 	for {
 		select {
 		case event, ok := <-eventChan:
@@ -703,6 +713,14 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 				return
 			}
 
+			// 使用 JSON 解析精确检测 usage 字段
+			if !hasUsage {
+				hasUsage = checkEventHasUsage(event)
+			}
+
+			// 提取文本内容用于估算输出 token
+			extractTextFromEvent(event, &outputTextBuffer)
+
 			// 缓存事件用于最后的日志输出
 			if streamLoggingEnabled {
 				logBuffer.WriteString(event)
@@ -712,6 +730,14 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 						synthesizer.ProcessLine(line)
 					}
 				}
+			}
+
+			// 检测 message_stop 事件，在其之前注入 usage（如果需要）
+			if !hasUsage && !clientGone && isMessageStopEvent(event) {
+				usageEvent := buildUsageEvent(requestBody, outputTextBuffer.String())
+				w.Write([]byte(usageEvent))
+				flusher.Flush()
+				hasUsage = true // 防止重复注入
 			}
 
 			// 实时转发给客户端（流式传输）
@@ -846,4 +872,117 @@ func maskAPIKey(key string) string {
 
 	// 长密钥：保留前8位和后5位
 	return key[:8] + "***" + key[length-5:]
+}
+
+// buildUsageEvent 构建带 usage 的 message_delta SSE 事件
+func buildUsageEvent(requestBody []byte, outputText string) string {
+	inputTokens := utils.EstimateRequestTokens(requestBody)
+	outputTokens := utils.EstimateTokens(outputText)
+
+	event := map[string]interface{}{
+		"type": "message_delta",
+		"usage": map[string]int{
+			"input_tokens":  inputTokens,
+			"output_tokens": outputTokens,
+		},
+	}
+	eventJSON, _ := json.Marshal(event)
+	return fmt.Sprintf("event: message_delta\ndata: %s\n\n", eventJSON)
+}
+
+// checkEventHasUsage 使用 JSON 解析精确检测事件是否包含 usage 字段
+func checkEventHasUsage(event string) bool {
+	for _, line := range strings.Split(event, "\n") {
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		jsonStr := strings.TrimPrefix(line, "data: ")
+
+		var data map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+			continue
+		}
+
+		// 检查顶层 usage 字段
+		if hasUsageFields(data["usage"]) {
+			return true
+		}
+
+		// 检查 message.usage（Claude 流式响应格式）
+		if msg, ok := data["message"].(map[string]interface{}); ok {
+			if hasUsageFields(msg["usage"]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasUsageFields 检查 usage 对象是否包含 token 字段
+func hasUsageFields(usage interface{}) bool {
+	if u, ok := usage.(map[string]interface{}); ok {
+		_, hasInput := u["input_tokens"]
+		_, hasOutput := u["output_tokens"]
+		return hasInput || hasOutput
+	}
+	return false
+}
+
+// isMessageStopEvent 使用 JSON 解析检测是否为 message_stop 事件
+func isMessageStopEvent(event string) bool {
+	// 先检查 event: 行
+	if strings.Contains(event, "event: message_stop") {
+		return true
+	}
+
+	// 再检查 data 中的 type 字段
+	for _, line := range strings.Split(event, "\n") {
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		jsonStr := strings.TrimPrefix(line, "data: ")
+
+		var data map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+			continue
+		}
+
+		if data["type"] == "message_stop" {
+			return true
+		}
+	}
+	return false
+}
+
+// extractTextFromEvent 从 SSE 事件中提取文本内容
+func extractTextFromEvent(event string, buf *bytes.Buffer) {
+	for _, line := range strings.Split(event, "\n") {
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		jsonStr := strings.TrimPrefix(line, "data: ")
+
+		var data map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+			continue
+		}
+
+		// Claude SSE: delta.text (text_delta 类型)
+		if delta, ok := data["delta"].(map[string]interface{}); ok {
+			if text, ok := delta["text"].(string); ok {
+				buf.WriteString(text)
+			}
+			// tool_use: delta.partial_json
+			if partialJSON, ok := delta["partial_json"].(string); ok {
+				buf.WriteString(partialJSON)
+			}
+		}
+
+		// content_block_start 中的初始文本
+		if cb, ok := data["content_block"].(map[string]interface{}); ok {
+			if text, ok := cb["text"].(string); ok {
+				buf.WriteString(text)
+			}
+		}
+	}
 }

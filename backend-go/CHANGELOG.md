@@ -1,5 +1,29 @@
 # Changelog
 
+## [v2.1.6] - 2025-12-11
+
+### Added - Messages API Token 计数补全
+
+**问题背景**：
+- 某些 OpenAI 兼容的上游服务不返回 token 计数（usage 字段为空）
+- 客户端依赖 usage 信息进行成本统计和限流
+
+**解决方案**：
+- 当上游响应没有返回 usage 时，本地估算 token 数量并附加到响应中
+- 使用字符估算法：CJK 字符 ~1.5 字符/token，英文 ~3.5 字符/token
+
+**具体改动**：
+1. `internal/utils/token_counter.go` - 新增 token 估算工具
+   - `EstimateTokens()` - 基于字符估算 token 数量
+   - `EstimateRequestTokens()` - 估算请求的输入 token
+   - `EstimateResponseTokens()` - 估算响应的输出 token
+2. `internal/handlers/proxy.go`
+   - `handleNormalResponse()` - 非流式响应 Usage 补全
+   - `handleStreamResponse()` - 流式响应 Usage 补全（在 message_stop 之前注入）
+   - `buildUsageEvent()` - 构建带 usage 的 SSE 事件
+   - `extractTextFromEvent()` - 从流式事件中提取文本（支持 text_delta 和 partial_json）
+   - `checkEventHasUsage()` - 使用 JSON 解析精确检测 usage 字段，避免误判
+
 ## [v2.1.2] - 2025-12-11
 
 ### Changed - Gin Logger 过滤：减少 /api/channels 轮询日志噪音

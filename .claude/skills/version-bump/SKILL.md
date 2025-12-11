@@ -2,6 +2,7 @@
 name: version-bump
 description: 升级项目版本号并提交git，支持patch/minor/major版本升级或指定具体版本号
 version: 1.1.0
+author: https://github.com/BenedictKing/claude-proxy/
 allowed-tools: Bash, Read, Write
 ---
 

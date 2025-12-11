@@ -204,6 +204,7 @@ docs/
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/version-bump/
+!.claude/skills/codex-review/
 
 .aider*
 *.log
