@@ -1542,6 +1542,8 @@ onUnmounted(() => {
 
   .stat-cards-row {
     margin-bottom: 12px !important;
+    margin-left: -4px !important;
+    margin-right: -4px !important;
   }
 
   .stat-cards-row .v-col {
