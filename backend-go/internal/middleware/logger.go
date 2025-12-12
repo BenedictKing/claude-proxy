@@ -11,6 +11,7 @@ import (
 // 默认跳过日志的路径前缀（仅 GET 请求）
 var defaultSkipPrefixes = []string{
 	"/api/channels",
+	"/api/responses/channels",
 }
 
 // FilteredLogger 创建一个可过滤路径的 Logger 中间件
