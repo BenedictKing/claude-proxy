@@ -797,11 +797,6 @@ defineExpose({
   .channel-keys {
     display: none;
   }
-
-  /* 960px以下：两列 */
-  .inactive-pool {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 @media (max-width: 600px) {
@@ -819,11 +814,6 @@ defineExpose({
   .priority-number,
   .drag-handle {
     display: none;
-  }
-
-  /* 600px以下：单列 */
-  .inactive-pool {
-    grid-template-columns: 1fr;
   }
 }
 
