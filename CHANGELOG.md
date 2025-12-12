@@ -6,6 +6,18 @@
 
 ## [Unreleased]
 
+### 🐛 Bug 修复
+
+- **修复添加渠道弹窗密钥重复错误状态残留问题**
+  - 切换渠道弹窗时，之前的"该密钥已存在"错误提示不会被清理
+  - 修复：在弹窗打开时统一清理 `apiKeyError` 和 `duplicateKeyIndex` 状态
+  - 影响文件：`frontend/src/components/AddChannelModal.vue`
+
+- **修复备用池渠道卡片在移动端的显示问题**
+  - 问题：描述文本过长时导致卡片溢出，窄屏下布局混乱
+  - 修复：调整响应式布局，960px 以下两列，600px 以下单列
+  - 影响文件：`frontend/src/components/ChannelOrchestration.vue`
+
 ### ✨ 新功能
 
 - **新增 `/v1/responses/compact` 端点**
