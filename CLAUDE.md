@@ -11,21 +11,6 @@ Claude API 代理服务器 - 支持多上游 AI 服务（OpenAI/Gemini/Claude）
 ## 常用命令
 
 ```bash
-# Go 后端开发
-cd backend-go
-make dev              # 热重载开发模式
-make test             # 运行所有测试
-make test-cover       # 测试 + 覆盖率报告
-go test -v ./internal/converters/...  # 运行单个包测试
-go test -v -run TestName ./internal/...  # 运行单个测试
-make build            # 构建生产版本
-make lint             # 代码检查
-make fmt              # 格式化代码
-
-# 前端开发
-cd frontend
-bun install && bun run dev
-
 # 根目录（推荐）
 make dev              # Go 后端热重载开发（不含前端）
 make run              # 构建前端并运行 Go 后端
@@ -33,39 +18,82 @@ make frontend-dev     # 前端开发服务器
 make build            # 构建前端并编译 Go 后端
 make clean            # 清理构建文件
 docker-compose up -d  # Docker 部署
+
+# Go 后端开发 (backend-go/)
+make dev              # 热重载开发模式
+make test             # 运行所有测试
+make test-cover       # 测试 + 覆盖率报告（生成 coverage.html）
+make build            # 构建生产版本
+make lint             # 代码检查（需要 golangci-lint）
+make fmt              # 格式化代码
+make deps             # 更新依赖
+
+# 运行特定测试
+go test -v ./internal/converters/...       # 运行单个包测试
+go test -v -run TestName ./internal/...    # 运行单个测试
+
+# 前端开发 (frontend/)
+bun install && bun run dev    # 开发服务器
+bun run build                 # 生产构建
 ```
 
 ## 架构概览
 
 ```
 claude-proxy/
-├── backend-go/                 # Go 后端
-│   ├── main.go                # 入口
+├── backend-go/                 # Go 后端（主程序）
+│   ├── main.go                # 入口、路由配置
 │   └── internal/
-│       ├── handlers/          # HTTP 处理器 (proxy.go, responses.go)
+│       ├── handlers/          # HTTP 处理器 (proxy.go, responses.go, config.go)
 │       ├── providers/         # 上游适配器 (openai.go, gemini.go, claude.go)
-│       ├── converters/        # Responses API 协议转换器
-│       ├── config/            # 配置管理 + 热重载
-│       ├── session/           # Responses API 会话管理
-│       ├── scheduler/         # 多渠道调度器
-│       └── metrics/           # 渠道指标监控
-└── frontend/                   # Vue 3 + Vuetify 前端
-    └── src/
-        ├── components/        # Vue 组件
-        └── services/          # API 服务
+│       ├── converters/        # 协议转换器（工厂模式）
+│       ├── scheduler/         # 多渠道调度器（优先级、熔断）
+│       ├── session/           # 会话管理 + Trace 亲和性
+│       ├── metrics/           # 渠道指标（滑动窗口算法）
+│       ├── config/            # 配置管理（fsnotify 热重载）
+│       └── middleware/        # 认证、CORS、日志过滤
+├── frontend/                   # Vue 3 + Vuetify 前端
+│   └── src/
+│       ├── components/        # Vue 组件
+│       └── services/          # API 服务封装
+└── .config/                    # 运行时配置（热重载）
 ```
 
 ## 核心设计模式
 
 1. **Provider Pattern** - `internal/providers/`: 所有上游实现统一 `Provider` 接口
-2. **Converter Pattern** - `internal/converters/`: Responses API 协议转换，工厂模式创建转换器
+2. **Converter Pattern** - `internal/converters/`: 协议转换，工厂模式创建转换器
 3. **Session Manager** - `internal/session/`: 基于 `previous_response_id` 的多轮对话跟踪
-4. **Scheduler Pattern** - `internal/scheduler/`: 优先级调度、健康检查、自动熔断
+4. **Scheduler Pattern** - `internal/scheduler/`: 优先级调度、Trace 亲和性、自动熔断
 
-## 双 API 支持
+## API 端点
 
-- `/v1/messages` - Claude Messages API（支持 OpenAI/Gemini 协议转换）
-- `/v1/responses` - Codex Responses API（支持会话管理）
+**代理端点**:
+- `POST /v1/messages` - Claude Messages API（支持 OpenAI/Gemini 协议转换）
+- `POST /v1/messages/count_tokens` - Token 计数
+- `POST /v1/responses` - Codex Responses API（支持会话管理）
+- `POST /v1/responses/compact` - 精简版 Responses API
+- `GET /health` - 健康检查（无需认证）
+
+**管理 API** (`/api/`):
+- `/api/channels` - Messages 渠道 CRUD
+- `/api/responses/channels` - Responses 渠道 CRUD
+- `/api/channels/metrics` - 渠道指标
+- `/api/channels/scheduler/stats` - 调度器统计
+- `/api/ping/:id` - 渠道连通性测试
+
+## 关键配置
+
+| 环境变量 | 默认值 | 说明 |
+|---------|--------|------|
+| `PORT` | 3000 | 服务器端口 |
+| `ENV` | production | 运行环境 |
+| `PROXY_ACCESS_KEY` | - | **必须设置** 访问密钥 |
+| `LOAD_BALANCE_STRATEGY` | failover | 负载均衡策略 |
+| `QUIET_POLLING_LOGS` | true | 静默轮询日志 |
+| `MAX_REQUEST_BODY_SIZE_MB` | 50 | 请求体最大大小 |
+
+完整配置参考 `backend-go/.env.example`
 
 ## 常见任务
 
@@ -78,10 +106,12 @@ claude-proxy/
 
 - **Git 操作**: 未经用户明确要求，不要执行 git commit/push/branch 操作
 - **配置热重载**: `backend-go/.config/config.json` 修改后自动生效，无需重启
+- **环境变量变更**: 修改 `.env` 后需要重启服务
 - **认证**: 所有端点（除 `/health`）需要 `x-api-key` 头或 `PROXY_ACCESS_KEY`
-- **环境变量**: 通过 `.env` 文件配置，参考 `backend-go/.env.example`
 
 ## 模块文档
 
-- [backend-go/CLAUDE.md](backend-go/CLAUDE.md) - Go 后端详细文档（API 端点、Provider 接口、数据模型）
-- [frontend/CLAUDE.md](frontend/CLAUDE.md) - Vue 前端详细文档（组件、API 服务）
+- [backend-go/CLAUDE.md](backend-go/CLAUDE.md) - Go 后端详细文档
+- [frontend/CLAUDE.md](frontend/CLAUDE.md) - Vue 前端详细文档
+- [ARCHITECTURE.md](ARCHITECTURE.md) - 详细架构设计
+- [ENVIRONMENT.md](ENVIRONMENT.md) - 完整环境变量配置
