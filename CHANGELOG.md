@@ -4,6 +4,18 @@
 
 ---
 
+## [v2.1.20] - 2025-12-12
+
+### ✨ 新功能
+
+- **渠道名称支持点击打开编辑弹窗**
+  - 故障转移序列和备用资源池中的渠道名称现在可点击，与密钥数量点击行为一致
+  - 新增 hover 视觉反馈：鼠标指针变手型、文字变主题色并显示下划线
+  - 支持键盘可访问性：`tabindex`、`role="button"`、Enter/Space 键触发、`:focus-visible` 轮廓样式
+  - 影响文件：`frontend/src/components/ChannelOrchestration.vue`
+
+---
+
 ## [v2.1.19] - 2025-12-12
 
 ### 🐛 Bug 修复

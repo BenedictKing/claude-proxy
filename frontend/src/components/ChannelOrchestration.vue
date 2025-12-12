@@ -57,7 +57,14 @@
 
             <!-- 渠道名称和描述 -->
             <div class="channel-name">
-              <span class="font-weight-medium">{{ element.name }}</span>
+              <span
+                class="font-weight-medium channel-name-link"
+                tabindex="0"
+                role="button"
+                @click="$emit('edit', element)"
+                @keydown.enter="$emit('edit', element)"
+                @keydown.space.prevent="$emit('edit', element)"
+              >{{ element.name }}</span>
               <!-- 官网链接按钮 -->
               <v-btn
                 :href="getWebsiteUrl(element)"
@@ -236,7 +243,14 @@
           <!-- 渠道信息 -->
           <div class="channel-info">
             <div class="channel-info-main">
-              <span class="font-weight-medium">{{ channel.name }}</span>
+              <span
+                class="font-weight-medium channel-name-link"
+                tabindex="0"
+                role="button"
+                @click="$emit('edit', channel)"
+                @keydown.enter="$emit('edit', channel)"
+                @keydown.space.prevent="$emit('edit', channel)"
+              >{{ channel.name }}</span>
               <span class="text-caption text-disabled ml-2">{{ channel.serviceType }}</span>
             </div>
             <div v-if="channel.description" class="channel-info-desc text-caption text-disabled">
@@ -670,6 +684,24 @@ defineExpose({
 
 .channel-name .font-weight-medium {
   font-size: 0.95rem;
+}
+
+.channel-name-link {
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.channel-name-link:hover,
+.channel-name-link:focus {
+  color: rgb(var(--v-theme-primary));
+  text-decoration: underline;
+  outline: none;
+}
+
+.channel-name-link:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 .channel-metrics {
