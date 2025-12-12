@@ -1455,6 +1455,12 @@ onUnmounted(() => {
    手机端专属样式 (≤600px)
    ========================================= */
 @media (max-width: 600px) {
+  /* --- 主容器内边距缩小 --- */
+  .v-main .v-container {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
   /* --- 顶部导航栏 --- */
   .app-header {
     padding: 0 12px !important;
