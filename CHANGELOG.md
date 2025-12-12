@@ -23,6 +23,11 @@
   - 减少统计卡片之间的间距
   - 影响文件：`frontend/src/App.vue`
 
+- **优化渠道编排响应式布局**
+  - 960px 以下：恢复显示健康度指标和密钥数量
+  - 600px 以下：隐藏健康度指标和密钥数量，保持精简
+  - 影响文件：`frontend/src/components/ChannelOrchestration.vue`
+
 ### ✨ 新功能
 
 - **新增 `/v1/responses/compact` 端点**
