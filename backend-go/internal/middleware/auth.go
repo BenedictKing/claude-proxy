@@ -100,6 +100,9 @@ func isPollingEndpoint(path string) bool {
 		"/api/channels",
 		"/api/channels/metrics",
 		"/api/channels/scheduler/stats",
+		"/api/responses/channels",
+		"/api/responses/channels/metrics",
+		"/api/responses/channels/scheduler/stats",
 	}
 	for _, p := range pollingPaths {
 		if path == p {
