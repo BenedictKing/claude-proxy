@@ -797,6 +797,14 @@ defineExpose({
   .channel-keys {
     display: none;
   }
+
+  .inactive-pool {
+    grid-template-columns: 1fr;
+  }
+
+  .inactive-channel-row .channel-info-desc {
+    display: none;
+  }
 }
 
 @media (max-width: 600px) {
@@ -819,6 +827,7 @@ defineExpose({
   .inactive-pool {
     grid-template-columns: 1fr;
     padding: 12px;
+    gap: 8px;
   }
 
   .inactive-pool-header {
