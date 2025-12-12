@@ -1036,6 +1036,10 @@ watch(
   () => props.show,
   newShow => {
     if (newShow) {
+      // 无论是编辑还是新增，都先清理密钥错误状态
+      apiKeyError.value = ''
+      duplicateKeyIndex.value = -1
+
       if (props.channel) {
         // 编辑模式：使用表单模式
         isQuickMode.value = false
