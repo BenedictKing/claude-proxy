@@ -789,8 +789,9 @@ defineExpose({
 /* 响应式调整 */
 @media (max-width: 960px) {
   .channel-row {
-    grid-template-columns: 32px 32px 90px 1fr 100px 70px 70px;
+    grid-template-columns: 32px 32px 90px minmax(80px, 1fr) 90px 60px 60px;
     padding: 10px 12px;
+    gap: 8px;
   }
 }
 
