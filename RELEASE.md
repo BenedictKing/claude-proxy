@@ -91,6 +91,14 @@
     git push origin vX.Y.Z
     ```
 
+3.  推送 tag 后，GitHub Actions 会自动触发以下构建任务（**三平台并行执行**）：
+    -   `release-linux.yml` - 构建 Linux amd64/arm64 版本
+    -   `release-macos.yml` - 构建 macOS amd64/arm64 版本
+    -   `release-windows.yml` - 构建 Windows amd64/arm64 版本
+    -   `docker-build.yml` - 构建并推送 Docker 镜像
+
+    > **注意**: 各平台使用独立的 concurrency group (`${{ github.workflow }}-${{ github.ref }}`)，确保并行构建互不阻塞。
+
 ### 步骤 6: 在 GitHub 上创建 Release (可选但推荐)
 
 1.  访问项目的 GitHub 页面，进入 "Releases" 部分。

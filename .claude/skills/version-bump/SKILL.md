@@ -215,13 +215,26 @@ git push origin v{新版本号}
 | `release-linux.yml` | ubuntu-latest | `claude-proxy-linux-amd64`, `claude-proxy-linux-arm64` |
 | `release-macos.yml` | macos-latest | `claude-proxy-darwin-amd64`, `claude-proxy-darwin-arm64` |
 | `release-windows.yml` | windows-latest | `claude-proxy-windows-amd64.exe`, `claude-proxy-windows-arm64.exe` |
-| `docker-build.yml` | ubuntu-latest | Docker 镜像 (ghcr.io, linux/amd64 + linux/arm64) |
+| `docker-build.yml` | ubuntu-latest | Docker 镜像 (阿里云容器镜像服务, linux/amd64 + linux/arm64) |
+
+### Concurrency 配置
+
+每个 release workflow 使用独立的 concurrency group，确保三个平台**并行编译**：
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+```
+
+- `${{ github.workflow }}` 使用 workflow 名称作为前缀，避免不同平台的构建相互阻塞
+- `cancel-in-progress: false` 确保发布构建不会被取消
 
 ### 发布内容
 
-- 6 个平台的可执行文件
+- 6 个平台的可执行文件（三平台并行构建）
 - 自动生成的 Release Notes
-- Docker 镜像（推送到 ghcr.io）
+- Docker 镜像（推送到阿里云容器镜像服务）
 - 发布为 **draft** 模式，需手动确认发布
 
 ## 注意事项
