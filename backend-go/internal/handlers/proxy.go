@@ -783,11 +783,13 @@ func processStreamEvent(c *gin.Context, w gin.ResponseWriter, flusher http.Flush
 				log.Printf("🔢 [Stream-Token] 检测到虚假值, 延迟到流结束修补")
 			}
 		}
-		// 累积收集 usage 数据（借鉴 new-api：input_tokens > 0 时更新，output_tokens 取最新）
-		if usageData.InputTokens > 0 {
+		// 累积收集 usage 数据
+		// InputTokens: 取最大值（避免中间更新的真实值被最终事件的旧值覆盖）
+		// OutputTokens: 取最大值（最终事件的 output_tokens 通常是最准确的）
+		if usageData.InputTokens > ctx.collectedUsage.InputTokens {
 			ctx.collectedUsage.InputTokens = usageData.InputTokens
 		}
-		if usageData.OutputTokens > 0 {
+		if usageData.OutputTokens > ctx.collectedUsage.OutputTokens {
 			ctx.collectedUsage.OutputTokens = usageData.OutputTokens
 		}
 		if usageData.CacheCreationInputTokens > 0 {
@@ -1174,6 +1176,7 @@ func patchTokensInEvent(event string, estimatedInputTokens, estimatedOutputToken
 
 // patchUsageFieldsWithLog 修补 usage 对象中的 token 字段，并输出日志
 // hasCacheTokens: 从 ctx.collectedUsage 传入（而非从当前事件读取），因为最终事件通常不含缓存字段
+// estimatedInput/estimatedOutput: 收集到的最大值（或估算值）
 func patchUsageFieldsWithLog(usage map[string]interface{}, estimatedInput, estimatedOutput int, hasCacheTokens bool, enableLog bool, location string) {
 	originalInput := usage["input_tokens"]
 	originalOutput := usage["output_tokens"]
@@ -1186,14 +1189,26 @@ func patchUsageFieldsWithLog(usage map[string]interface{}, estimatedInput, estim
 	promptTokens, _ := usage["prompt_tokens"].(float64)
 	completionTokens, _ := usage["completion_tokens"].(float64)
 
-	// 只有在没有缓存 token 的情况下才补全 input_tokens（hasCacheTokens 由调用方从 ctx.collectedUsage 传入）
-	if v, ok := usage["input_tokens"].(float64); ok && v <= 1 && !hasCacheTokens {
-		usage["input_tokens"] = estimatedInput
-		inputPatched = true
+	// 补全 input_tokens：
+	// 1. 如果当前值 <= 1 且没有缓存 token，使用收集到的值
+	// 2. 如果收集到的值 > 当前值且没有缓存 token，也使用收集到的值（中间事件可能有更准确的值）
+	// 注意：缓存请求合法地报告 input_tokens 为 0/1，不应被覆盖
+	if v, ok := usage["input_tokens"].(float64); ok {
+		currentInput := int(v)
+		if !hasCacheTokens && ((currentInput <= 1) || (estimatedInput > currentInput && estimatedInput > 1)) {
+			usage["input_tokens"] = estimatedInput
+			inputPatched = true
+		}
 	}
-	if v, ok := usage["output_tokens"].(float64); ok && v <= 1 {
-		usage["output_tokens"] = estimatedOutput
-		outputPatched = true
+	// 补全 output_tokens：
+	// 1. 如果当前值 <= 1，使用收集到的值
+	// 2. 如果收集到的值 > 当前值，也使用收集到的值
+	if v, ok := usage["output_tokens"].(float64); ok {
+		currentOutput := int(v)
+		if currentOutput <= 1 || (estimatedOutput > currentOutput && estimatedOutput > 1) {
+			usage["output_tokens"] = estimatedOutput
+			outputPatched = true
+		}
 	}
 
 	if enableLog {
