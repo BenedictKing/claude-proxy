@@ -4,6 +4,20 @@
 
 ---
 
+## [Unreleased]
+
+### ✨ 新功能
+
+- **新增 `/v1/responses/compact` 端点**
+  - 支持 OpenAI Responses API 的上下文压缩功能，用于长期代理工作流
+  - 完整的 Key 轮转：每个渠道尝试所有可用 API Key，401/429/配额错误自动切换
+  - 多渠道故障转移：复用 `shouldRetryWithNextKey` 逻辑判断是否切换渠道
+  - 会话亲和性：提取 `userID` 用于 Trace 亲和，记录成功/失败到调度器
+  - 请求体大小限制：复用 `MaxRequestBodySize` 配置，防止内存耗尽
+  - 影响文件：`backend-go/internal/handlers/responses.go`, `backend-go/main.go`
+
+---
+
 ## [v2.1.14] - 2025-12-12
 
 ### 🐛 Bug 修复

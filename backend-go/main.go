@@ -153,6 +153,7 @@ func main() {
 
 	// Responses API 端点
 	r.POST("/v1/responses", handlers.ResponsesHandler(envCfg, cfgManager, sessionManager, channelScheduler))
+	r.POST("/v1/responses/compact", handlers.CompactHandler(envCfg, cfgManager, sessionManager, channelScheduler))
 
 	// 静态文件服务 (嵌入的前端)
 	if envCfg.EnableWebUI {
