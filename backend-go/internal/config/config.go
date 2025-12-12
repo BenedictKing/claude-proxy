@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/BenedictKing/claude-proxy/internal/utils"
@@ -72,12 +73,14 @@ type ConfigManager struct {
 	mu                    sync.RWMutex
 	config                Config
 	configFile            string
-	requestCount          int
-	responsesRequestCount int
+	requestCount          int64 // 使用 int64 支持原子操作
+	responsesRequestCount int64 // 使用 int64 支持原子操作
 	watcher               *fsnotify.Watcher
 	failedKeysCache       map[string]*FailedKey
 	keyRecoveryTime       time.Duration
 	maxFailureCount       int
+	stopChan              chan struct{} // 用于通知 goroutine 停止
+	closeOnce             sync.Once     // 确保 Close 只执行一次
 }
 
 const (
@@ -93,6 +96,7 @@ func NewConfigManager(configFile string) (*ConfigManager, error) {
 		failedKeysCache: make(map[string]*FailedKey),
 		keyRecoveryTime: keyRecoveryTime,
 		maxFailureCount: maxFailureCount,
+		stopChan:        make(chan struct{}),
 	}
 
 	// 加载配置
@@ -361,6 +365,8 @@ func (cm *ConfigManager) startWatcher() error {
 	go func() {
 		for {
 			select {
+			case <-cm.stopChan:
+				return
 			case event, ok := <-watcher.Events:
 				if !ok {
 					return
@@ -426,7 +432,7 @@ func (cm *ConfigManager) GetNextResponsesAPIKey(upstream *UpstreamConfig, failed
 	return cm.getNextAPIKeyWithStrategy(upstream, failedKeys, cm.config.ResponsesLoadBalance, &cm.responsesRequestCount)
 }
 
-func (cm *ConfigManager) getNextAPIKeyWithStrategy(upstream *UpstreamConfig, failedKeys map[string]bool, strategy string, requestCounter *int) (string, error) {
+func (cm *ConfigManager) getNextAPIKeyWithStrategy(upstream *UpstreamConfig, failedKeys map[string]bool, strategy string, requestCounter *int64) (string, error) {
 	if len(upstream.APIKeys) == 0 {
 		return "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)
 	}
@@ -478,11 +484,9 @@ func (cm *ConfigManager) getNextAPIKeyWithStrategy(upstream *UpstreamConfig, fai
 	// 根据负载均衡策略选择密钥
 	switch strategy {
 	case "round-robin":
-		cm.mu.Lock()
-		*requestCounter++
-		index := (*requestCounter - 1) % len(availableKeys)
+		count := atomic.AddInt64(requestCounter, 1)
+		index := int((count - 1) % int64(len(availableKeys)))
 		selectedKey := availableKeys[index]
-		cm.mu.Unlock()
 		log.Printf("轮询选择密钥 %s (%d/%d)", utils.MaskAPIKey(selectedKey), index+1, len(availableKeys))
 		return selectedKey, nil
 
@@ -557,22 +561,44 @@ func (cm *ConfigManager) cleanupExpiredFailures() {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		cm.mu.Lock()
-		now := time.Now()
-		for key, failure := range cm.failedKeysCache {
-			recoveryTime := cm.keyRecoveryTime
-			if failure.FailureCount > cm.maxFailureCount {
-				recoveryTime = cm.keyRecoveryTime * 2
-			}
+	for {
+		select {
+		case <-cm.stopChan:
+			return
+		case <-ticker.C:
+			cm.mu.Lock()
+			now := time.Now()
+			for key, failure := range cm.failedKeysCache {
+				recoveryTime := cm.keyRecoveryTime
+				if failure.FailureCount > cm.maxFailureCount {
+					recoveryTime = cm.keyRecoveryTime * 2
+				}
 
-			if now.Sub(failure.Timestamp) > recoveryTime {
-				delete(cm.failedKeysCache, key)
-				log.Printf("API密钥 %s 已从失败列表中恢复", utils.MaskAPIKey(key))
+				if now.Sub(failure.Timestamp) > recoveryTime {
+					delete(cm.failedKeysCache, key)
+					log.Printf("API密钥 %s 已从失败列表中恢复", utils.MaskAPIKey(key))
+				}
 			}
+			cm.mu.Unlock()
 		}
-		cm.mu.Unlock()
 	}
+}
+
+// Close 关闭 ConfigManager 并释放资源（幂等，可安全多次调用）
+func (cm *ConfigManager) Close() error {
+	var closeErr error
+	cm.closeOnce.Do(func() {
+		// 通知所有 goroutine 停止
+		if cm.stopChan != nil {
+			close(cm.stopChan)
+		}
+
+		// 关闭文件监听器
+		if cm.watcher != nil {
+			closeErr = cm.watcher.Close()
+		}
+	})
+	return closeErr
 }
 
 // clearFailedKeysForUpstream 清理指定渠道的所有失败 key 记录
@@ -985,14 +1011,6 @@ func RedirectModel(model string, upstream *UpstreamConfig) string {
 	}
 
 	return model
-}
-
-// Close 关闭配置管理器
-func (cm *ConfigManager) Close() error {
-	if cm.watcher != nil {
-		return cm.watcher.Close()
-	}
-	return nil
 }
 
 // ============== Responses 接口专用方法 ==============

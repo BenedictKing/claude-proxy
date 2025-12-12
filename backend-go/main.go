@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/BenedictKing/claude-proxy/internal/config"
@@ -50,6 +55,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("初始化配置管理器失败: %v", err)
 	}
+	defer cfgManager.Close()
 
 	// 初始化会话管理器（Responses API 专用）
 	sessionManager := session.NewSessionManager(
@@ -190,7 +196,46 @@ func main() {
 	}
 	fmt.Printf("\n")
 
-	if err := r.Run(addr); err != nil {
+	// 创建 HTTP 服务器
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: r,
+	}
+
+	// 用于传递关闭结果
+	shutdownDone := make(chan struct{})
+
+	// 优雅关闭：监听系统信号
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		<-sigChan
+		signal.Stop(sigChan) // 停止信号监听，避免资源泄漏
+
+		log.Println("🛑 收到关闭信号，正在优雅关闭服务器...")
+
+		// 创建超时上下文
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Printf("⚠️ 服务器关闭时发生错误: %v", err)
+		} else {
+			log.Println("✅ 服务器已安全关闭")
+		}
+		close(shutdownDone)
+	}()
+
+	// 启动服务器（阻塞直到关闭）
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("服务器启动失败: %v", err)
+	}
+
+	// 等待关闭完成（带超时保护，避免死锁）
+	select {
+	case <-shutdownDone:
+		// 正常关闭完成
+	case <-time.After(15 * time.Second):
+		log.Println("⚠️ 等待关闭超时")
 	}
 }

@@ -18,6 +18,7 @@ type EnvConfig struct {
 	QuietPollingLogs     bool // 静默轮询端点日志
 	RequestTimeout       int
 	MaxConcurrentReqs    int
+	MaxRequestBodySize   int64 // 请求体最大大小 (字节)，由 MB 配置转换
 	EnableCORS           bool
 	CORSOrigin           string
 	EnableRateLimit      bool
@@ -58,6 +59,7 @@ func NewEnvConfig() *EnvConfig {
 		QuietPollingLogs:     getEnv("QUIET_POLLING_LOGS", "true") != "false",
 		RequestTimeout:       getEnvAsInt("REQUEST_TIMEOUT", 300000),
 		MaxConcurrentReqs:    getEnvAsInt("MAX_CONCURRENT_REQUESTS", 100),
+		MaxRequestBodySize:   getEnvAsInt64("MAX_REQUEST_BODY_SIZE_MB", 50) * 1024 * 1024, // MB 转换为字节
 		EnableCORS:           getEnv("ENABLE_CORS", "true") != "false",
 		CORSOrigin:           getEnv("CORS_ORIGIN", "*"),
 		EnableRateLimit:      getEnv("ENABLE_RATE_LIMIT", "false") == "true",
@@ -123,6 +125,16 @@ func getEnv(key, defaultValue string) string {
 func getEnvAsInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
+}
+
+// getEnvAsInt64 获取环境变量并转换为 int64
+func getEnvAsInt64(key string, defaultValue int64) int64 {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.ParseInt(value, 10, 64); err == nil {
 			return intValue
 		}
 	}

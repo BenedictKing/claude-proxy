@@ -1,5 +1,40 @@
 # Changelog
 
+## [v2.1.15] - 2025-12-12
+
+### Fixed - 安全加固与资源管理优化
+
+**本次修改解决的问题**：
+1. 请求体无大小限制，可被 DoS 攻击利用
+2. ConfigManager 存在 goroutine 泄漏和资源未释放问题
+3. 负载均衡计数器存在数据竞争风险
+4. 服务器缺少优雅关闭机制
+
+**具体改动**：
+
+1. **请求体大小限制** (`handlers/proxy.go`, `handlers/responses.go`)
+   - 新增 `MAX_REQUEST_BODY_SIZE_MB` 环境变量（默认 50MB）
+   - `/v1/messages` 和 `/v1/responses` 端点均应用限制
+   - 超限返回 413 状态码
+
+2. **Goroutine 泄漏修复** (`config/config.go`)
+   - 添加 `stopChan` 用于通知后台 goroutine 退出
+   - `startWatcher()` 和 `cleanupExpiredFailures()` 监听停止信号
+   - 添加 `Close()` 方法释放 watcher 资源
+
+3. **数据竞争修复** (`config/config.go`)
+   - `requestCount` 和 `responsesRequestCount` 改为 `int64` 类型
+   - 使用 `sync/atomic.AddInt64()` 进行原子操作
+
+4. **优雅关闭** (`main.go`)
+   - 监听 SIGINT/SIGTERM 信号
+   - 10 秒超时优雅关闭 HTTP 服务器
+   - `defer cfgManager.Close()` 确保资源释放
+   - 根据关闭结果输出准确日志
+
+5. **Close() 幂等性** (`config/config.go`)
+   - 使用 `sync.Once` 确保多次调用不会 panic
+
 ## [v2.1.7] - 2025-12-11
 
 ### Fixed - Token 计数补全：处理虚假值场景

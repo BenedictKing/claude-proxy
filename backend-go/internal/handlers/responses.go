@@ -40,10 +40,18 @@ func ResponsesHandler(
 
 		startTime := time.Now()
 
-		// 读取原始请求体
-		bodyBytes, err := io.ReadAll(c.Request.Body)
+		// 读取原始请求体（限制最大大小，通过环境变量配置）
+		maxBodySize := envCfg.MaxRequestBodySize
+		limitedReader := io.LimitReader(c.Request.Body, maxBodySize+1)
+		bodyBytes, err := io.ReadAll(limitedReader)
 		if err != nil {
 			c.JSON(400, gin.H{"error": "Failed to read request body"})
+			return
+		}
+		if int64(len(bodyBytes)) > maxBodySize {
+			// 排空剩余请求体，避免 keep-alive 连接污染
+			io.Copy(io.Discard, c.Request.Body)
+			c.JSON(413, gin.H{"error": fmt.Sprintf("Request body too large, maximum size is %d MB", maxBodySize/1024/1024)})
 			return
 		}
 		// 恢复请求体供后续使用
