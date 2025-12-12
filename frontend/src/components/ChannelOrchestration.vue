@@ -760,6 +760,7 @@ defineExpose({
 .inactive-channel-row .channel-info {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -776,6 +777,7 @@ defineExpose({
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.3;
+  max-width: 100%;
 }
 
 .inactive-channel-row .channel-actions {
@@ -837,6 +839,11 @@ defineExpose({
   .inactive-channel-row .channel-info {
     flex: 1 1 100%;
     margin-bottom: 8px;
+    max-width: 100%;
+  }
+
+  .inactive-channel-row .channel-info-desc {
+    display: none;
   }
 
   .inactive-channel-row .channel-keys {
