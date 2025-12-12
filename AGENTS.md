@@ -1,37 +1,36 @@
-# Repository Guidelines
+# 仓库协作指南
 
-## Always respond in Chinese-simplified
+## 重要约定
+- **始终使用简体中文回复**。
+- 遵循 SOLID / KISS / DRY / YAGNI；优先修复根因，避免无关重构。
 
-## Project Structure & Module Organization
-- `backend-go/`: primary Go service (Gin), embeds built frontend, commands via `Makefile`; Go packages live under `internal/`.
-- `frontend/`: web UI (Vite-based). Built assets are embedded by the Go build; keep static assets in `frontend/public/`.
-- `backend/`: legacy TypeScript service kept for reference/compat; Bun workspaces span `frontend` and `backend`.
-- `dist/`: build artifacts (Go binary, bundled UI). Avoid manual edits.
-- Config and docs: `.env.example` variants in `backend-go/`, env guidance in `ENVIRONMENT.md`, architecture notes in `ARCHITECTURE.md`, dev flow in `DEVELOPMENT.md`.
+## 项目结构与模块
+- `backend-go/`：主 Go 服务（Gin），构建后内嵌前端静态资源；Go 代码位于 `backend-go/internal/`。
+- `frontend/`：Vue 3 + Vite + Vuetify 管理界面；构建产物复制到 `backend-go/frontend/dist/` 并由后端 embed。
+- `dist/`：发布构建产物（Go 二进制/打包后的 UI），不要手动编辑。
+- `.config/`：运行时配置目录（`config.json` 及 `backups/`），随容器/本地持久化。
+- `refs/`：外部参考项目存档，仅供对照，默认只读。
+- 文档入口：`README.md`、`ARCHITECTURE.md`、`DEVELOPMENT.md`、`ENVIRONMENT.md`、`RELEASE.md`。
 
-## Build, Test, and Development Commands
-- Go backend: `cd backend-go && make dev` (hot reload with Air), `make build` (release binary to `dist/`), `make build-local` (local binary), `make run` (go run), `make clean`.
-- Go testing: `cd backend-go && make test` (all packages), `make test-cover` (+ coverage artifacts).
-- JS/TS workspace: `bun install` (root) then `bun run dev` (frontend+backend dev), `bun run build` (bundle all), `bun run type-check` (TS types), `bun run start` (start Bun backend).
-- Docker: `docker-compose up -d` uses `Dockerfile`/`Dockerfile_China`; keep `.env` aligned first.
+## 构建/测试/开发命令
+- 全栈开发（推荐）：根目录 `make dev`（前端 `bun run dev` + 后端 `air` 热重载）。
+- 仅后端：`cd backend-go && make dev`。
+- 构建运行：
+  - 根目录 `make run` / `make build`（先构建前端再编译后端）。
+  - 后端本地构建：`cd backend-go && make build-local`。
+- 测试：`cd backend-go && make test`（或 `make test-cover` 生成覆盖率）。
+- 前端：`cd frontend && bun install` 后 `bun run dev|build|type-check`。
+- Docker：`docker-compose up -d` 默认拉取镜像；本地构建请按 `docker-compose.yml` 注释说明启用 `build`（可选 `Dockerfile_China`）。
 
-## Coding Style & Naming Conventions
-- Go: run `go fmt ./...`; prefer idiomatic Go naming (MixedCaps for exports, lowerCamel for locals); keep packages small and purpose-driven.
-- JS/TS: follow Prettier defaults (`bunx prettier .` if needed), TypeScript strictness from `tsconfig.json`.
-- Files: configs use `.env`/`.json`; avoid committing environment files; keep secrets out of VCS.
+## 代码风格
+- Go：保持包职责单一、接口清晰；修改后运行 `go fmt ./...`。
+- 前端：遵循现有 Vuetify/Tailwind/Prettier 风格；TypeScript 保持 strict。
+- 配置/密钥：`.env`/`.json` 只提交示例文件（`*.example`），禁止提交真实密钥。
 
-## Testing Guidelines
-- Default to Go tests; place new tests alongside code under `backend-go/internal/...` with `_test.go` suffix.
-- Aim to cover new handlers/middleware and upstream error paths; prefer table-driven tests and `httptest` utilities.
-- Use `make test-cover` to confirm regressions and inspect coverage (`coverage.html`).
-- For JS/TS additions, mirror existing test locations (none today—add lightweight unit tests if adding logic-heavy modules).
+## 测试规范
+- 新增/修改后端逻辑尽量补 `_test.go`，优先表驱动 + `httptest`。
+- 前端目前无测试框架；如增加复杂逻辑再引入轻量单测。
 
-## Commit & Pull Request Guidelines
-- Commits follow conventional prefixes seen in history (`feat:`, `fix:`, etc.); keep messages imperative and scoped.
-- PRs: describe intent, key changes, and risk; link issues; note breaking changes; include run/test commands executed.
-- UI changes: attach before/after screenshots or brief clip; backend behavior changes: include sample requests/responses when relevant.
-
-## Security & Configuration Tips
-- Copy `backend-go/.env.example` to `.env` and set a strong `PROXY_ACCESS_KEY`; never commit populated `.env`.
-- Review `ENV` vs runtime modes (development vs production) and ensure ports/keys match deployment target.
-- Limit access logs and response logs in production when handling sensitive data; rotate keys stored in `.config/` appropriately.
+## 安全与配置提示
+- 部署前必须设置强 `PROXY_ACCESS_KEY`；生产环境建议关闭详细请求/响应日志。
+- 代理端点统一鉴权（Header `x-api-key` / `Authorization: Bearer`）；生产环境不建议使用 query `key`。
