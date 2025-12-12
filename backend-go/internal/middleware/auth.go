@@ -14,8 +14,8 @@ func WebAuthMiddleware(envCfg *config.EnvConfig, cfgManager *config.ConfigManage
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
 
-		// 公开端点直接放行
-		if path == envCfg.HealthCheckPath ||
+		// 公开端点直接放行（健康检查固定为 /health）
+		if path == "/health" ||
 			path == "/admin/config/reload" ||
 			(envCfg.IsDevelopment() && path == "/admin/dev/info") {
 			c.Next()

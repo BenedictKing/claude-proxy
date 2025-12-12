@@ -89,8 +89,8 @@ func main() {
 	// Web UI 访问控制中间件
 	r.Use(middleware.WebAuthMiddleware(envCfg, cfgManager))
 
-	// 健康检查端点
-	r.GET(envCfg.HealthCheckPath, handlers.HealthCheck(envCfg, cfgManager))
+	// 健康检查端点（固定路径 /health，与 Dockerfile HEALTHCHECK 保持一致）
+	r.GET("/health", handlers.HealthCheck(envCfg, cfgManager))
 
 	// 配置重载端点
 	r.POST("/admin/config/reload", handlers.ReloadConfig(cfgManager))
@@ -166,7 +166,7 @@ func main() {
 				"mode":    "API Only",
 				"version": "1.0.0",
 				"endpoints": gin.H{
-					"health": envCfg.HealthCheckPath,
+					"health": "/health",
 					"proxy":  "/v1/messages",
 					"config": "/admin/config/reload",
 				},
@@ -189,7 +189,7 @@ func main() {
 	fmt.Printf("📍 API 地址: http://localhost:%d/v1\n", envCfg.Port)
 	fmt.Printf("📋 Claude Messages: POST /v1/messages\n")
 	fmt.Printf("📋 Codex Responses: POST /v1/responses\n")
-	fmt.Printf("💚 健康检查: GET %s\n", envCfg.HealthCheckPath)
+	fmt.Printf("💚 健康检查: GET /health\n")
 	fmt.Printf("📊 环境: %s\n", envCfg.Env)
 	// 检查是否使用默认密码，给予提示
 	if envCfg.ProxyAccessKey == "your-proxy-access-key" {

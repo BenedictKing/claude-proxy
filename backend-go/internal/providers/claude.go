@@ -113,6 +113,10 @@ func (p *ClaudeProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 		defer body.Close()
 
 		scanner := bufio.NewScanner(body)
+		// 设置更大的 buffer (1MB) 以处理大 JSON chunk，避免默认 64KB 限制
+		const maxScannerBufferSize = 1024 * 1024 // 1MB
+		scanner.Buffer(make([]byte, 0, 64*1024), maxScannerBufferSize)
+
 		toolUseStopEmitted := false
 
 		for scanner.Scan() {

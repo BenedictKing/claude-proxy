@@ -33,9 +33,8 @@ func setupRouterWithAuth(envCfg *config.EnvConfig) *gin.Engine {
 
 func TestWebAuthMiddleware_APIRequiresKey(t *testing.T) {
 	envCfg := &config.EnvConfig{
-		ProxyAccessKey:  "secret-key",
-		EnableWebUI:     true,
-		HealthCheckPath: "/health",
+		ProxyAccessKey: "secret-key",
+		EnableWebUI:    true,
 	}
 	router := setupRouterWithAuth(envCfg)
 
@@ -77,9 +76,8 @@ func TestWebAuthMiddleware_APIRequiresKey(t *testing.T) {
 
 func TestWebAuthMiddleware_SPAPassesThrough(t *testing.T) {
 	envCfg := &config.EnvConfig{
-		ProxyAccessKey:  "secret-key",
-		EnableWebUI:     true,
-		HealthCheckPath: "/health",
+		ProxyAccessKey: "secret-key",
+		EnableWebUI:    true,
 	}
 	router := setupRouterWithAuth(envCfg)
 

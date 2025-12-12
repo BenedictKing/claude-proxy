@@ -10,6 +10,12 @@ import (
 // CORSMiddleware CORS 中间件
 func CORSMiddleware(envCfg *config.EnvConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// 如果未启用 CORS，直接跳过
+		if !envCfg.EnableCORS {
+			c.Next()
+			return
+		}
+
 		origin := c.GetHeader("Origin")
 
 		// 开发环境允许所有 localhost 源

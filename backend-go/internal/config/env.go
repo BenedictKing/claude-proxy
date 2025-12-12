@@ -7,25 +7,20 @@ import (
 
 // EnvConfig 环境变量配置
 type EnvConfig struct {
-	Port                 int
-	Env                  string
-	EnableWebUI          bool
-	ProxyAccessKey       string
-	LoadBalanceStrategy  string
-	LogLevel             string
-	EnableRequestLogs    bool
-	EnableResponseLogs   bool
-	QuietPollingLogs     bool // 静默轮询端点日志
-	RequestTimeout       int
-	MaxConcurrentReqs    int
-	MaxRequestBodySize   int64 // 请求体最大大小 (字节)，由 MB 配置转换
-	EnableCORS           bool
-	CORSOrigin           string
-	EnableRateLimit      bool
-	RateLimitWindow      int
-	RateLimitMaxRequests int
-	HealthCheckEnabled   bool
-	HealthCheckPath      string
+	Port                int
+	Env                 string
+	EnableWebUI         bool
+	ProxyAccessKey      string
+	LoadBalanceStrategy string
+	LogLevel            string
+	EnableRequestLogs   bool
+	EnableResponseLogs  bool
+	QuietPollingLogs    bool // 静默轮询端点日志
+	RequestTimeout      int
+	MaxConcurrentReqs   int
+	MaxRequestBodySize  int64 // 请求体最大大小 (字节)，由 MB 配置转换
+	EnableCORS          bool
+	CORSOrigin          string
 	// 指标配置
 	MetricsWindowSize       int     // 滑动窗口大小
 	MetricsFailureThreshold float64 // 失败率阈值
@@ -48,25 +43,20 @@ func NewEnvConfig() *EnvConfig {
 	}
 
 	return &EnvConfig{
-		Port:                 getEnvAsInt("PORT", 3000),
-		Env:                  env,
-		EnableWebUI:          getEnv("ENABLE_WEB_UI", "true") != "false",
-		ProxyAccessKey:       getEnv("PROXY_ACCESS_KEY", "your-proxy-access-key"),
-		LoadBalanceStrategy:  getEnv("LOAD_BALANCE_STRATEGY", "failover"),
-		LogLevel:             getEnv("LOG_LEVEL", "info"),
-		EnableRequestLogs:    getEnv("ENABLE_REQUEST_LOGS", "true") != "false",
-		EnableResponseLogs:   getEnv("ENABLE_RESPONSE_LOGS", "true") != "false",
-		QuietPollingLogs:     getEnv("QUIET_POLLING_LOGS", "true") != "false",
-		RequestTimeout:       getEnvAsInt("REQUEST_TIMEOUT", 300000),
-		MaxConcurrentReqs:    getEnvAsInt("MAX_CONCURRENT_REQUESTS", 100),
-		MaxRequestBodySize:   getEnvAsInt64("MAX_REQUEST_BODY_SIZE_MB", 50) * 1024 * 1024, // MB 转换为字节
-		EnableCORS:           getEnv("ENABLE_CORS", "true") != "false",
-		CORSOrigin:           getEnv("CORS_ORIGIN", "*"),
-		EnableRateLimit:      getEnv("ENABLE_RATE_LIMIT", "false") == "true",
-		RateLimitWindow:      getEnvAsInt("RATE_LIMIT_WINDOW", 60000),
-		RateLimitMaxRequests: getEnvAsInt("RATE_LIMIT_MAX_REQUESTS", 100),
-		HealthCheckEnabled:   getEnv("HEALTH_CHECK_ENABLED", "true") != "false",
-		HealthCheckPath:      getEnv("HEALTH_CHECK_PATH", "/health"),
+		Port:                getEnvAsInt("PORT", 3000),
+		Env:                 env,
+		EnableWebUI:         getEnv("ENABLE_WEB_UI", "true") != "false",
+		ProxyAccessKey:      getEnv("PROXY_ACCESS_KEY", "your-proxy-access-key"),
+		LoadBalanceStrategy: getEnv("LOAD_BALANCE_STRATEGY", "failover"),
+		LogLevel:            getEnv("LOG_LEVEL", "info"),
+		EnableRequestLogs:   getEnv("ENABLE_REQUEST_LOGS", "true") != "false",
+		EnableResponseLogs:  getEnv("ENABLE_RESPONSE_LOGS", "true") != "false",
+		QuietPollingLogs:    getEnv("QUIET_POLLING_LOGS", "true") != "false",
+		RequestTimeout:      getEnvAsInt("REQUEST_TIMEOUT", 300000),
+		MaxConcurrentReqs:   getEnvAsInt("MAX_CONCURRENT_REQUESTS", 100),
+		MaxRequestBodySize:  getEnvAsInt64("MAX_REQUEST_BODY_SIZE_MB", 50) * 1024 * 1024, // MB 转换为字节
+		EnableCORS:          getEnv("ENABLE_CORS", "true") != "false",
+		CORSOrigin:          getEnv("CORS_ORIGIN", "*"),
 		// 指标配置
 		MetricsWindowSize:       getEnvAsInt("METRICS_WINDOW_SIZE", 10),
 		MetricsFailureThreshold: getEnvAsFloat("METRICS_FAILURE_THRESHOLD", 0.5),

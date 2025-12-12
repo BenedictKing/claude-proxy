@@ -133,15 +133,6 @@ MAX_CONCURRENT_REQUESTS=100
 # ============ CORS 配置 ============
 ENABLE_CORS=true
 CORS_ORIGIN=*
-
-# ============ 速率限制 ============
-ENABLE_RATE_LIMIT=false
-RATE_LIMIT_WINDOW=60000
-RATE_LIMIT_MAX_REQUESTS=100
-
-# ============ 健康检查 ============
-HEALTH_CHECK_ENABLED=true
-HEALTH_CHECK_PATH=/health
 ```
 
 ### 环境模式详解
