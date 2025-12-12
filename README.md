@@ -331,7 +331,9 @@ docker-compose restart claude-proxy
 本服务支持两种 API 格式：
 
 1. **Messages API** (`/v1/messages`) - 标准的 Claude API 格式
-2. **Responses API** (`/v1/responses`) - Codex 格式，支持会话管理
+2. **Messages Token 计数** (`/v1/messages/count_tokens`) - Token 计数
+3. **Responses API** (`/v1/responses`) - Codex 格式，支持会话管理
+4. **Responses Compact** (`/v1/responses/compact`) - 精简版 Responses API
 
 ### Messages API - 标准 Claude API 调用
 

@@ -21,14 +21,16 @@ claude-proxy/
 
 ### 前端配置变量
 
-#### 通用变量（所有环境）
-- `VITE_API_BASE_PATH` - API 基础路径，默认 `/api`
-- `VITE_PROXY_API_PATH` - 代理 API 路径，默认 `/v1`
-- `VITE_APP_ENV` - 应用环境标识
+#### 开发环境变量
 
-#### 开发环境专用变量
-- `VITE_BACKEND_URL` - 完整后端URL，默认 `http://localhost:3000`
-- `VITE_FRONTEND_PORT` - 前端开发服务器端口，默认 `5173`
+前端使用 Vite，环境变量需以 `VITE_` 前缀：
+
+- `VITE_PROXY_TARGET` - 后端代理目标地址（默认 `http://localhost:3000`）
+- `VITE_FRONTEND_PORT` - 前端开发服务器端口（默认 `5173`）
+- `VITE_BACKEND_URL` - 开发环境后端 URL（用于 API 服务）
+- `VITE_API_BASE_PATH` - API 基础路径（默认 `/api`）
+- `VITE_PROXY_API_PATH` - 代理 API 路径（默认 `/v1`）
+- `VITE_APP_ENV` - 应用环境标识
 
 ### 后端配置 (Go)
 
@@ -52,6 +54,20 @@ ENABLE_WEB_UI=true                     # 是否启用 Web 管理界面
 LOG_LEVEL=info                         # 日志级别: debug | info | warn | error
 ENABLE_REQUEST_LOGS=true               # 是否记录请求日志
 ENABLE_RESPONSE_LOGS=false             # 是否记录响应日志
+QUIET_POLLING_LOGS=true                # 静默前端轮询端点日志（/api/channels 等）
+
+# 性能配置
+REQUEST_TIMEOUT=300000                 # 请求超时时间（毫秒）
+MAX_CONCURRENT_REQUESTS=100            # 最大并发请求数
+MAX_REQUEST_BODY_SIZE_MB=50            # 请求体最大大小（MB，默认 50）
+
+# CORS 配置
+ENABLE_CORS=false                      # 是否启用 CORS
+CORS_ORIGIN=*                          # CORS 允许的源
+
+# 熔断指标配置
+METRICS_WINDOW_SIZE=10                 # 滑动窗口大小（最小 3，默认 10）
+METRICS_FAILURE_THRESHOLD=0.5          # 失败率阈值（0-1，默认 0.5 即 50%）
 ```
 
 #### 日志等级说明
@@ -297,8 +313,8 @@ server: {
 
 ### 开发环境启动
 ```bash
-# 方式 1: 同时启动前后端 (推荐)
-bun run dev
+# 方式 1: 根目录启动（推荐）
+make dev
 
 # 方式 2: 分别启动
 # 启动后端 (端口 3000)
@@ -310,13 +326,10 @@ cd frontend && bun run dev
 
 ### 生产环境构建
 ```bash
-# 构建完整项目
-bun run build
+# 完整构建
+make build
 
-# 启动生产服务器
-bun run start
-
-# 或使用 Docker
+# Docker 部署
 docker-compose up -d
 ```
 

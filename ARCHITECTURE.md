@@ -4,47 +4,36 @@
 
 ## 项目结构
 
-### Monorepo 结构
-
-项目采用 Monorepo 架构，由 Bun workspaces 管理，主要包含两个核心模块：
+项目采用一体化架构，Go 后端嵌入前端构建产物，实现单二进制部署：
 
 ```
 claude-proxy/
-├── backend-go/              # Go 后端服务 (当前活跃)
-│   ├── cmd/                # 主程序入口
+├── backend-go/              # Go 后端服务（主程序）
+│   ├── main.go             # 程序入口
 │   ├── internal/           # 内部实现
 │   │   ├── config/        # 配置管理
 │   │   ├── handlers/      # HTTP 处理器
 │   │   ├── middleware/    # 中间件
-│   │   └── providers/     # 上游服务适配器
+│   │   ├── providers/     # 上游服务适配器
+│   │   ├── converters/    # Responses API 协议转换器
+│   │   ├── scheduler/     # 多渠道调度器
+│   │   ├── session/       # 会话管理
+│   │   └── metrics/       # 渠道指标监控
 │   ├── .config/           # 运行时配置
 │   │   ├── config.json    # 主配置文件
 │   │   └── backups/       # 配置备份 (保留最近10个)
 │   └── .env               # 环境变量
-├── frontend/               # Vue 3 前端
+├── frontend/               # Vue 3 + Vuetify 前端
 │   ├── src/
 │   │   ├── components/    # Vue 组件
 │   │   ├── services/      # API 服务
 │   │   └── styles/        # 样式文件
 │   ├── public/            # 静态资源
-│   └── dist/              # 构建产物
-├── backend/                # Node.js/Bun 后端 (备用实现)
-├── scripts/                # 构建和部署脚本
-└── docs/                   # 文档 (markdown 文件)
+│   └── dist/              # 构建产物（嵌入到 Go 二进制）
+├── Makefile               # 构建和开发命令
+├── docker-compose.yml     # Docker 部署配置
+└── Dockerfile             # 容器镜像定义
 ```
-
-### TypeScript 路径别名
-
-项目配置了路径别名，方便跨模块导入：
-
-```typescript
-// 示例导入
-import { api } from '@frontend/services/api'
-import { ConfigManager } from '@backend/config/config-manager'
-```
-
-- `@frontend/*` → `frontend/src/*`
-- `@backend/*` → `backend/src/*`
 
 ## 核心技术栈
 

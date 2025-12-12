@@ -21,9 +21,14 @@ make build        # 构建二进制
 |------|------|------|
 | `/health` | GET | 健康检查（无需认证） |
 | `/v1/messages` | POST | Claude Messages API |
+| `/v1/messages/count_tokens` | POST | Token 计数 |
 | `/v1/responses` | POST | Codex Responses API |
-| `/api/channels` | CRUD | 渠道管理 |
+| `/v1/responses/compact` | POST | 精简版 Responses API |
+| `/api/channels` | CRUD | Messages 渠道管理 |
+| `/api/responses/channels` | CRUD | Responses 渠道管理 |
 | `/api/ping/:id` | GET | 渠道连通性测试 |
+| `/api/channels/metrics` | GET | 渠道指标 |
+| `/api/channels/scheduler/stats` | GET | 调度器统计 |
 
 ## Provider 接口
 
