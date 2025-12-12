@@ -798,12 +798,9 @@ defineExpose({
     display: none;
   }
 
+  /* 960px以下：两列 */
   .inactive-pool {
-    grid-template-columns: 1fr;
-  }
-
-  .inactive-channel-row .channel-info-desc {
-    display: none;
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
@@ -824,45 +821,9 @@ defineExpose({
     display: none;
   }
 
+  /* 600px以下：单列 */
   .inactive-pool {
     grid-template-columns: 1fr;
-    padding: 12px;
-    gap: 8px;
-  }
-
-  .inactive-pool-header {
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-
-  .inactive-channel-row {
-    flex-wrap: nowrap;
-    padding: 8px 10px;
-    box-shadow: 2px 2px 0 0 rgb(var(--v-theme-on-surface));
-  }
-
-  .v-theme--dark .inactive-channel-row {
-    box-shadow: 2px 2px 0 0 rgba(255, 255, 255, 0.5);
-  }
-
-  .inactive-channel-row .channel-info {
-    flex: 1;
-    min-width: 0;
-    margin-bottom: 0;
-    max-width: 100%;
-  }
-
-  .inactive-channel-row .channel-info-desc {
-    display: none;
-  }
-
-  .inactive-channel-row .channel-keys {
-    display: none;
-  }
-
-  .inactive-channel-row .channel-actions {
-    flex-shrink: 0;
-    justify-content: flex-end;
   }
 }
 
