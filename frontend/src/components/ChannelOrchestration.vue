@@ -827,8 +827,8 @@ defineExpose({
   }
 
   .inactive-channel-row {
-    flex-wrap: wrap;
-    padding: 10px;
+    flex-wrap: nowrap;
+    padding: 8px 10px;
     box-shadow: 2px 2px 0 0 rgb(var(--v-theme-on-surface));
   }
 
@@ -837,8 +837,9 @@ defineExpose({
   }
 
   .inactive-channel-row .channel-info {
-    flex: 1 1 100%;
-    margin-bottom: 8px;
+    flex: 1;
+    min-width: 0;
+    margin-bottom: 0;
     max-width: 100%;
   }
 
@@ -851,7 +852,7 @@ defineExpose({
   }
 
   .inactive-channel-row .channel-actions {
-    flex: 1;
+    flex-shrink: 0;
     justify-content: flex-end;
   }
 }
