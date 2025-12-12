@@ -789,11 +789,10 @@ defineExpose({
 /* 响应式调整 */
 @media (max-width: 960px) {
   .channel-row {
-    grid-template-columns: 32px 32px 90px 1fr 70px;
+    grid-template-columns: 32px 32px 90px 1fr 100px 70px;
     padding: 10px 12px;
   }
 
-  .channel-metrics,
   .channel-keys {
     display: none;
   }
@@ -805,6 +804,10 @@ defineExpose({
     padding: 10px;
     gap: 8px;
     box-shadow: 3px 3px 0 0 rgb(var(--v-theme-on-surface));
+  }
+
+  .channel-metrics {
+    display: none;
   }
 
   .v-theme--dark .channel-row {
