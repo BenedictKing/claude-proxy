@@ -908,69 +908,224 @@ func logSynthesizedContent(ctx *streamContext) {
 
 // shouldRetryWithNextKey 判断是否应该使用下一个密钥重试
 // 返回: (shouldFailover bool, isQuotaRelated bool)
+//
+// HTTP 状态码分类策略：
+//   - 4xx 客户端错误：部分应触发 failover（密钥/配额问题）
+//   - 5xx 服务端错误：应触发 failover（上游临时故障）
+//   - 2xx/3xx：不应触发 failover（成功或重定向）
+//
+// isQuotaRelated 标记用于调度器优先级调整：
+//   - true: 额度/配额相关，降低密钥优先级
+//   - false: 临时错误，不影响优先级
 func shouldRetryWithNextKey(statusCode int, bodyBytes []byte) (bool, bool) {
-	// 401/403 通常是认证问题
-	if statusCode == 401 || statusCode == 403 {
+	// 第一层：基于状态码的快速分类
+	shouldFailover, isQuotaRelated := classifyByStatusCode(statusCode)
+	if shouldFailover {
+		return true, isQuotaRelated
+	}
+
+	// 第二层：解析响应体，检查错误消息
+	// 用于 400/408 等需要进一步判断的状态码
+	msgFailover, msgQuota := classifyByErrorMessage(bodyBytes)
+	if msgFailover {
+		return true, msgQuota
+	}
+
+	return false, false
+}
+
+// classifyByStatusCode 基于 HTTP 状态码分类
+// 返回: (shouldFailover bool, isQuotaRelated bool)
+func classifyByStatusCode(statusCode int) (bool, bool) {
+	switch {
+	// === 认证/授权错误 (应 failover，非配额相关) ===
+	case statusCode == 401: // Unauthorized - 密钥无效
 		return true, false
-	}
+	case statusCode == 403: // Forbidden - 权限不足
+		return true, false
 
-	// 429 速率限制，切换下一个密钥
-	if statusCode == 429 {
+	// === 配额/计费错误 (应 failover，配额相关) ===
+	case statusCode == 402: // Payment Required - 余额不足、订阅过期
 		return true, true
+	case statusCode == 429: // Too Many Requests - 速率限制、配额耗尽
+		return true, true
+
+	// === 超时错误 (应 failover，非配额相关) ===
+	case statusCode == 408: // Request Timeout - 上游超时，应尝试其他密钥/渠道
+		return true, false
+
+	// === 需要检查消息体的状态码 (交给第二层判断) ===
+	case statusCode == 400: // Bad Request - 可能是密钥无效、配额问题等，需检查消息体
+		return false, false
+
+	// === 请求错误 (不应 failover，客户端问题) ===
+	case statusCode == 404: // Not Found - 端点不存在，换密钥无意义
+		return false, false
+	case statusCode == 405: // Method Not Allowed
+		return false, false
+	case statusCode == 406: // Not Acceptable
+		return false, false
+	case statusCode == 409: // Conflict
+		return false, false
+	case statusCode == 410: // Gone
+		return false, false
+	case statusCode == 411: // Length Required
+		return false, false
+	case statusCode == 412: // Precondition Failed
+		return false, false
+	case statusCode == 413: // Payload Too Large
+		return false, false
+	case statusCode == 414: // URI Too Long
+		return false, false
+	case statusCode == 415: // Unsupported Media Type
+		return false, false
+	case statusCode == 416: // Range Not Satisfiable
+		return false, false
+	case statusCode == 417: // Expectation Failed
+		return false, false
+	case statusCode == 422: // Unprocessable Entity - 请求格式正确但语义错误
+		return false, false
+	case statusCode == 423: // Locked
+		return false, false
+	case statusCode == 424: // Failed Dependency
+		return false, false
+	case statusCode == 426: // Upgrade Required
+		return false, false
+	case statusCode == 428: // Precondition Required
+		return false, false
+	case statusCode == 431: // Request Header Fields Too Large
+		return false, false
+	case statusCode == 451: // Unavailable For Legal Reasons
+		return false, false
+
+	// === 服务端错误 (应 failover，非配额相关) ===
+	case statusCode >= 500: // 5xx 服务端错误
+		return true, false
+
+	// === 其他 4xx (保守处理，不 failover) ===
+	case statusCode >= 400 && statusCode < 500:
+		return false, false
+
+	// === 成功/重定向 (不应 failover) ===
+	default:
+		return false, false
+	}
+}
+
+// classifyByErrorMessage 基于错误消息内容分类
+// 用于处理状态码无法明确判断的情况（如 400/408 错误）
+// 返回: (shouldFailover bool, isQuotaRelated bool)
+func classifyByErrorMessage(bodyBytes []byte) (bool, bool) {
+	var errResp map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &errResp); err != nil {
+		return false, false
 	}
 
-	isQuotaRelated := false
+	errObj, ok := errResp["error"].(map[string]interface{})
+	if !ok {
+		return false, false
+	}
 
-	// 检查错误消息
-	var errResp map[string]interface{}
-	if err := json.Unmarshal(bodyBytes, &errResp); err == nil {
-		if errObj, ok := errResp["error"].(map[string]interface{}); ok {
-			if msg, ok := errObj["message"].(string); ok {
-				msgLower := strings.ToLower(msg)
-				if strings.Contains(msgLower, "insufficient") ||
-					strings.Contains(msgLower, "invalid") ||
-					strings.Contains(msgLower, "unauthorized") ||
-					strings.Contains(msgLower, "quota") ||
-					strings.Contains(msgLower, "rate limit") ||
-					strings.Contains(msg, "请求数限制") ||
-					strings.Contains(msgLower, "credit") ||
-					strings.Contains(msgLower, "balance") {
-
-					// 判断是否为额度/余额相关
-					if strings.Contains(msgLower, "积分不足") ||
-						strings.Contains(msgLower, "insufficient") ||
-						strings.Contains(msgLower, "credit") ||
-						strings.Contains(msgLower, "balance") ||
-						strings.Contains(msgLower, "quota") ||
-						strings.Contains(msg, "请求数限制") {
-						isQuotaRelated = true
-					}
-					return true, isQuotaRelated
-				}
-			}
-
-			if errType, ok := errObj["type"].(string); ok {
-				errTypeLower := strings.ToLower(errType)
-				if strings.Contains(errTypeLower, "permission") ||
-					strings.Contains(errTypeLower, "insufficient") ||
-					strings.Contains(errTypeLower, "over_quota") ||
-					strings.Contains(errTypeLower, "billing") {
-
-					// 判断是否为额度/余额相关
-					if strings.Contains(errTypeLower, "over_quota") ||
-						strings.Contains(errTypeLower, "billing") ||
-						strings.Contains(errTypeLower, "insufficient") {
-						isQuotaRelated = true
-					}
-					return true, isQuotaRelated
-				}
-			}
+	// 检查 error.message 字段
+	if msg, ok := errObj["message"].(string); ok {
+		if failover, quota := classifyMessage(msg); failover {
+			return true, quota
 		}
 	}
 
-	// 500+ 错误也可以尝试 failover
-	if statusCode >= 500 {
-		return true, false
+	// 检查 error.type 字段
+	if errType, ok := errObj["type"].(string); ok {
+		if failover, quota := classifyErrorType(errType); failover {
+			return true, quota
+		}
+	}
+
+	return false, false
+}
+
+// classifyMessage 基于错误消息内容分类
+// 返回: (shouldFailover bool, isQuotaRelated bool)
+func classifyMessage(msg string) (bool, bool) {
+	msgLower := strings.ToLower(msg)
+
+	// 配额/余额相关关键词 (failover + quota)
+	quotaKeywords := []string{
+		"insufficient", "quota", "credit", "balance",
+		"rate limit", "limit exceeded", "exceeded",
+		"billing", "payment", "subscription",
+		"积分不足", "余额不足", "请求数限制", "额度",
+	}
+	for _, keyword := range quotaKeywords {
+		if strings.Contains(msgLower, keyword) {
+			return true, true
+		}
+	}
+
+	// 认证/授权相关关键词 (failover + 非 quota)
+	authKeywords := []string{
+		"invalid", "unauthorized", "authentication",
+		"api key", "apikey", "token", "expired",
+		"permission", "forbidden", "denied",
+		"密钥无效", "认证失败", "权限不足",
+	}
+	for _, keyword := range authKeywords {
+		if strings.Contains(msgLower, keyword) {
+			return true, false
+		}
+	}
+
+	// 临时错误关键词 (failover + 非 quota)
+	transientKeywords := []string{
+		"timeout", "timed out", "temporarily",
+		"overloaded", "unavailable", "retry",
+		"server error", "internal error",
+		"超时", "暂时", "重试",
+	}
+	for _, keyword := range transientKeywords {
+		if strings.Contains(msgLower, keyword) {
+			return true, false
+		}
+	}
+
+	return false, false
+}
+
+// classifyErrorType 基于错误类型分类
+// 返回: (shouldFailover bool, isQuotaRelated bool)
+func classifyErrorType(errType string) (bool, bool) {
+	typeLower := strings.ToLower(errType)
+
+	// 配额相关的错误类型 (failover + quota)
+	quotaTypes := []string{
+		"over_quota", "quota_exceeded", "rate_limit",
+		"billing", "insufficient", "payment",
+	}
+	for _, t := range quotaTypes {
+		if strings.Contains(typeLower, t) {
+			return true, true
+		}
+	}
+
+	// 认证相关的错误类型 (failover + 非 quota)
+	authTypes := []string{
+		"authentication", "authorization", "permission",
+		"invalid_api_key", "invalid_token", "expired",
+	}
+	for _, t := range authTypes {
+		if strings.Contains(typeLower, t) {
+			return true, false
+		}
+	}
+
+	// 服务端错误类型 (failover + 非 quota)
+	serverTypes := []string{
+		"server_error", "internal_error", "service_unavailable",
+		"timeout", "overloaded",
+	}
+	for _, t := range serverTypes {
+		if strings.Contains(typeLower, t) {
+			return true, false
+		}
 	}
 
 	return false, false

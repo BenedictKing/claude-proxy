@@ -4,6 +4,48 @@
 
 ---
 
+## [v2.1.23] - 2025-12-13
+
+### 🐛 Bug 修复
+
+- **修复 402 状态码未触发 failover 的问题**
+  - 问题：促销渠道返回 402 (Payment Required) 错误后，不会尝试其他密钥或渠道
+  - 原因：`shouldRetryWithNextKey` 函数未处理 402 状态码
+  - 修复：将 402 纳入 failover 重试逻辑，标记为额度相关错误并触发密钥/渠道切换
+
+### 🧪 测试
+
+- **新增 failover 分类逻辑单元测试**
+  - `TestClassifyByStatusCode`: 状态码分类测试（20 个用例）
+  - `TestClassifyMessage`: 错误消息分类测试（20 个用例）
+  - `TestClassifyErrorType`: 错误类型分类测试（14 个用例）
+  - `TestClassifyByErrorMessage`: 响应体解析测试（7 个用例）
+  - `TestShouldRetryWithNextKey`: 完整重试逻辑测试（9 个用例）
+  - 新增文件：`backend-go/internal/handlers/failover_test.go`
+
+### ♻️ 重构
+
+- **重构 HTTP 状态码 failover 判断逻辑**
+  - 将原有的"打补丁式" if-else 改为系统化的两层分类策略
+  - **第一层 - 状态码分类** `classifyByStatusCode()`:
+    - 401/403: failover + 非配额（认证问题）
+    - 402/429: failover + 配额相关（余额/限流）
+    - 408: failover + 非配额（上游超时）
+    - 5xx: failover + 非配额（服务端故障）
+    - 400: 交给第二层判断
+    - 其他 4xx: 不 failover（客户端请求问题）
+  - **第二层 - 消息体分类** `classifyByErrorMessage()`:
+    - 返回 `(shouldFailover, isQuotaRelated)` 双值
+    - `classifyMessage()`: 基于错误消息关键词分类
+    - `classifyErrorType()`: 基于错误类型分类
+  - **关键词分类**:
+    - 配额类: insufficient, quota, credit, balance, rate limit 等
+    - 认证类: invalid, unauthorized, api key, token, expired 等
+    - 临时类: timeout, overloaded, unavailable, retry 等
+  - 影响文件：`backend-go/internal/handlers/proxy.go`
+
+---
+
 ## [v2.1.20] - 2025-12-12
 
 ### ✨ 新功能
