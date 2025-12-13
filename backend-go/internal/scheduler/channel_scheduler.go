@@ -71,23 +71,19 @@ func (s *ChannelScheduler) SelectChannel(
 	// 获取对应类型的指标管理器
 	metricsManager := s.getMetricsManager(isResponses)
 
-	// 0. 检查促销期渠道（最高优先级）
+	// 0. 检查促销期渠道（最高优先级，绕过健康检查）
 	promotedChannel := s.findPromotedChannel(activeChannels, isResponses)
 	if promotedChannel != nil && !failedChannels[promotedChannel.Index] {
-		// 促销渠道存在且未失败，检查是否健康
+		// 促销渠道存在且未失败，直接使用（不检查健康状态，让用户设置的促销渠道有机会尝试）
 		upstream := s.getUpstreamByIndex(promotedChannel.Index, isResponses)
 		if upstream != nil && len(upstream.APIKeys) > 0 {
-			if metricsManager.IsChannelHealthyWithKeys(upstream.BaseURL, upstream.APIKeys) {
-				log.Printf("🎉 促销期优先选择渠道: [%d] %s (user: %s)", promotedChannel.Index, upstream.Name, maskUserID(userID))
-				return &SelectionResult{
-					Upstream:     upstream,
-					ChannelIndex: promotedChannel.Index,
-					Reason:       "promotion_priority",
-				}, nil
-			} else {
-				failureRate := metricsManager.CalculateChannelFailureRate(upstream.BaseURL, upstream.APIKeys)
-				log.Printf("⚠️ 促销渠道 [%d] %s 不健康（失败率: %.1f%%），跳过", promotedChannel.Index, upstream.Name, failureRate*100)
-			}
+			failureRate := metricsManager.CalculateChannelFailureRate(upstream.BaseURL, upstream.APIKeys)
+			log.Printf("🎉 促销期优先选择渠道: [%d] %s (失败率: %.1f%%, 绕过健康检查)", promotedChannel.Index, upstream.Name, failureRate*100)
+			return &SelectionResult{
+				Upstream:     upstream,
+				ChannelIndex: promotedChannel.Index,
+				Reason:       "promotion_priority",
+			}, nil
 		} else if upstream != nil {
 			log.Printf("⚠️ 促销渠道 [%d] %s 无可用密钥，跳过", promotedChannel.Index, upstream.Name)
 		}
