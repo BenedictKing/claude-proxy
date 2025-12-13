@@ -1,5 +1,17 @@
 # Changelog
 
+## [v2.1.22] - 2025-12-13
+
+### Fixed
+
+- **流式日志合成器类型修复** (`internal/handlers/proxy.go`)
+  - 所有 Provider 的 HandleStreamResponse 都会将响应转换为 Claude SSE 格式
+  - 日志合成器应使用 "claude" 类型解析转换后的事件，而非原始 serviceType
+
+- **insecureSkipVerify 字段提交修复** (`frontend/src/components/AddChannelModal.vue`)
+  - 修复 insecureSkipVerify 为 false 时不提交的问题
+  - 确保用户取消勾选后能正确保存设置
+
 ## [v2.1.21] - 2025-12-13
 
 ### Fixed - 促销渠道绕过健康检查

@@ -1017,7 +1017,7 @@ const handleSubmit = async () => {
     serviceType: form.serviceType as 'openai' | 'openaiold' | 'gemini' | 'claude' | 'responses',
     baseUrl: form.baseUrl.trim().replace(/\/$/, ''), // 移除末尾斜杠
     website: form.website.trim() || undefined,
-    insecureSkipVerify: form.insecureSkipVerify || undefined,
+    insecureSkipVerify: form.insecureSkipVerify,
     description: form.description.trim(),
     apiKeys: processedApiKeys,
     modelMapping: form.modelMapping

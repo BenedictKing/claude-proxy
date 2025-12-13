@@ -744,7 +744,9 @@ func newStreamContext(envCfg *config.EnvConfig, upstream *config.UpstreamConfig)
 		loggingEnabled: envCfg.IsDevelopment() && envCfg.EnableResponseLogs,
 	}
 	if ctx.loggingEnabled {
-		ctx.synthesizer = utils.NewStreamSynthesizer(upstream.ServiceType)
+		// 所有 Provider 的 HandleStreamResponse 都会将响应转换为 Claude SSE 格式
+		// 因此日志合成器应该使用 "claude" 类型来解析转换后的事件
+		ctx.synthesizer = utils.NewStreamSynthesizer("claude")
 	}
 	return ctx
 }
