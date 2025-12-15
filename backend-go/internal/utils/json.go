@@ -619,3 +619,8 @@ func MaskAPIKey(key string) string {
 
 	return key[:8] + "***" + key[length-5:]
 }
+
+// FormatJSONBytesRaw 原始输出JSON字节数组（不缩进、不截断、不重排序）
+func FormatJSONBytesRaw(jsonData []byte) string {
+	return string(jsonData)
+}

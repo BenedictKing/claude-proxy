@@ -337,7 +337,12 @@ func handleSingleChannelResponses(
 		if envCfg.EnableRequestLogs {
 			log.Printf("📥 收到 Responses 请求: %s %s", c.Request.Method, c.Request.URL.Path)
 			if envCfg.IsDevelopment() {
-				formattedBody := utils.FormatJSONBytesForLog(lastOriginalBodyBytes, 500)
+				var formattedBody string
+				if envCfg.RawLogOutput {
+					formattedBody = utils.FormatJSONBytesRaw(lastOriginalBodyBytes)
+				} else {
+					formattedBody = utils.FormatJSONBytesForLog(lastOriginalBodyBytes, 500)
+				}
 				log.Printf("📄 原始请求体:\n%s", formattedBody)
 
 				sanitizedHeaders := make(map[string]string)
@@ -347,7 +352,12 @@ func handleSingleChannelResponses(
 					}
 				}
 				maskedHeaders := utils.MaskSensitiveHeaders(sanitizedHeaders)
-				headersJSON, _ := json.MarshalIndent(maskedHeaders, "", "  ")
+				var headersJSON []byte
+				if envCfg.RawLogOutput {
+					headersJSON, _ = json.Marshal(maskedHeaders)
+				} else {
+					headersJSON, _ = json.MarshalIndent(maskedHeaders, "", "  ")
+				}
 				log.Printf("📥 原始请求头:\n%s", string(headersJSON))
 			}
 		}
@@ -374,7 +384,12 @@ func handleSingleChannelResponses(
 
 				log.Printf("⚠️ Responses API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
 				if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
-					formattedBody := utils.FormatJSONBytesForLog(respBodyBytes, 500)
+					var formattedBody string
+					if envCfg.RawLogOutput {
+						formattedBody = utils.FormatJSONBytesRaw(respBodyBytes)
+					} else {
+						formattedBody = utils.FormatJSONBytesForLog(respBodyBytes, 500)
+					}
 					log.Printf("📦 失败原因:\n%s", formattedBody)
 				} else if envCfg.EnableResponseLogs {
 					log.Printf("失败原因: %s", string(respBodyBytes))
@@ -397,7 +412,12 @@ func handleSingleChannelResponses(
 			if envCfg.EnableResponseLogs {
 				log.Printf("⚠️ Responses 上游返回错误: %d", resp.StatusCode)
 				if envCfg.IsDevelopment() {
-					formattedBody := utils.FormatJSONBytesForLog(respBodyBytes, 500)
+					var formattedBody string
+					if envCfg.RawLogOutput {
+						formattedBody = utils.FormatJSONBytesRaw(respBodyBytes)
+					} else {
+						formattedBody = utils.FormatJSONBytesForLog(respBodyBytes, 500)
+					}
 					log.Printf("📦 错误响应体:\n%s", formattedBody)
 
 					respHeaders := make(map[string]string)
@@ -406,7 +426,12 @@ func handleSingleChannelResponses(
 							respHeaders[key] = values[0]
 						}
 					}
-					respHeadersJSON, _ := json.MarshalIndent(respHeaders, "", "  ")
+					var respHeadersJSON []byte
+					if envCfg.RawLogOutput {
+						respHeadersJSON, _ = json.Marshal(respHeaders)
+					} else {
+						respHeadersJSON, _ = json.MarshalIndent(respHeaders, "", "  ")
+					}
 					log.Printf("📋 错误响应头:\n%s", string(respHeadersJSON))
 				}
 			}
@@ -481,7 +506,12 @@ func sendResponsesRequest(req *http.Request, upstream *config.UpstreamConfig, en
 				}
 			}
 			maskedReqHeaders := utils.MaskSensitiveHeaders(reqHeaders)
-			reqHeadersJSON, _ := json.MarshalIndent(maskedReqHeaders, "", "  ")
+			var reqHeadersJSON []byte
+			if envCfg.RawLogOutput {
+				reqHeadersJSON, _ = json.Marshal(maskedReqHeaders)
+			} else {
+				reqHeadersJSON, _ = json.MarshalIndent(maskedReqHeaders, "", "  ")
+			}
 			log.Printf("📋 实际请求头:\n%s", string(reqHeadersJSON))
 
 			if req.Body != nil {
@@ -492,7 +522,12 @@ func sendResponsesRequest(req *http.Request, upstream *config.UpstreamConfig, en
 					req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
 					// 使用智能截断和简化函数（与TS版本对齐）
-					formattedBody := utils.FormatJSONBytesForLog(bodyBytes, 500)
+					var formattedBody string
+					if envCfg.RawLogOutput {
+						formattedBody = utils.FormatJSONBytesRaw(bodyBytes)
+					} else {
+						formattedBody = utils.FormatJSONBytesForLog(bodyBytes, 500)
+					}
 					log.Printf("📦 实际请求体:\n%s", formattedBody)
 				}
 			}
@@ -643,10 +678,20 @@ func handleResponsesSuccess(
 					respHeaders[key] = values[0]
 				}
 			}
-			respHeadersJSON, _ := json.MarshalIndent(respHeaders, "", "  ")
+			var respHeadersJSON []byte
+			if envCfg.RawLogOutput {
+				respHeadersJSON, _ = json.Marshal(respHeaders)
+			} else {
+				respHeadersJSON, _ = json.MarshalIndent(respHeaders, "", "  ")
+			}
 			log.Printf("📋 响应头:\n%s", string(respHeadersJSON))
 
-			formattedBody := utils.FormatJSONBytesForLog(bodyBytes, 500)
+			var formattedBody string
+			if envCfg.RawLogOutput {
+				formattedBody = utils.FormatJSONBytesRaw(bodyBytes)
+			} else {
+				formattedBody = utils.FormatJSONBytesForLog(bodyBytes, 500)
+			}
 			log.Printf("📦 响应体:\n%s", formattedBody)
 		}
 	}

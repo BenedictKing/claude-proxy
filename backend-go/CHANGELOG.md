@@ -1,5 +1,23 @@
 # Changelog
 
+## [Unreleased]
+
+### Added - 原始日志输出开关
+
+**功能描述**：新增 `RAW_LOG_OUTPUT` 环境变量，开启后日志将直接输出完整的请求/响应内容，不进行缩进格式化、内容截断或字段重排序。适用于需要调试完整 JSON 数据的场景。
+
+**涉及文件**：
+- `internal/config/env.go` - 新增 `RawLogOutput` 配置字段
+- `internal/utils/json.go` - 新增 `FormatJSONBytesRaw()` 函数
+- `internal/handlers/proxy.go` - 修改日志输出逻辑支持原始输出
+- `internal/handlers/responses.go` - 修改日志输出逻辑支持原始输出
+- `.env.example` - 添加环境变量说明文档
+
+**使用方式**：
+```bash
+RAW_LOG_OUTPUT=true  # 启用原始日志输出（默认 false）
+```
+
 ## [v2.1.22] - 2025-12-13
 
 ### Fixed

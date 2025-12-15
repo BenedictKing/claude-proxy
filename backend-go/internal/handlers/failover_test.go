@@ -8,10 +8,10 @@ import (
 // TestClassifyByStatusCode 测试基于状态码的分类
 func TestClassifyByStatusCode(t *testing.T) {
 	tests := []struct {
-		name           string
-		statusCode     int
-		wantFailover   bool
-		wantQuota      bool
+		name         string
+		statusCode   int
+		wantFailover bool
+		wantQuota    bool
 	}{
 		// 认证/授权错误
 		{"401 Unauthorized", 401, true, false},

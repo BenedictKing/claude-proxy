@@ -16,6 +16,7 @@ type EnvConfig struct {
 	EnableRequestLogs   bool
 	EnableResponseLogs  bool
 	QuietPollingLogs    bool // 静默轮询端点日志
+	RawLogOutput        bool // 原始日志输出（不缩进、不截断、不重排序）
 	RequestTimeout      int
 	MaxConcurrentReqs   int
 	MaxRequestBodySize  int64 // 请求体最大大小 (字节)，由 MB 配置转换
@@ -52,6 +53,7 @@ func NewEnvConfig() *EnvConfig {
 		EnableRequestLogs:   getEnv("ENABLE_REQUEST_LOGS", "true") != "false",
 		EnableResponseLogs:  getEnv("ENABLE_RESPONSE_LOGS", "true") != "false",
 		QuietPollingLogs:    getEnv("QUIET_POLLING_LOGS", "true") != "false",
+		RawLogOutput:        getEnv("RAW_LOG_OUTPUT", "false") == "true",
 		RequestTimeout:      getEnvAsInt("REQUEST_TIMEOUT", 300000),
 		MaxConcurrentReqs:   getEnvAsInt("MAX_CONCURRENT_REQUESTS", 100),
 		MaxRequestBodySize:  getEnvAsInt64("MAX_REQUEST_BODY_SIZE_MB", 50) * 1024 * 1024, // MB 转换为字节
