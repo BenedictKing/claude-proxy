@@ -150,4 +150,3 @@ func (p *ClaudeProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 
 	return eventChan, errChan, nil
 }
-
