@@ -42,7 +42,7 @@ type Provider interface {
 }
 ```
 
-**实现**: `ClaudeProvider`, `OpenAIProvider`, `OpenAIOldProvider`, `GeminiProvider`
+**实现**: `ClaudeProvider`, `OpenAIProvider`, `GeminiProvider`
 
 ## 核心模块
 
