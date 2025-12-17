@@ -262,6 +262,18 @@ func tryChannelWithAllKeys(
 				// 记录该 key 失败
 				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, isResponses)
 				log.Printf("⚠️ API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
+				// 打印错误详情
+				if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
+					var formattedBody string
+					if envCfg.RawLogOutput {
+						formattedBody = utils.FormatJSONBytesRaw(respBodyBytes)
+					} else {
+						formattedBody = utils.FormatJSONBytesForLog(respBodyBytes, 500)
+					}
+					log.Printf("📦 失败原因:\n%s", formattedBody)
+				} else if envCfg.EnableResponseLogs {
+					log.Printf("失败原因: %s", string(respBodyBytes))
+				}
 
 				lastFailoverError = &struct {
 					Status int
