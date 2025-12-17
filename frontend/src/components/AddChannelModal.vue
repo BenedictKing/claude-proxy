@@ -685,7 +685,9 @@ const allSourceModelOptions = computed(() => {
       { title: 'gpt-5.1-codex-max', value: 'gpt-5.1-codex-max' },
       { title: 'gpt-5.1-codex', value: 'gpt-5.1-codex' },
       { title: 'gpt-5.1-codex-mini', value: 'gpt-5.1-codex-mini' },
-      { title: 'gpt-5.1', value: 'gpt-5.1' }
+      { title: 'gpt-5.2', value: 'gpt-5.2' },
+      { title: 'gpt-5.1', value: 'gpt-5.1' },
+      { title: 'gpt-5', value: 'gpt-5' }
     ]
   } else {
     // Messages API (Claude) 常用模型别名
