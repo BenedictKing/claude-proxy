@@ -26,8 +26,6 @@ func GetProvider(serviceType string) Provider {
 	switch serviceType {
 	case "openai":
 		return &OpenAIProvider{}
-	case "openaiold":
-		return &OpenAIOldProvider{}
 	case "gemini":
 		return &GeminiProvider{}
 	case "claude":

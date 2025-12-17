@@ -151,7 +151,3 @@ func (p *ClaudeProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 	return eventChan, errChan, nil
 }
 
-// OpenAIOldProvider 旧版 OpenAI 提供商
-type OpenAIOldProvider struct {
-	OpenAIProvider
-}

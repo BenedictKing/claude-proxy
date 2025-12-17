@@ -199,8 +199,6 @@ func NewConverter(serviceType string) ResponsesConverter {
     switch serviceType {
     case "openai":
         return &OpenAIChatConverter{}
-    case "openaiold":
-        return &OpenAICompletionsConverter{}
     case "claude":
         return &ClaudeConverter{}
     case "responses":

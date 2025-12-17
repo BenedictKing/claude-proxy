@@ -232,7 +232,6 @@ func TestConverterFactory(t *testing.T) {
 		expectedType string
 	}{
 		{"openai", "*converters.OpenAIChatConverter"},
-		{"openaiold", "*converters.OpenAICompletionsConverter"},
 		{"claude", "*converters.ClaudeConverter"},
 		{"responses", "*converters.ResponsesPassthroughConverter"},
 		{"unknown", "*converters.OpenAIChatConverter"}, // 默认

@@ -270,8 +270,7 @@ backend-go/
 │   │   ├── provider.go     # Provider 接口
 │   │   ├── openai.go       # OpenAI 适配器
 │   │   ├── gemini.go       # Gemini 适配器
-│   │   ├── claude.go       # Claude 适配器
-│   │   └── openaiold.go    # OpenAI Old 适配器
+│   │   └── claude.go       # Claude 适配器
 │   ├── middleware/         # HTTP 中间件
 │   │   ├── cors.go         # CORS 中间件
 │   │   └── auth.go         # 认证中间件

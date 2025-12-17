@@ -65,7 +65,7 @@ export interface ChannelMetrics {
 
 export interface Channel {
   name: string
-  serviceType: 'openai' | 'openaiold' | 'gemini' | 'claude' | 'responses'
+  serviceType: 'openai' | 'gemini' | 'claude' | 'responses'
   baseUrl: string
   apiKeys: string[]
   description?: string

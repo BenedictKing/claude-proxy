@@ -73,7 +73,7 @@ func (s *StreamSynthesizer) ProcessLine(line string) {
 	switch s.serviceType {
 	case "gemini":
 		s.processGemini(data)
-	case "openai", "openaiold":
+	case "openai":
 		s.processOpenAI(data)
 	case "claude":
 		s.processClaude(data)

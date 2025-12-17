@@ -576,7 +576,7 @@ const getDefaultServiceType = (): string => {
 }
 
 // 获取默认服务类型值
-const getDefaultServiceTypeValue = (): 'openai' | 'openaiold' | 'gemini' | 'claude' | 'responses' => {
+const getDefaultServiceTypeValue = (): 'openai' | 'gemini' | 'claude' | 'responses' => {
   if (props.channelType === 'responses') {
     return 'responses'
   }
@@ -662,14 +662,12 @@ const serviceTypeOptions = computed(() => {
   if (props.channelType === 'responses') {
     return [
       { title: 'Responses (原生接口)', value: 'responses' },
-      { title: 'OpenAI (新版API)', value: 'openai' },
-      { title: 'OpenAI (兼容旧版)', value: 'openaiold' },
+      { title: 'OpenAI', value: 'openai' },
       { title: 'Claude', value: 'claude' }
     ]
   } else {
     return [
-      { title: 'OpenAI (新版API)', value: 'openai' },
-      { title: 'OpenAI (兼容旧版)', value: 'openaiold' },
+      { title: 'OpenAI', value: 'openai' },
       { title: 'Claude', value: 'claude' },
       { title: 'Gemini', value: 'gemini' }
     ]
@@ -725,7 +723,7 @@ const targetModelPlaceholder = computed(() => {
 // 表单数据
 const form = reactive({
   name: '',
-  serviceType: '' as 'openai' | 'openaiold' | 'gemini' | 'claude' | 'responses' | '',
+  serviceType: '' as 'openai' | 'gemini' | 'claude' | 'responses' | '',
   baseUrl: '',
   website: '',
   insecureSkipVerify: false,
@@ -832,7 +830,6 @@ const getUrlHint = (): string => {
   const hints: Record<string, string> = {
     responses: '通常为：https://api.openai.com/v1',
     openai: '通常为：https://api.openai.com/v1',
-    openaiold: '通常为：https://api.openai.com/v1',
     claude: '通常为：https://api.anthropic.com',
     gemini: '通常为：https://generativelanguage.googleapis.com/v1'
   }
@@ -1016,7 +1013,7 @@ const handleSubmit = async () => {
   // 类型断言，因为表单验证已经确保serviceType不为空
   const channelData = {
     name: form.name.trim(),
-    serviceType: form.serviceType as 'openai' | 'openaiold' | 'gemini' | 'claude' | 'responses',
+    serviceType: form.serviceType as 'openai' | 'gemini' | 'claude' | 'responses',
     baseUrl: form.baseUrl.trim().replace(/\/$/, ''), // 移除末尾斜杠
     website: form.website.trim() || undefined,
     insecureSkipVerify: form.insecureSkipVerify,

@@ -305,7 +305,6 @@ defineEmits<{
 const getServiceChipColor = () => {
   const colorMap: Record<string, string> = {
     openai: 'info',
-    openaiold: 'secondary',
     claude: 'success',
     gemini: 'accent'
   }
@@ -402,7 +401,6 @@ const copyApiKey = async (key: string, index: number) => {
 const getServiceIcon = () => {
   const iconMap: Record<string, string> = {
     'openai': 'mdi-robot',
-    'openaiold': 'mdi-robot-outline',
     'claude': 'mdi-message-processing',
     'gemini': 'mdi-diamond-stone'
   }
@@ -413,7 +411,6 @@ const getServiceIcon = () => {
 const getServiceIconColor = () => {
   const colorMap: Record<string, string> = {
     'openai': 'primary',
-    'openaiold': 'info',
     'claude': 'orange',
     'gemini': 'purple'
   }
@@ -424,7 +421,6 @@ const getServiceIconColor = () => {
 const getServiceDisplayName = () => {
   const nameMap: Record<string, string> = {
     'openai': 'OpenAI API',
-    'openaiold': 'OpenAI Legacy',
     'claude': 'Claude API',
     'gemini': 'Gemini API'
   }
@@ -454,7 +450,6 @@ const keyChipStyle = computed(() => {
 const serviceStyle = computed(() => {
   const map: Record<string, string> = {
     openai: 'var(--v-theme-info)',
-    openaiold: 'var(--v-theme-secondary)',
     claude: 'var(--v-theme-success)',
     gemini: 'var(--v-theme-accent)'
   }

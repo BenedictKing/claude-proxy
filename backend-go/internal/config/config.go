@@ -22,7 +22,7 @@ import (
 type UpstreamConfig struct {
 	BaseURL            string            `json:"baseUrl"`
 	APIKeys            []string          `json:"apiKeys"`
-	ServiceType        string            `json:"serviceType"` // gemini, openai, openaiold, claude
+	ServiceType        string            `json:"serviceType"` // gemini, openai, claude
 	Name               string            `json:"name,omitempty"`
 	Description        string            `json:"description,omitempty"`
 	Website            string            `json:"website,omitempty"`
