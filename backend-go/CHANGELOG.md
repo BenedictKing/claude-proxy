@@ -1,6 +1,18 @@
 # Changelog
 
-## [Unreleased]
+## [v2.1.25] - 2025-12-18
+
+### Added - TransformerMetadata 和 CacheControl 支持
+
+**功能描述**：新增转换器元数据和 Anthropic 缓存控制支持，用于在协议转换过程中保留原始格式信息（如 cache_control、system 数组格式等），实现特性透传。
+
+**涉及文件**：
+- `internal/types/types.go` - 新增 `CacheControl` 类型，`ClaudeContent` 和 `ClaudeTool` 添加 `CacheControl` 字段
+- `internal/types/responses.go` - `ResponsesRequest` 新增 `TransformerMetadata` 字段（`json:"-"` 不序列化）
+
+**新增类型**：
+- `CacheControl` - Anthropic 缓存控制结构（type: "ephemeral"）
+- `TransformerMetadata` - 转换器内部元数据，用于保留原始请求格式信息
 
 ### Added - FinishReason 统一映射函数
 

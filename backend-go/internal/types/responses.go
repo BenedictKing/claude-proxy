@@ -18,6 +18,11 @@ type ResponsesRequest struct {
 	Stop               interface{} `json:"stop,omitempty"`              // 停止序列 (string 或 []string)
 	User               string      `json:"user,omitempty"`              // 用户标识
 	StreamOptions      interface{} `json:"stream_options,omitempty"`    // 流式选项
+
+	// TransformerMetadata 转换器元数据（仅内存使用，不序列化）
+	// 用于在单次请求的转换流程中保留原始格式信息，如 system 数组格式等
+	// 注意：此字段不会通过 JSON 序列化保留，仅在同一请求处理链中有效
+	TransformerMetadata map[string]interface{} `json:"-"`
 }
 
 // ResponsesItem Responses API 消息项

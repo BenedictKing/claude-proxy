@@ -17,21 +17,29 @@ type ClaudeMessage struct {
 	Content interface{} `json:"content"` // string 或 content 数组
 }
 
+// CacheControl Anthropic 缓存控制
+// 用于 Claude API 请求，会序列化到 JSON（仅在发送给 Anthropic 时有效）
+type CacheControl struct {
+	Type string `json:"type,omitempty"` // "ephemeral"
+}
+
 // ClaudeContent Claude 内容块
 type ClaudeContent struct {
-	Type      string      `json:"type"` // text, tool_use, tool_result
-	Text      string      `json:"text,omitempty"`
-	ID        string      `json:"id,omitempty"`
-	Name      string      `json:"name,omitempty"`
-	Input     interface{} `json:"input,omitempty"`
-	ToolUseID string      `json:"tool_use_id,omitempty"`
+	Type         string        `json:"type"` // text, tool_use, tool_result
+	Text         string        `json:"text,omitempty"`
+	ID           string        `json:"id,omitempty"`
+	Name         string        `json:"name,omitempty"`
+	Input        interface{}   `json:"input,omitempty"`
+	ToolUseID    string        `json:"tool_use_id,omitempty"`
+	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
 
 // ClaudeTool Claude 工具定义
 type ClaudeTool struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description,omitempty"`
-	InputSchema interface{} `json:"input_schema"`
+	Name         string        `json:"name"`
+	Description  string        `json:"description,omitempty"`
+	InputSchema  interface{}   `json:"input_schema"`
+	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
 
 // ClaudeResponse Claude 响应
