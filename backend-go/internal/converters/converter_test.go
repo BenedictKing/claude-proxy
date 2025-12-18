@@ -300,3 +300,78 @@ func TestOpenAIChatConverter_WithSessionHistory(t *testing.T) {
 		t.Errorf("第三条消息内容不匹配")
 	}
 }
+
+// ============== FinishReason 映射测试 ==============
+
+func TestOpenAIFinishReasonToAnthropic(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"stop", "end_turn"},
+		{"length", "max_tokens"},
+		{"tool_calls", "tool_use"},
+		{"function_call", "tool_use"},
+		{"content_filter", "refusal"},
+		{"empty", "end_turn"},
+		{"unknown_reason", "unknown_reason"}, // 未知原因透传
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := OpenAIFinishReasonToAnthropic(tt.input)
+			if result != tt.expected {
+				t.Errorf("OpenAIFinishReasonToAnthropic(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestAnthropicStopReasonToOpenAI(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"end_turn", "stop"},
+		{"max_tokens", "length"},
+		{"stop_sequence", "stop"},
+		{"pause_turn", "stop"},
+		{"tool_use", "tool_calls"},
+		{"refusal", "content_filter"},
+		{"empty", "stop"},
+		{"unknown_reason", "unknown_reason"}, // 未知原因透传
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := AnthropicStopReasonToOpenAI(tt.input)
+			if result != tt.expected {
+				t.Errorf("AnthropicStopReasonToOpenAI(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestOpenAIFinishReasonToResponses(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"stop", "completed"},
+		{"tool_calls", "completed"},
+		{"function_call", "completed"},
+		{"length", "incomplete"},
+		{"content_filter", "failed"},
+		{"empty", "completed"},
+		{"unknown_reason", "incomplete"}, // 未知原因视为未完成
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := OpenAIFinishReasonToResponses(tt.input)
+			if result != tt.expected {
+				t.Errorf("OpenAIFinishReasonToResponses(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}

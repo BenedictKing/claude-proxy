@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added - FinishReason 统一映射函数
+
+**功能描述**：新增 OpenAI/Anthropic/Responses 三种协议间的 FinishReason 双向映射工具函数，覆盖 `pause_turn`、`refusal`、`stop_sequence` 等边缘情况。未知原因透传或映射为 `incomplete`，避免隐藏上游状态或误报成功。
+
+**涉及文件**：
+- `internal/converters/converter.go` - 新增 3 个映射函数
+- `internal/converters/converter_test.go` - 新增单元测试
+
+**新增函数**：
+- `OpenAIFinishReasonToAnthropic()` - OpenAI → Anthropic（未知原因透传）
+- `AnthropicStopReasonToOpenAI()` - Anthropic → OpenAI（未知原因透传）
+- `OpenAIFinishReasonToResponses()` - OpenAI → Responses status（未知原因映射为 incomplete）
+
 ### Added - 原始日志输出开关
 
 **功能描述**：新增 `RAW_LOG_OUTPUT` 环境变量，开启后日志将直接输出完整的请求/响应内容，不进行缩进格式化、内容截断或字段重排序。适用于需要调试完整 JSON 数据的场景。
