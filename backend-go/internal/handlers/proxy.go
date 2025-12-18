@@ -12,6 +12,7 @@ import (
 
 	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/httpclient"
+	"github.com/BenedictKing/claude-proxy/internal/metrics"
 	"github.com/BenedictKing/claude-proxy/internal/middleware"
 	"github.com/BenedictKing/claude-proxy/internal/providers"
 	"github.com/BenedictKing/claude-proxy/internal/scheduler"
@@ -209,6 +210,13 @@ func tryChannelWithAllKeys(
 	}
 	deprioritizeCandidates := make(map[string]bool)
 
+	// 强制探测模式：检查是否所有 Key 都被熔断
+	// 如果是，则忽略熔断状态强制尝试，以探测网络是否已恢复
+	forceProbeMode := areAllKeysSuspended(metricsManager, upstream.BaseURL, upstream.APIKeys)
+	if forceProbeMode {
+		log.Printf("🔍 [强制探测] 渠道 %s 所有 Key 都被熔断，启用强制探测模式", upstream.Name)
+	}
+
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		// 恢复请求体
 		c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
@@ -219,7 +227,8 @@ func tryChannelWithAllKeys(
 		}
 
 		// 检查该 Key 是否处于熔断状态，跳过熔断的 Key
-		if metricsManager.ShouldSuspendKey(upstream.BaseURL, apiKey) {
+		// 强制探测模式下不跳过，让请求真正发出去探测网络状态
+		if !forceProbeMode && metricsManager.ShouldSuspendKey(upstream.BaseURL, apiKey) {
 			failedKeys[apiKey] = true
 			log.Printf("⚡ 跳过熔断中的 Key: %s", utils.MaskAPIKey(apiKey))
 			continue
@@ -363,6 +372,13 @@ func handleSingleChannelProxy(
 	// 获取指标管理器用于检查熔断状态
 	metricsManager := channelScheduler.GetMessagesMetricsManager()
 
+	// 强制探测模式：检查是否所有 Key 都被熔断
+	// 如果是，则忽略熔断状态强制尝试，以探测网络是否已恢复
+	forceProbeMode := areAllKeysSuspended(metricsManager, upstream.BaseURL, upstream.APIKeys)
+	if forceProbeMode {
+		log.Printf("🔍 [强制探测] 渠道 %s 所有 Key 都被熔断，启用强制探测模式", upstream.Name)
+	}
+
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		// 恢复请求体
 		c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
@@ -374,7 +390,8 @@ func handleSingleChannelProxy(
 		}
 
 		// 检查该 Key 是否处于熔断状态，跳过熔断的 Key
-		if metricsManager.ShouldSuspendKey(upstream.BaseURL, apiKey) {
+		// 强制探测模式下不跳过，让请求真正发出去探测网络状态
+		if !forceProbeMode && metricsManager.ShouldSuspendKey(upstream.BaseURL, apiKey) {
 			failedKeys[apiKey] = true
 			log.Printf("⚡ 跳过熔断中的 Key: %s", utils.MaskAPIKey(apiKey))
 			continue
@@ -1567,4 +1584,19 @@ func CountTokensHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManag
 			log.Printf("🔢 [CountTokens] 本地估算: model=%s, input_tokens=%d", req.Model, inputTokens)
 		}
 	}
+}
+
+// areAllKeysSuspended 检查渠道的所有 Key 是否都处于熔断状态
+// 用于判断是否需要启用强制探测模式
+func areAllKeysSuspended(metricsManager *metrics.MetricsManager, baseURL string, apiKeys []string) bool {
+	if len(apiKeys) == 0 {
+		return false
+	}
+
+	for _, apiKey := range apiKeys {
+		if !metricsManager.ShouldSuspendKey(baseURL, apiKey) {
+			return false // 只要有一个 Key 不是熔断状态，就不需要强制探测
+		}
+	}
+	return true // 所有 Key 都被熔断，需要强制探测
 }

@@ -186,6 +186,9 @@ func tryResponsesChannelWithAllKeys(
 
 	provider := &providers.ResponsesProvider{SessionManager: sessionManager}
 
+	// 获取指标管理器用于检查熔断状态
+	metricsManager := channelScheduler.GetResponsesMetricsManager()
+
 	maxRetries := len(upstream.APIKeys)
 	failedKeys := make(map[string]bool)
 	var lastFailoverError *struct {
@@ -194,12 +197,27 @@ func tryResponsesChannelWithAllKeys(
 	}
 	deprioritizeCandidates := make(map[string]bool)
 
+	// 强制探测模式：检查是否所有 Key 都被熔断
+	// 如果是，则忽略熔断状态强制尝试，以探测网络是否已恢复
+	forceProbeMode := areAllResponsesKeysSuspended(metricsManager, upstream.BaseURL, upstream.APIKeys)
+	if forceProbeMode {
+		log.Printf("🔍 [强制探测/Responses] 渠道 %s 所有 Key 都被熔断，启用强制探测模式", upstream.Name)
+	}
+
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
 		apiKey, err := cfgManager.GetNextResponsesAPIKey(upstream, failedKeys)
 		if err != nil {
 			break
+		}
+
+		// 检查该 Key 是否处于熔断状态，跳过熔断的 Key
+		// 强制探测模式下不跳过，让请求真正发出去探测网络状态
+		if !forceProbeMode && metricsManager.ShouldSuspendKey(upstream.BaseURL, apiKey) {
+			failedKeys[apiKey] = true
+			log.Printf("⚡ [Responses] 跳过熔断中的 Key: %s", utils.MaskAPIKey(apiKey))
+			continue
 		}
 
 		if envCfg.ShouldLog("info") {
@@ -270,6 +288,8 @@ func tryResponsesChannelWithAllKeys(
 }
 
 // handleSingleChannelResponses 处理单渠道 Responses 请求（现有逻辑）
+// 注意：单渠道模式没有 channelScheduler 提供指标，因此不支持熔断检查
+// 熔断检查仅在多渠道模式下生效
 func handleSingleChannelResponses(
 	c *gin.Context,
 	envCfg *config.EnvConfig,
@@ -932,13 +952,30 @@ func tryCompactChannelWithAllKeys(
 		return false, "", nil
 	}
 
+	// 获取指标管理器用于检查熔断状态
+	metricsManager := channelScheduler.GetResponsesMetricsManager()
+
 	failedKeys := make(map[string]bool)
 	var lastErr *compactError
+
+	// 强制探测模式：检查是否所有 Key 都被熔断
+	forceProbeMode := areAllResponsesKeysSuspended(metricsManager, upstream.BaseURL, upstream.APIKeys)
+	if forceProbeMode {
+		log.Printf("🔍 [强制探测/Compact] 渠道 %s 所有 Key 都被熔断，启用强制探测模式", upstream.Name)
+	}
 
 	for attempt := 0; attempt < len(upstream.APIKeys); attempt++ {
 		apiKey, err := cfgManager.GetNextResponsesAPIKey(upstream, failedKeys)
 		if err != nil {
 			break
+		}
+
+		// 检查该 Key 是否处于熔断状态，跳过熔断的 Key
+		// 强制探测模式下不跳过
+		if !forceProbeMode && metricsManager.ShouldSuspendKey(upstream.BaseURL, apiKey) {
+			failedKeys[apiKey] = true
+			log.Printf("⚡ [Compact] 跳过熔断中的 Key: %s", utils.MaskAPIKey(apiKey))
+			continue
 		}
 
 		success, compactErr := tryCompactWithKey(c, upstream, apiKey, bodyBytes, envCfg)
@@ -1040,3 +1077,7 @@ func extractConversationID(c *gin.Context, bodyBytes []byte) string {
 
 	return ""
 }
+
+// areAllResponsesKeysSuspended 复用 proxy.go 中的 areAllKeysSuspended
+// 为保持代码一致性，直接调用共享函数
+var areAllResponsesKeysSuspended = areAllKeysSuspended

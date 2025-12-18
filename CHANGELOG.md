@@ -4,6 +4,24 @@
 
 ---
 
+## [Unreleased]
+
+### ✨ 新功能
+
+- **强制探测模式 (Force Probe Mode)**
+  - 问题：网络故障导致所有 Key 进入熔断状态后，即使网络恢复，系统仍跳过所有熔断 Key，无法自动恢复服务
+  - 解决：当检测到渠道所有 Key 都被熔断时，自动启用强制探测模式，忽略熔断状态强制尝试请求
+  - 日志标识：`🔍 [强制探测] 渠道 xxx 所有 Key 都被熔断，启用强制探测模式`
+  - 涉及文件：`handlers/proxy.go`, `handlers/responses.go`
+
+### 🐛 Bug 修复
+
+- **修复 Responses 渠道缺少熔断检查的问题**
+  - `tryResponsesChannelWithAllKeys` 和 `tryCompactChannelWithAllKeys` 现在也会检查 Key 熔断状态
+  - 与 Messages 渠道行为保持一致
+
+---
+
 ## [v2.1.24] - 2025-12-17
 
 ### ✨ 新功能
