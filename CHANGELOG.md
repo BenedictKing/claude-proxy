@@ -4,6 +4,32 @@
 
 ---
 
+## [v2.1.30] - 2025-12-19
+
+### ✨ 新功能
+
+- **强制探测模式 (Force Probe Mode)**
+  - 问题：网络故障导致所有 Key 进入熔断状态后，即使网络恢复，系统仍跳过所有熔断 Key，无法自动恢复服务
+  - 解决：当检测到渠道所有 Key 都被熔断时，自动启用强制探测模式，忽略熔断状态强制尝试请求
+  - 日志标识：`🔍 [强制探测] 渠道 xxx 所有 Key 都被熔断，启用强制探测模式`
+  - 涉及文件：`handlers/proxy.go`, `handlers/responses.go`
+
+### 🐛 Bug 修复
+
+- **修复 Responses 渠道缺少熔断检查的问题**
+  - `tryResponsesChannelWithAllKeys` 和 `tryCompactChannelWithAllKeys` 现在也会检查 Key 熔断状态
+  - 与 Messages 渠道行为保持一致
+
+### 🗑️ 移除
+
+- **移除基础 URL 输入框下方的固定提示文本**
+  - 移除 "通常为: https://api.openai.com/v1" 等冗余提示
+  - 原因：输入框已有 placeholder 提示，且下方已显示预期请求 URL 预览
+  - 删除未使用的 `getUrlHint()` 函数
+  - 涉及文件：`frontend/src/components/AddChannelModal.vue`
+
+---
+
 ## [v2.1.28] - 2025-12-19
 
 ### ✨ 新功能
@@ -39,24 +65,6 @@
 
 - **Responses 渠道新增模型选项**
   - 添加 `gpt-5.2-codex` 到模型重定向下拉列表
-
----
-
-## [Unreleased]
-
-### ✨ 新功能
-
-- **强制探测模式 (Force Probe Mode)**
-  - 问题：网络故障导致所有 Key 进入熔断状态后，即使网络恢复，系统仍跳过所有熔断 Key，无法自动恢复服务
-  - 解决：当检测到渠道所有 Key 都被熔断时，自动启用强制探测模式，忽略熔断状态强制尝试请求
-  - 日志标识：`🔍 [强制探测] 渠道 xxx 所有 Key 都被熔断，启用强制探测模式`
-  - 涉及文件：`handlers/proxy.go`, `handlers/responses.go`
-
-### 🐛 Bug 修复
-
-- **修复 Responses 渠道缺少熔断检查的问题**
-  - `tryResponsesChannelWithAllKeys` 和 `tryCompactChannelWithAllKeys` 现在也会检查 Key 熔断状态
-  - 与 Messages 渠道行为保持一致
 
 ---
 

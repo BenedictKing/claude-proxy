@@ -149,8 +149,6 @@
                 :rules="[rules.required, rules.url]"
                 required
                 :error-messages="errors.baseUrl"
-                :hint="getUrlHint()"
-                persistent-hint
               />
               <div v-if="form.baseUrl && form.serviceType" class="text-caption text-medium-emphasis mt-1 ml-3">
                 预期请求: {{ formExpectedRequestUrl }}
@@ -909,16 +907,6 @@ const isValidUrl = (url: string): boolean => {
   } catch {
     return false
   }
-}
-
-const getUrlHint = (): string => {
-  const hints: Record<string, string> = {
-    responses: '通常为：https://api.openai.com/v1',
-    openai: '通常为：https://api.openai.com/v1',
-    claude: '通常为：https://api.anthropic.com',
-    gemini: '通常为：https://generativelanguage.googleapis.com/v1'
-  }
-  return hints[form.serviceType] || '请输入完整的API基础URL'
 }
 
 const maskApiKey = (key: string): string => {
