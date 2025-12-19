@@ -4,6 +4,20 @@
 
 ---
 
+## [v2.1.31] - 2025-12-19
+
+### ✨ 新功能
+
+- **前端显示版本号和更新检查**
+  - 在顶部应用栏显示当前运行版本号
+  - 自动检查 GitHub 最新版本，有更新时显示橙色提示
+  - 点击版本号可跳转 GitHub Release 页面
+  - 30 分钟 localStorage 缓存，错误状态 5 分钟短期缓存
+  - 新增文件：`frontend/src/services/version.ts`
+  - 涉及文件：`frontend/src/App.vue`, `frontend/src/services/api.ts`, `frontend/vite.config.ts`
+
+---
+
 ## [v2.1.30] - 2025-12-19
 
 ### ✨ 新功能

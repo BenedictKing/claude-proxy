@@ -84,6 +84,42 @@
 
       <v-spacer></v-spacer>
 
+      <!-- 版本信息 -->
+      <div
+        v-if="versionInfo.currentVersion"
+        class="version-badge"
+        :class="{
+          'version-clickable': versionInfo.status === 'update-available' || versionInfo.status === 'latest',
+          'version-checking': versionInfo.status === 'checking',
+          'version-latest': versionInfo.status === 'latest',
+          'version-update': versionInfo.status === 'update-available'
+        }"
+        @click="handleVersionClick"
+      >
+        <v-icon
+          v-if="versionInfo.status === 'checking'"
+          size="14"
+          class="mr-1"
+        >mdi-clock-outline</v-icon>
+        <v-icon
+          v-else-if="versionInfo.status === 'latest'"
+          size="14"
+          class="mr-1"
+          color="success"
+        >mdi-check-circle</v-icon>
+        <v-icon
+          v-else-if="versionInfo.status === 'update-available'"
+          size="14"
+          class="mr-1"
+          color="warning"
+        >mdi-alert</v-icon>
+        <span class="version-text">{{ versionInfo.currentVersion }}</span>
+        <template v-if="versionInfo.status === 'update-available' && versionInfo.latestVersion">
+          <span class="version-arrow mx-1">→</span>
+          <span class="version-latest-text">{{ versionInfo.latestVersion }}</span>
+        </template>
+      </div>
+
       <!-- 暗色模式切换 -->
       <v-btn icon variant="text" size="small" class="header-btn" @click="toggleDarkMode">
         <v-icon size="20">{{
@@ -333,7 +369,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useTheme } from 'vuetify'
-import { api, type Channel, type ChannelsResponse } from './services/api'
+import { api, fetchHealth, type Channel, type ChannelsResponse } from './services/api'
+import { versionService, type VersionInfo } from './services/version'
 import AddChannelModal from './components/AddChannelModal.vue'
 import ChannelOrchestration from './components/ChannelOrchestration.vue'
 import { useAppTheme } from './composables/useTheme'
@@ -362,6 +399,18 @@ const selectedChannelForKey = ref<number>(-1)
 const newApiKey = ref('')
 const isPingingAll = ref(false)
 const darkModePreference = ref<'light' | 'dark' | 'auto'>('auto')
+
+// 版本信息
+const versionInfo = ref<VersionInfo>({
+  currentVersion: '',
+  latestVersion: null,
+  isLatest: false,
+  hasUpdate: false,
+  releaseUrl: null,
+  lastCheckTime: 0,
+  status: 'checking'
+})
+const isCheckingVersion = ref(false)
 
 // Toast通知系统
 interface Toast {
@@ -813,6 +862,44 @@ const handleAuthError = (error: any) => {
   }
 }
 
+// 版本检查
+const checkVersion = async () => {
+  if (isCheckingVersion.value) return
+
+  isCheckingVersion.value = true
+  try {
+    // 先获取当前版本
+    const health = await fetchHealth()
+    const currentVersion = health.version?.version || ''
+
+    if (currentVersion) {
+      versionService.setCurrentVersion(currentVersion)
+      versionInfo.value.currentVersion = currentVersion
+
+      // 检查 GitHub 最新版本
+      const result = await versionService.checkForUpdates()
+      versionInfo.value = result
+    } else {
+      versionInfo.value.status = 'error'
+    }
+  } catch (error) {
+    console.warn('Version check failed:', error)
+    versionInfo.value.status = 'error'
+  } finally {
+    isCheckingVersion.value = false
+  }
+}
+
+// 版本点击处理
+const handleVersionClick = () => {
+  if (
+    (versionInfo.value.status === 'update-available' || versionInfo.value.status === 'latest') &&
+    versionInfo.value.releaseUrl
+  ) {
+    window.open(versionInfo.value.releaseUrl, '_blank', 'noopener,noreferrer')
+  }
+}
+
 // 初始化
 onMounted(async () => {
   // 初始化复古像素主题
@@ -829,6 +916,9 @@ onMounted(async () => {
     if (darkModePreference.value === 'auto') setDarkMode('auto')
   }
   mediaQuery.addEventListener('change', handlePref)
+
+  // 版本检查（独立于认证，静默执行）
+  checkVersion()
 
   // 检查是否有保存的密钥
   const savedKey = localStorage.getItem('proxyAccessKey')
@@ -1043,6 +1133,67 @@ onUnmounted(() => {
 .header-btn:active {
   transform: translate(2px, 2px) !important;
   box-shadow: none !important;
+}
+
+/* ----- 版本信息徽章 ----- */
+.version-badge {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px;
+  margin-right: 8px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  border: 2px solid rgb(var(--v-theme-on-surface));
+  background: rgb(var(--v-theme-surface));
+  transition: all 0.15s ease;
+}
+
+.version-badge.version-clickable {
+  cursor: pointer;
+}
+
+.version-badge.version-clickable:hover {
+  transform: translateY(-1px);
+  box-shadow: 3px 3px 0 0 rgb(var(--v-theme-on-surface));
+}
+
+.version-badge.version-checking {
+  opacity: 0.7;
+}
+
+.version-badge.version-latest {
+  border-color: rgb(var(--v-theme-success));
+}
+
+.version-badge.version-update {
+  border-color: rgb(var(--v-theme-warning));
+  background: rgba(var(--v-theme-warning), 0.1);
+}
+
+.version-text {
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.version-arrow {
+  color: rgb(var(--v-theme-warning));
+  font-weight: bold;
+}
+
+.version-latest-text {
+  color: rgb(var(--v-theme-warning));
+  font-weight: bold;
+}
+
+.v-theme--dark .version-badge {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.v-theme--dark .version-badge.version-latest {
+  border-color: rgb(var(--v-theme-success));
+}
+
+.v-theme--dark .version-badge.version-update {
+  border-color: rgb(var(--v-theme-warning));
 }
 
 /* ----- 统计卡片 - 复古像素风格 ----- */
