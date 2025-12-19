@@ -149,9 +149,13 @@
                 :rules="[rules.required, rules.url]"
                 required
                 :error-messages="errors.baseUrl"
+                hide-details="auto"
               />
-              <div v-if="form.baseUrl && form.serviceType" class="text-caption text-medium-emphasis mt-1 ml-3">
-                预期请求: {{ formExpectedRequestUrl }}
+              <!-- 固定高度的提示区域，防止布局跳动；有错误时不显示 -->
+              <div v-show="formExpectedRequestUrl && !baseUrlHasError" class="base-url-hint">
+                <span class="text-caption text-medium-emphasis">
+                  预期请求: {{ formExpectedRequestUrl }}
+                </span>
               </div>
             </v-col>
 
@@ -480,6 +484,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useTheme } from 'vuetify'
 import type { Channel } from '../services/api'
+import { isValidApiKey, isValidUrl as isValidQuickInputUrl } from '../utils/quickInputParser'
 
 interface Props {
   show: boolean
@@ -510,6 +515,10 @@ const quickInput = ref('')
 const detectedBaseUrl = ref('')
 const detectedApiKeys = ref<string[]>([])
 
+// 详细表单预期请求 URL 预览（防止输入时抖动）
+const formBaseUrlPreview = ref('')
+let formBaseUrlPreviewTimer: number | null = null
+
 // 切换模式时，将快速模式检测到的值同步到详细表单，但不清空快速模式输入
 const toggleMode = () => {
   if (isQuickMode.value) {
@@ -529,19 +538,6 @@ const toggleMode = () => {
   isQuickMode.value = !isQuickMode.value
 }
 
-// 检测单个 token 是否为有效的 API Key
-const isValidApiKey = (token: string): boolean => {
-  // 常见 API Key 前缀格式
-  if (/^(sk-|cr_|ms-|key-|api-|AIza)/i.test(token)) {
-    return true
-  }
-  // 长度足够且只包含合法字符的也可能是 key
-  if (token.length >= 32 && /^[a-zA-Z0-9_-]+$/.test(token)) {
-    return true
-  }
-  return false
-}
-
 // 解析快速输入内容
 const parseQuickInput = () => {
   // 统一按换行、空格、逗号、分号分割，然后 trim
@@ -555,8 +551,8 @@ const parseQuickInput = () => {
   detectedApiKeys.value = []
 
   for (const token of tokens) {
-    // 检测 URL (http:// 或 https:// 开头)
-    if (/^https?:\/\//i.test(token)) {
+    // 检测 URL (使用工具函数)
+    if (isValidQuickInputUrl(token)) {
       // 只取第一个检测到的 URL
       if (!detectedBaseUrl.value) {
         // 保留 # 结尾（用于跳过自动添加 /v1），但移除末尾斜杠
@@ -568,7 +564,7 @@ const parseQuickInput = () => {
       continue
     }
 
-    // 检测 API Key
+    // 检测 API Key (使用工具函数)
     if (isValidApiKey(token) && !detectedApiKeys.value.includes(token)) {
       detectedApiKeys.value.push(token)
     }
@@ -685,11 +681,25 @@ const expectedRequestUrl = computed(() => {
   return baseUrl + '/v1' + endpoint
 })
 
+// 检测 baseUrl 是否有验证错误
+const baseUrlHasError = computed(() => {
+  const value = form.baseUrl
+  if (!value) return true
+  try {
+    new URL(value)
+    return false
+  } catch {
+    return true
+  }
+})
+
 // 详细模式预期请求 URL（根据表单选择的 serviceType）
 const formExpectedRequestUrl = computed(() => {
-  if (!form.baseUrl || !form.serviceType) return ''
+  if (!form.serviceType) return ''
+  const rawBaseUrl = formBaseUrlPreview.value.trim()
+  if (!rawBaseUrl || !isValidUrl(rawBaseUrl)) return ''
 
-  let baseUrl = form.baseUrl
+  let baseUrl = rawBaseUrl
   const skipVersion = baseUrl.endsWith('#')
   if (skipVersion) {
     baseUrl = baseUrl.slice(0, -1)
@@ -962,6 +972,9 @@ const loadChannelData = (channel: Channel) => {
   originalKeyMap.value.clear()
 
   form.modelMapping = { ...(channel.modelMapping || {}) }
+
+  // 立即同步 baseUrl 到预览变量，避免等待 debounce
+  formBaseUrlPreview.value = channel.baseUrl
 }
 
 const addApiKey = () => {
@@ -1134,6 +1147,19 @@ watch(
   }
 )
 
+watch(
+  () => form.baseUrl,
+  value => {
+    if (formBaseUrlPreviewTimer !== null) {
+      window.clearTimeout(formBaseUrlPreviewTimer)
+    }
+    formBaseUrlPreviewTimer = window.setTimeout(() => {
+      formBaseUrlPreview.value = value
+    }, 200)
+  },
+  { immediate: true }
+)
+
 // ESC键监听
 const handleKeydown = (event: KeyboardEvent) => {
   if (event.key === 'Escape' && props.show) {
@@ -1147,10 +1173,20 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
+  if (formBaseUrlPreviewTimer !== null) {
+    window.clearTimeout(formBaseUrlPreviewTimer)
+  }
 })
 </script>
 
 <style scoped>
+/* 基础URL下方的提示区域 - 固定高度防止布局跳动 */
+.base-url-hint {
+  min-height: 20px;
+  padding: 4px 12px 0;
+  line-height: 1.25;
+}
+
 /* 浅色模式下副标题使用白色带透明度 */
 .text-white-subtitle {
   color: rgba(255, 255, 255, 0.85) !important;

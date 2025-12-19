@@ -4,6 +4,39 @@
 
 ---
 
+## [v2.1.32] - 2025-12-19
+
+### 🐛 Bug 修复
+
+- **修复编辑渠道弹窗中基础 URL 布局和验证问题**
+  - 使用 `hide-details="auto"` 保留 URL 验证错误显示
+  - 使用独立 `<div class="base-url-hint">` 显示"预期请求"提示，避免输入时布局跳动
+  - 新增 `baseUrlHasError` 计算属性，有错误时隐藏预期请求提示
+  - 修复编辑模式下 `formBaseUrlPreview` 未立即同步导致提示不显示的问题
+  - 涉及文件：`frontend/src/components/AddChannelModal.vue`
+
+### ✨ 新功能
+
+- **改进快速添加渠道的 API Key 识别算法**
+  - 支持通用 `xx-xxx` 和 `xx_xxx` 前缀格式（如 `ut_xxx`、`sk-xxx`、`api-xxx`）
+  - 支持 JWT 格式识别（`eyJ` 开头）
+  - 保留 Google API Key 格式（`AIza` 开头）和长字符串（≥32字符）识别
+  - 涉及文件：`frontend/src/components/AddChannelModal.vue`
+
+- **新增 API Key 和 URL 识别单元测试**
+  - 38 个测试用例覆盖各种 API Key 格式和 URL 验证场景
+  - 新增文件：`frontend/src/components/__tests__/quickInputParser.test.ts`
+
+### 🔧 重构
+
+- **提取快速输入解析工具到独立模块**
+  - 将 `isValidApiKey`、`isValidUrl`、`parseQuickInput` 从组件提取到 `utils/quickInputParser.ts`
+  - 组件和测试共用同一套解析逻辑，避免代码重复和维护性问题
+  - 修复 `isValidUrl` 正则不支持无路径 `#` 结尾 URL 的问题（如 `https://api.example.com#`）
+  - 新增文件：`frontend/src/utils/quickInputParser.ts`
+
+---
+
 ## [v2.1.31] - 2025-12-19
 
 ### ✨ 新功能
