@@ -152,6 +152,9 @@
                 :hint="getUrlHint()"
                 persistent-hint
               />
+              <div v-if="form.baseUrl && form.serviceType" class="text-caption text-medium-emphasis mt-1 ml-3">
+                预期请求: {{ formExpectedRequestUrl }}
+              </div>
             </v-col>
 
             <!-- 官网/控制台（可选） -->
@@ -676,6 +679,44 @@ const expectedRequestUrl = computed(() => {
   } else {
     // messages 渠道：claude 用 /messages，其他用 /chat/completions
     endpoint = '/messages' // 快速添加默认是 claude
+  }
+
+  if (hasVersion || skipVersion) {
+    return baseUrl + endpoint
+  }
+  return baseUrl + '/v1' + endpoint
+})
+
+// 详细模式预期请求 URL（根据表单选择的 serviceType）
+const formExpectedRequestUrl = computed(() => {
+  if (!form.baseUrl || !form.serviceType) return ''
+
+  let baseUrl = form.baseUrl
+  const skipVersion = baseUrl.endsWith('#')
+  if (skipVersion) {
+    baseUrl = baseUrl.slice(0, -1)
+  }
+  baseUrl = baseUrl.replace(/\/$/, '')
+
+  const hasVersion = /\/v\d+[a-z]*$/.test(baseUrl)
+
+  // 根据 serviceType 确定端点（与后端逻辑一致）
+  let endpoint = ''
+  if (props.channelType === 'responses') {
+    if (form.serviceType === 'responses') {
+      endpoint = '/responses'
+    } else if (form.serviceType === 'claude') {
+      endpoint = '/messages'
+    } else {
+      endpoint = '/chat/completions'
+    }
+  } else {
+    // messages 渠道
+    if (form.serviceType === 'claude') {
+      endpoint = '/messages'
+    } else {
+      endpoint = '/chat/completions'
+    }
   }
 
   if (hasVersion || skipVersion) {
