@@ -1,7 +1,7 @@
 ---
 name: codex-review
-description: 调用 codex 命令行进行代码审核，自动收集当前文件修改和任务状态一并发送 (user)
-version: 1.3.0
+description: 调用 codex 命令行进行代码审核，自动收集当前文件修改和任务状态一并发送；工作区干净时自动审核最新提交 (user)
+version: 1.4.0
 author: https://github.com/BenedictKing/claude-proxy/
 allowed-tools: Bash, Read, Glob, Write, Edit
 ---
@@ -23,6 +23,16 @@ allowed-tools: Bash, Read, Glob, Write, Edit
 **"代码变更 + 意图描述"同时作为输入，是提升 AI 代码审查质量的最高效手段。**
 
 ## 执行步骤
+
+### 0. 【首先】检查工作区状态
+
+```bash
+git diff --name-only && git status --short
+```
+
+**根据输出决定审核模式：**
+- **有未提交变更** → 继续执行步骤 1-4（常规流程）
+- **工作区干净** → 直接审核最新提交：`codex review --commit HEAD`
 
 ### 1. 【强制】检查 CHANGELOG 是否已更新
 
