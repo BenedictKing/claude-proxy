@@ -4,6 +4,17 @@
 
 ---
 
+## [v2.1.27] - 2025-12-19
+
+### ♻️ 重构
+
+- **移除 Claude Provider 畸形 tool_call 修复逻辑**
+  - 删除 `toolCallFixer` 相关代码，简化流式响应处理
+  - 移除未使用的 `fmt`、`log`、`time` 导入
+  - 涉及文件：`internal/providers/claude.go`
+
+---
+
 ## [v2.1.26] - 2025-12-19
 
 ### ✨ 新功能

@@ -4,13 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/types"
@@ -122,26 +119,11 @@ func (p *ClaudeProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 
 		toolUseStopEmitted := false
 
-		// 畸形 tool_call 修复状态
-		toolCallFixer := newToolCallFixer()
-
 		for scanner.Scan() {
 			line := scanner.Text()
 
 			// 直接转发 SSE 事件（包括空行）
 			if strings.HasPrefix(line, "event:") || strings.HasPrefix(line, "data:") || line == "" {
-				// 检测并修复畸形 tool_call 参数
-				if strings.HasPrefix(line, "data:") && strings.Contains(line, "input_json_delta") {
-					fixedLines, needsFix := toolCallFixer.processLine(line)
-					if needsFix {
-						// 发送修复后的事件
-						for _, fixedLine := range fixedLines {
-							eventChan <- fixedLine
-						}
-						continue
-					}
-				}
-
 				eventChan <- line + "\n"
 
 				// 检测是否发送了 tool_use 相关的 stop_reason
@@ -149,13 +131,6 @@ func (p *ClaudeProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 					strings.Contains(line, `"stop_reason": "tool_use"`) {
 					toolUseStopEmitted = true
 				}
-			}
-		}
-
-		// 流结束时，检查是否有待发送的修复事件
-		if pendingEvents := toolCallFixer.flush(); len(pendingEvents) > 0 {
-			for _, event := range pendingEvents {
-				eventChan <- event
 			}
 		}
 
