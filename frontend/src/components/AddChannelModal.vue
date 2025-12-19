@@ -680,6 +680,7 @@ const allSourceModelOptions = computed(() => {
     // Responses API (Codex) 常用模型名称
     return [
       { title: 'codex', value: 'codex' },
+      { title: 'gpt-5.2-codex', value: 'gpt-5.2-codex' },
       { title: 'gpt-5.1-codex-max', value: 'gpt-5.1-codex-max' },
       { title: 'gpt-5.1-codex', value: 'gpt-5.1-codex' },
       { title: 'gpt-5.1-codex-mini', value: 'gpt-5.1-codex-mini' },
