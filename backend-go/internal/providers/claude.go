@@ -52,17 +52,23 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 
 	// 构建目标URL
 	// 智能拼接逻辑：
-	// 1. 如果 baseURL 已包含版本号后缀（如 /v1, /v2, /v3），直接拼接端点路径
-	// 2. 如果 baseURL 不包含版本号后缀，自动添加 /v1 再拼接端点路径
+	// 1. 如果 baseURL 以 # 结尾，跳过自动添加 /v1
+	// 2. 如果 baseURL 已包含版本号后缀（如 /v1, /v2, /v3），直接拼接端点路径
+	// 3. 如果 baseURL 不包含版本号后缀，自动添加 /v1 再拼接端点路径
 	endpoint := strings.TrimPrefix(c.Request.URL.Path, "/v1")
-	baseURL := strings.TrimSuffix(upstream.BaseURL, "/")
+	baseURL := upstream.BaseURL
+	skipVersionPrefix := strings.HasSuffix(baseURL, "#")
+	if skipVersionPrefix {
+		baseURL = strings.TrimSuffix(baseURL, "#")
+	}
+	baseURL = strings.TrimSuffix(baseURL, "/")
 
 	// 使用正则表达式检测 baseURL 是否以版本号结尾（/v1, /v2, /v1beta, /v2alpha等）
 	versionPattern := regexp.MustCompile(`/v\d+[a-z]*$`)
 
 	var targetURL string
-	if versionPattern.MatchString(baseURL) {
-		// baseURL 已包含版本号，直接拼接
+	if versionPattern.MatchString(baseURL) || skipVersionPrefix {
+		// baseURL 已包含版本号或以#结尾，直接拼接
 		targetURL = baseURL + endpoint
 	} else {
 		// baseURL 不包含版本号，添加 /v1

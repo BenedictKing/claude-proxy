@@ -49,6 +49,9 @@
                     <div class="text-caption" :class="detectedBaseUrl ? 'text-success' : 'text-error'">
                       {{ detectedBaseUrl || '请输入一个有效的 URL (https://...)' }}
                     </div>
+                    <div v-if="detectedBaseUrl" class="text-caption text-medium-emphasis mt-1">
+                      预期请求: {{ expectedRequestUrl }}
+                    </div>
                   </div>
                   <v-chip v-if="detectedBaseUrl" size="x-small" color="success" variant="tonal"> 已检测 </v-chip>
                 </div>
@@ -555,7 +558,11 @@ const parseQuickInput = () => {
     if (/^https?:\/\//i.test(token)) {
       // 只取第一个检测到的 URL
       if (!detectedBaseUrl.value) {
-        detectedBaseUrl.value = token.replace(/\/$/, '') // 移除末尾斜杠
+        // 保留 # 结尾（用于跳过自动添加 /v1），但移除末尾斜杠
+        const endsWithHash = token.endsWith('#')
+        let url = endsWithHash ? token.slice(0, -1) : token
+        url = url.replace(/\/$/, '')
+        detectedBaseUrl.value = endsWithHash ? url + '#' : url
       }
       continue
     }
@@ -639,6 +646,42 @@ const generatedChannelName = computed(() => {
   }
   const domain = extractDomain(detectedBaseUrl.value)
   return `${domain}-${randomSuffix.value}`
+})
+
+// 预期请求 URL（模拟后端逻辑）
+const expectedRequestUrl = computed(() => {
+  if (!detectedBaseUrl.value) return ''
+
+  let baseUrl = detectedBaseUrl.value
+  const skipVersion = baseUrl.endsWith('#')
+  if (skipVersion) {
+    baseUrl = baseUrl.slice(0, -1)
+  }
+
+  // 检查是否已包含版本号
+  const hasVersion = /\/v\d+[a-z]*$/.test(baseUrl)
+
+  // 根据渠道类型和服务类型确定端点（与后端逻辑一致）
+  const serviceType = getDefaultServiceTypeValue()
+  let endpoint = ''
+  if (props.channelType === 'responses') {
+    // responses 渠道根据 serviceType 决定端点
+    if (serviceType === 'responses') {
+      endpoint = '/responses'
+    } else if (serviceType === 'claude') {
+      endpoint = '/messages'
+    } else {
+      endpoint = '/chat/completions'
+    }
+  } else {
+    // messages 渠道：claude 用 /messages，其他用 /chat/completions
+    endpoint = '/messages' // 快速添加默认是 claude
+  }
+
+  if (hasVersion || skipVersion) {
+    return baseUrl + endpoint
+  }
+  return baseUrl + '/v1' + endpoint
 })
 
 // 处理快速添加提交

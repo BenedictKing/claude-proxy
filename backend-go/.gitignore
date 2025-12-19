@@ -26,3 +26,5 @@ Thumbs.db
 *~
 go.sum
 tmp/
+
+!docs/

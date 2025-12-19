@@ -4,6 +4,24 @@
 
 ---
 
+## [v2.1.28] - 2025-12-19
+
+### ✨ 新功能
+
+- **BaseURL 支持 `#` 结尾跳过自动添加 `/v1`**
+  - 问题：部分 API 服务端点不带 `/v1` 前缀，但系统会自动添加
+  - 解决：在 BaseURL 末尾添加 `#` 标记，系统将跳过自动添加 `/v1`
+  - 示例：`https://api.example.com#` → 请求 `https://api.example.com/chat/completions`
+  - 示例：`https://api.example.com` → 请求 `https://api.example.com/v1/chat/completions`
+  - 涉及文件：`providers/openai.go`, `providers/claude.go`, `providers/responses.go`
+
+- **前端快速添加显示预期请求 URL**
+  - 在快速添加模式下显示实际请求的完整 URL
+  - 支持识别 `#` 结尾的 BaseURL
+  - 涉及文件：`frontend/src/components/AddChannelModal.vue`
+
+---
+
 ## [v2.1.27] - 2025-12-19
 
 ### ♻️ 重构

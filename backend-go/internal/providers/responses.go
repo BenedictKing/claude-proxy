@@ -118,10 +118,16 @@ func (p *ResponsesProvider) ConvertToProviderRequest(
 
 // buildTargetURL 根据上游类型构建目标 URL
 // 智能拼接逻辑：
-// 1. 如果 baseURL 已包含版本号后缀（如 /v1, /v2, /v8, /v1beta），直接拼接端点路径
-// 2. 如果 baseURL 不包含版本号后缀，自动添加 /v1 再拼接端点路径
+// 1. 如果 baseURL 以 # 结尾，跳过自动添加 /v1
+// 2. 如果 baseURL 已包含版本号后缀（如 /v1, /v2, /v8, /v1beta），直接拼接端点路径
+// 3. 如果 baseURL 不包含版本号后缀，自动添加 /v1 再拼接端点路径
 func (p *ResponsesProvider) buildTargetURL(upstream *config.UpstreamConfig) string {
-	baseURL := strings.TrimSuffix(upstream.BaseURL, "/")
+	baseURL := upstream.BaseURL
+	skipVersionPrefix := strings.HasSuffix(baseURL, "#")
+	if skipVersionPrefix {
+		baseURL = strings.TrimSuffix(baseURL, "#")
+	}
+	baseURL = strings.TrimSuffix(baseURL, "/")
 
 	// 使用正则表达式检测 baseURL 是否以版本号结尾（/v1, /v2, /v1beta, /v2alpha等）
 	versionPattern := regexp.MustCompile(`/v\d+[a-z]*$`)
@@ -138,9 +144,9 @@ func (p *ResponsesProvider) buildTargetURL(upstream *config.UpstreamConfig) stri
 		endpoint = "/chat/completions"
 	}
 
-	// 如果 baseURL 已包含版本号，直接拼接端点
+	// 如果 baseURL 已包含版本号或以#结尾，直接拼接端点
 	// 否则添加 /v1 再拼接端点
-	if hasVersionSuffix {
+	if hasVersionSuffix || skipVersionPrefix {
 		return baseURL + endpoint
 	}
 	return baseURL + "/v1" + endpoint
