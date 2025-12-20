@@ -542,6 +542,17 @@ const resumeChannel = async (channelId: number) => {
 const setPromotion = async (channel: Channel) => {
   try {
     const PROMOTION_DURATION = 300 // 5分钟
+
+    // 如果渠道是熔断状态，先恢复它
+    if (channel.status === 'suspended') {
+      if (props.channelType === 'messages') {
+        await api.resumeChannel(channel.index)
+      } else {
+        await api.resumeResponsesChannel(channel.index)
+      }
+      await setChannelStatus(channel.index, 'active')
+    }
+
     if (props.channelType === 'messages') {
       await api.setChannelPromotion(channel.index, PROMOTION_DURATION)
     } else {

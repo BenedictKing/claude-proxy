@@ -734,6 +734,27 @@ cd backend-go && make help
 - **📝 版本历史**: [CHANGELOG.md](CHANGELOG.md) - 完整变更记录和升级指南
 - **🚀 发布流程**: [RELEASE.md](RELEASE.md) - 维护者发布流程
 
+## 🖥️ 相关项目
+
+### ProxyCast - 桌面版凭证代理工具
+
+如果你需要把 **AI 客户端的免费额度**（如 Kiro、Gemini CLI、通义千问）转换成标准 OpenAI API 供其他工具使用，可以试试我们的桌面应用 **ProxyCast**。
+
+**适用场景**：
+- 🔄 把 Kiro 的免费 Claude Sonnet 4.5 额度用在 Claude Code 或 Cursor 上
+- 💰 把 Claude Code 剩余额度转给 Cherry Studio 或自己的 AI Agent 项目
+- 🎯 统一管理多个 AI 账号，哪个有额度就用哪个
+
+**核心特性**：
+- 支持 Kiro、Gemini CLI、通义千问、OpenAI Codex、Vertex AI 等多种 Provider
+- 友好的图形界面，一键加载凭证、启动服务
+- 自动检测凭证变化、Token 过期自动刷新
+- 配额超限自动切换到下一个可用凭证
+
+📦 **下载地址**: [ProxyCast Releases](https://github.com/aiclientproxy/proxycast/releases)
+
+📚 **项目文档**: [refs/proxycast](refs/proxycast/) | [在线文档](https://proxycast.pages.dev/)
+
 ## 📄 许可证
 
 本项目基于 MIT 许可证开源 - 查看 [LICENSE](LICENSE) 文件了解详情。
