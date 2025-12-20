@@ -96,16 +96,13 @@ func isPollingEndpoint(path string) bool {
 	// 移除尾部斜杠
 	path = strings.TrimSuffix(path, "/")
 
-	pollingPaths := []string{
+	// 使用前缀匹配，与 FilteredLogger 保持一致
+	pollingPrefixes := []string{
 		"/api/channels",
-		"/api/channels/metrics",
-		"/api/channels/scheduler/stats",
 		"/api/responses/channels",
-		"/api/responses/channels/metrics",
-		"/api/responses/channels/scheduler/stats",
 	}
-	for _, p := range pollingPaths {
-		if path == p {
+	for _, prefix := range pollingPrefixes {
+		if strings.HasPrefix(path, prefix) {
 			return true
 		}
 	}
