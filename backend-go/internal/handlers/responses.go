@@ -141,6 +141,19 @@ func handleMultiChannelResponses(
 
 	log.Printf("💥 [多渠道/Responses] 所有渠道都失败了")
 
+	// Fuzzy 模式下返回通用错误，不透传上游详情
+	if cfgManager.GetFuzzyModeEnabled() {
+		c.JSON(503, gin.H{
+			"type": "error",
+			"error": gin.H{
+				"type":    "service_unavailable",
+				"message": "All upstream channels are currently unavailable",
+			},
+		})
+		return
+	}
+
+	// 非 Fuzzy 模式：透传最后一个错误的详情
 	if lastFailoverError != nil {
 		status := lastFailoverError.Status
 		if status == 0 {
@@ -247,7 +260,7 @@ func tryResponsesChannelWithAllKeys(
 			resp.Body.Close()
 			respBodyBytes = utils.DecompressGzipIfNeeded(resp, respBodyBytes)
 
-			shouldFailover, isQuotaRelated := shouldRetryWithNextKey(resp.StatusCode, respBodyBytes)
+			shouldFailover, isQuotaRelated := shouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled())
 			if shouldFailover {
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey)
@@ -396,7 +409,7 @@ func handleSingleChannelResponses(
 			resp.Body.Close()
 			respBodyBytes = utils.DecompressGzipIfNeeded(resp, respBodyBytes)
 
-			shouldFailover, isQuotaRelated := shouldRetryWithNextKey(resp.StatusCode, respBodyBytes)
+			shouldFailover, isQuotaRelated := shouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled())
 			if shouldFailover {
 				lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)
 				failedKeys[apiKey] = true
@@ -473,6 +486,19 @@ func handleSingleChannelResponses(
 
 	log.Printf("💥 所有 Responses API密钥都失败了")
 
+	// Fuzzy 模式下返回通用错误，不透传上游详情
+	if cfgManager.GetFuzzyModeEnabled() {
+		c.JSON(503, gin.H{
+			"type": "error",
+			"error": gin.H{
+				"type":    "service_unavailable",
+				"message": "All upstream channels are currently unavailable",
+			},
+		})
+		return
+	}
+
+	// 非 Fuzzy 模式：透传最后一个错误的详情
 	if lastFailoverError != nil {
 		status := lastFailoverError.Status
 		if status == 0 {
@@ -858,7 +884,7 @@ func handleSingleChannelCompact(
 			break
 		}
 
-		success, compactErr := tryCompactWithKey(c, upstream, apiKey, bodyBytes, envCfg)
+		success, compactErr := tryCompactWithKey(c, upstream, apiKey, bodyBytes, envCfg, cfgManager)
 		if success {
 			return
 		}
@@ -877,6 +903,19 @@ func handleSingleChannelCompact(
 	}
 
 	// 所有 key 都失败
+	// Fuzzy 模式下返回通用错误，不透传上游详情
+	if cfgManager.GetFuzzyModeEnabled() {
+		c.JSON(503, gin.H{
+			"type": "error",
+			"error": gin.H{
+				"type":    "service_unavailable",
+				"message": "All upstream channels are currently unavailable",
+			},
+		})
+		return
+	}
+
+	// 非 Fuzzy 模式：透传最后一个错误的详情
 	if lastErr != nil {
 		c.Data(lastErr.status, "application/json", lastErr.body)
 	} else {
@@ -925,6 +964,19 @@ func handleMultiChannelCompact(
 	}
 
 	// 所有渠道都失败
+	// Fuzzy 模式下返回通用错误，不透传上游详情
+	if cfgManager.GetFuzzyModeEnabled() {
+		c.JSON(503, gin.H{
+			"type": "error",
+			"error": gin.H{
+				"type":    "service_unavailable",
+				"message": "All upstream channels are currently unavailable",
+			},
+		})
+		return
+	}
+
+	// 非 Fuzzy 模式：透传最后一个错误的详情
 	if lastErr != nil {
 		c.Data(lastErr.status, "application/json", lastErr.body)
 	} else {
@@ -978,7 +1030,7 @@ func tryCompactChannelWithAllKeys(
 			continue
 		}
 
-		success, compactErr := tryCompactWithKey(c, upstream, apiKey, bodyBytes, envCfg)
+		success, compactErr := tryCompactWithKey(c, upstream, apiKey, bodyBytes, envCfg, cfgManager)
 		if success {
 			return true, apiKey, nil
 		}
@@ -1001,7 +1053,7 @@ func tryCompactChannelWithAllKeys(
 }
 
 // tryCompactWithKey 使用单个 key 尝试 compact 请求
-func tryCompactWithKey(c *gin.Context, upstream *config.UpstreamConfig, apiKey string, bodyBytes []byte, envCfg *config.EnvConfig) (bool, *compactError) {
+func tryCompactWithKey(c *gin.Context, upstream *config.UpstreamConfig, apiKey string, bodyBytes []byte, envCfg *config.EnvConfig, cfgManager *config.ConfigManager) (bool, *compactError) {
 	targetURL := buildCompactURL(upstream)
 	req, err := http.NewRequestWithContext(c.Request.Context(), "POST", targetURL, bytes.NewReader(bodyBytes))
 	if err != nil {
@@ -1025,7 +1077,7 @@ func tryCompactWithKey(c *gin.Context, upstream *config.UpstreamConfig, apiKey s
 
 	// 判断是否需要故障转移（复用现有逻辑）
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		shouldFailover, _ := shouldRetryWithNextKey(resp.StatusCode, respBody)
+		shouldFailover, _ := shouldRetryWithNextKey(resp.StatusCode, respBody, cfgManager.GetFuzzyModeEnabled())
 		return false, &compactError{status: resp.StatusCode, body: respBody, shouldFailover: shouldFailover}
 	}
 

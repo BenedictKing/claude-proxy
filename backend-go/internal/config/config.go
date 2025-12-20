@@ -60,6 +60,9 @@ type Config struct {
 	ResponsesUpstream        []UpstreamConfig `json:"responsesUpstream"`
 	CurrentResponsesUpstream int              `json:"currentResponsesUpstream,omitempty"` // 已废弃：旧格式兼容用
 	ResponsesLoadBalance     string           `json:"responsesLoadBalance"`
+
+	// Fuzzy 模式：启用时模糊处理错误，所有非 2xx 错误都尝试 failover
+	FuzzyModeEnabled bool `json:"fuzzyModeEnabled"`
 }
 
 // FailedKey 失败密钥记录
@@ -135,16 +138,22 @@ func (cm *ConfigManager) loadConfig() error {
 		return err
 	}
 
-	// 兼容旧配置
-	cm.applyConfigDefaults()
+	// 兼容旧配置：检查 FuzzyModeEnabled 字段是否存在
+	// 如果不存在，默认设为 true（新功能默认启用）
+	needSaveDefaults := cm.applyConfigDefaults(data)
 
 	// 兼容旧格式：检测是否需要迁移
-	if cm.migrateOldFormat() {
+	needMigration := cm.migrateOldFormat()
+
+	// 如果有默认值迁移或格式迁移，保存配置
+	if needSaveDefaults || needMigration {
 		if err := cm.saveConfigLocked(cm.config); err != nil {
 			log.Printf("保存迁移后的配置失败: %v", err)
 			return err
 		}
-		log.Printf("配置迁移完成")
+		if needMigration {
+			log.Printf("配置迁移完成")
+		}
 	}
 
 	// 自检：没有配置 key 的渠道自动暂停
@@ -167,6 +176,7 @@ func (cm *ConfigManager) createDefaultConfig() error {
 		ResponsesUpstream:        []UpstreamConfig{},
 		CurrentResponsesUpstream: 0,
 		ResponsesLoadBalance:     "failover",
+		FuzzyModeEnabled:         true, // 默认启用 Fuzzy 模式
 	}
 
 	if err := os.MkdirAll(filepath.Dir(cm.configFile), 0755); err != nil {
@@ -177,13 +187,32 @@ func (cm *ConfigManager) createDefaultConfig() error {
 }
 
 // applyConfigDefaults 应用配置默认值
-func (cm *ConfigManager) applyConfigDefaults() {
+// rawJSON: 原始 JSON 数据，用于检测字段是否存在
+// 返回: 是否有字段需要迁移（需要保存配置）
+func (cm *ConfigManager) applyConfigDefaults(rawJSON []byte) bool {
+	needSave := false
+
 	if cm.config.LoadBalance == "" {
 		cm.config.LoadBalance = "failover"
 	}
 	if cm.config.ResponsesLoadBalance == "" {
 		cm.config.ResponsesLoadBalance = cm.config.LoadBalance
 	}
+
+	// FuzzyModeEnabled 默认值处理：
+	// 由于 bool 零值是 false，无法区分"用户设为 false"和"字段不存在"
+	// 通过检查原始 JSON 是否包含该字段来判断
+	var rawMap map[string]json.RawMessage
+	if err := json.Unmarshal(rawJSON, &rawMap); err == nil {
+		if _, exists := rawMap["fuzzyModeEnabled"]; !exists {
+			// 字段不存在，设为默认值 true
+			cm.config.FuzzyModeEnabled = true
+			needSave = true
+			log.Printf("配置迁移: FuzzyModeEnabled 字段不存在，设为默认值 true")
+		}
+	}
+
+	return needSave
 }
 
 // migrateOldFormat 迁移旧格式配置，返回是否有迁移
@@ -1429,4 +1458,32 @@ func (cm *ConfigManager) GetPromotedResponsesChannel() (int, bool) {
 		}
 	}
 	return -1, false
+}
+
+// ============== Fuzzy 模式相关方法 ==============
+
+// GetFuzzyModeEnabled 获取 Fuzzy 模式状态
+func (cm *ConfigManager) GetFuzzyModeEnabled() bool {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.config.FuzzyModeEnabled
+}
+
+// SetFuzzyModeEnabled 设置 Fuzzy 模式状态
+func (cm *ConfigManager) SetFuzzyModeEnabled(enabled bool) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	cm.config.FuzzyModeEnabled = enabled
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	status := "关闭"
+	if enabled {
+		status = "启用"
+	}
+	log.Printf("Fuzzy 模式已%s", status)
+	return nil
 }

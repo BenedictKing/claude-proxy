@@ -222,6 +222,28 @@
           </div>
 
           <div class="action-bar-right">
+            <!-- Fuzzy 模式切换按钮 -->
+            <v-tooltip location="bottom">
+              <template v-slot:activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  variant="tonal"
+                  size="large"
+                  @click="toggleFuzzyMode"
+                  :loading="fuzzyModeLoading"
+                  :disabled="fuzzyModeLoadError"
+                  :color="fuzzyModeLoadError ? 'error' : (fuzzyModeEnabled ? 'warning' : 'default')"
+                  class="action-btn mr-2"
+                >
+                  <v-icon start size="20">
+                    {{ fuzzyModeLoadError ? 'mdi-alert-circle-outline' : (fuzzyModeEnabled ? 'mdi-shield-refresh' : 'mdi-shield-off-outline') }}
+                  </v-icon>
+                  Fuzzy
+                </v-btn>
+              </template>
+              <span>{{ fuzzyModeLoadError ? '加载失败，请刷新页面' : (fuzzyModeEnabled ? 'Fuzzy 模式已启用：模糊处理错误，自动尝试所有渠道' : 'Fuzzy 模式已关闭：精确处理错误，透传上游响应') }}</span>
+            </v-tooltip>
+
             <!-- 负载均衡选择 -->
             <v-menu>
               <template v-slot:activator="{ props }">
@@ -399,6 +421,10 @@ const selectedChannelForKey = ref<number>(-1)
 const newApiKey = ref('')
 const isPingingAll = ref(false)
 const darkModePreference = ref<'light' | 'dark' | 'auto'>('auto')
+
+// Fuzzy 模式状态
+const fuzzyModeEnabled = ref(true)
+const fuzzyModeLoading = ref(false)
 
 // 版本信息
 const versionInfo = ref<VersionInfo>({
@@ -685,6 +711,39 @@ const updateLoadBalance = async (strategy: string) => {
   }
 }
 
+// Fuzzy 模式管理
+const fuzzyModeLoadError = ref(false) // 加载失败标记
+
+const loadFuzzyModeStatus = async () => {
+  fuzzyModeLoadError.value = false
+  try {
+    const { fuzzyModeEnabled: enabled } = await api.getFuzzyMode()
+    fuzzyModeEnabled.value = enabled
+  } catch (e) {
+    console.error('Failed to load fuzzy mode status:', e)
+    fuzzyModeLoadError.value = true
+    // 加载失败时不使用默认值，保持 UI 显示未知状态
+    showToast('加载 Fuzzy 模式状态失败，请刷新页面重试', 'warning')
+  }
+}
+
+const toggleFuzzyMode = async () => {
+  if (fuzzyModeLoadError.value) {
+    showToast('Fuzzy 模式状态未知，请先刷新页面', 'warning')
+    return
+  }
+  fuzzyModeLoading.value = true
+  try {
+    await api.setFuzzyMode(!fuzzyModeEnabled.value)
+    fuzzyModeEnabled.value = !fuzzyModeEnabled.value
+    showToast(`Fuzzy 模式已${fuzzyModeEnabled.value ? '启用' : '关闭'}`, 'success')
+  } catch (e) {
+    showToast(`切换 Fuzzy 模式失败: ${e instanceof Error ? e.message : '未知错误'}`, 'error')
+  } finally {
+    fuzzyModeLoading.value = false
+  }
+}
+
 // 主题管理
 const toggleDarkMode = () => {
   const newMode = darkModePreference.value === 'dark' ? 'light' : 'dark'
@@ -939,6 +998,8 @@ onMounted(async () => {
   if (authenticated) {
     // 加载渠道数据
     await refreshChannels()
+    // 加载 Fuzzy 模式状态
+    await loadFuzzyModeStatus()
     // 启动自动刷新
     startAutoRefresh()
   }

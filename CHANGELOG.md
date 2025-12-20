@@ -4,9 +4,18 @@
 
 ---
 
-## [Unreleased]
+## [v2.1.33] - 2025-12-20
 
 ### ✨ 新功能
+
+- **新增 Fuzzy Mode（模糊模式）错误处理开关**
+  - 默认启用，可通过前端实时切换
+  - 启用时：所有非 2xx 错误自动触发 failover，尝试下一个渠道/密钥
+  - 启用时：所有渠道失败后返回通用 503 错误，不透传上游错误详情
+  - 关闭时：保持原有精确错误分类和透传行为
+  - 后端新增 `/api/settings/fuzzy-mode` GET/PUT 端点
+  - 前端新增 Fuzzy 模式切换按钮（位于负载均衡策略按钮左侧）
+  - 涉及文件：`backend-go/internal/config/config.go`, `backend-go/internal/handlers/config.go`, `backend-go/internal/handlers/proxy.go`, `backend-go/internal/handlers/responses.go`, `frontend/src/App.vue`, `frontend/src/services/api.ts`
 
 - **新增渠道指标历史数据 API 和时间序列图表**
   - 后端新增 `/api/channels/metrics/history` 和 `/api/responses/channels/metrics/history` 端点

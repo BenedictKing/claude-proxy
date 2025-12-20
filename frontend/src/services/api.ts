@@ -409,6 +409,21 @@ class ApiService {
     })
   }
 
+  // ============== Fuzzy 模式 API ==============
+
+  // 获取 Fuzzy 模式状态
+  async getFuzzyMode(): Promise<{ fuzzyModeEnabled: boolean }> {
+    return this.request('/settings/fuzzy-mode')
+  }
+
+  // 设置 Fuzzy 模式状态
+  async setFuzzyMode(enabled: boolean): Promise<void> {
+    await this.request('/settings/fuzzy-mode', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled })
+    })
+  }
+
   // ============== 历史指标 API ==============
 
   // 获取 Messages 渠道历史指标（用于时间序列图表）

@@ -144,6 +144,10 @@ func main() {
 		// 负载均衡
 		apiGroup.PUT("/loadbalance", handlers.UpdateLoadBalance(cfgManager))
 
+		// Fuzzy 模式设置
+		apiGroup.GET("/settings/fuzzy-mode", handlers.GetFuzzyMode(cfgManager))
+		apiGroup.PUT("/settings/fuzzy-mode", handlers.SetFuzzyMode(cfgManager))
+
 		// Ping测试
 		apiGroup.GET("/ping/:id", handlers.PingChannel(cfgManager))
 		apiGroup.GET("/ping", handlers.PingAllChannels(cfgManager))

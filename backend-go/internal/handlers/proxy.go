@@ -148,6 +148,19 @@ func handleMultiChannelProxy(
 	// 所有渠道都失败
 	log.Printf("💥 [多渠道] 所有渠道都失败了")
 
+	// Fuzzy 模式下返回通用错误，不透传上游详情
+	if cfgManager.GetFuzzyModeEnabled() {
+		c.JSON(503, gin.H{
+			"type": "error",
+			"error": gin.H{
+				"type":    "service_unavailable",
+				"message": "All upstream channels are currently unavailable",
+			},
+		})
+		return
+	}
+
+	// 非 Fuzzy 模式：透传最后一个错误的详情
 	if lastFailoverError != nil {
 		status := lastFailoverError.Status
 		if status == 0 {
@@ -264,7 +277,7 @@ func tryChannelWithAllKeys(
 			resp.Body.Close()
 			respBodyBytes = utils.DecompressGzipIfNeeded(resp, respBodyBytes)
 
-			shouldFailover, isQuotaRelated := shouldRetryWithNextKey(resp.StatusCode, respBodyBytes)
+			shouldFailover, isQuotaRelated := shouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled())
 			if shouldFailover {
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey)
@@ -467,7 +480,7 @@ func handleSingleChannelProxy(
 			resp.Body.Close()
 			respBodyBytes = utils.DecompressGzipIfNeeded(resp, respBodyBytes)
 
-			shouldFailover, isQuotaRelated := shouldRetryWithNextKey(resp.StatusCode, respBodyBytes)
+			shouldFailover, isQuotaRelated := shouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled())
 			if shouldFailover {
 				lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)
 				failedKeys[apiKey] = true
@@ -554,6 +567,19 @@ func handleSingleChannelProxy(
 	// 所有密钥都失败了
 	log.Printf("💥 所有API密钥都失败了")
 
+	// Fuzzy 模式下返回通用错误，不透传上游详情
+	if cfgManager.GetFuzzyModeEnabled() {
+		c.JSON(503, gin.H{
+			"type": "error",
+			"error": gin.H{
+				"type":    "service_unavailable",
+				"message": "All upstream channels are currently unavailable",
+			},
+		})
+		return
+	}
+
+	// 非 Fuzzy 模式：透传最后一个错误的详情
 	if lastFailoverError != nil {
 		status := lastFailoverError.Status
 		if status == 0 {
@@ -983,7 +1009,9 @@ func logSynthesizedContent(ctx *streamContext) {
 // shouldRetryWithNextKey 判断是否应该使用下一个密钥重试
 // 返回: (shouldFailover bool, isQuotaRelated bool)
 //
-// HTTP 状态码分类策略：
+// fuzzyMode: 启用时，所有非 2xx 错误都触发 failover（模糊处理错误类型）
+//
+// HTTP 状态码分类策略（非 fuzzy 模式）：
 //   - 4xx 客户端错误：部分应触发 failover（密钥/配额问题）
 //   - 5xx 服务端错误：应触发 failover（上游临时故障）
 //   - 2xx/3xx：不应触发 failover（成功或重定向）
@@ -991,7 +1019,27 @@ func logSynthesizedContent(ctx *streamContext) {
 // isQuotaRelated 标记用于调度器优先级调整：
 //   - true: 额度/配额相关，降低密钥优先级
 //   - false: 临时错误，不影响优先级
-func shouldRetryWithNextKey(statusCode int, bodyBytes []byte) (bool, bool) {
+func shouldRetryWithNextKey(statusCode int, bodyBytes []byte, fuzzyMode bool) (bool, bool) {
+	if fuzzyMode {
+		return shouldRetryWithNextKeyFuzzy(statusCode)
+	}
+	return shouldRetryWithNextKeyNormal(statusCode, bodyBytes)
+}
+
+// shouldRetryWithNextKeyFuzzy Fuzzy 模式：所有非 2xx 错误都尝试 failover
+func shouldRetryWithNextKeyFuzzy(statusCode int) (bool, bool) {
+	// 成功响应不 failover
+	if statusCode >= 200 && statusCode < 300 {
+		return false, false
+	}
+
+	// Fuzzy 模式：所有非 2xx 错误都尝试 failover
+	isQuotaRelated := statusCode == 402 || statusCode == 429
+	return true, isQuotaRelated
+}
+
+// shouldRetryWithNextKeyNormal 原有的精确错误分类逻辑
+func shouldRetryWithNextKeyNormal(statusCode int, bodyBytes []byte) (bool, bool) {
 	// 第一层：基于状态码的快速分类
 	shouldFailover, isQuotaRelated := classifyByStatusCode(statusCode)
 	if shouldFailover {

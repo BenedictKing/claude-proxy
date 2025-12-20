@@ -357,12 +357,126 @@ func TestShouldRetryWithNextKey(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			bodyBytes, _ := json.Marshal(tt.body)
-			gotFailover, gotQuota := shouldRetryWithNextKey(tt.statusCode, bodyBytes)
+			// 测试非 Fuzzy 模式（精确错误分类）
+			gotFailover, gotQuota := shouldRetryWithNextKey(tt.statusCode, bodyBytes, false)
 			if gotFailover != tt.wantFailover {
-				t.Errorf("shouldRetryWithNextKey(%d, ...) failover = %v, want %v", tt.statusCode, gotFailover, tt.wantFailover)
+				t.Errorf("shouldRetryWithNextKey(%d, ..., false) failover = %v, want %v", tt.statusCode, gotFailover, tt.wantFailover)
 			}
 			if gotQuota != tt.wantQuota {
-				t.Errorf("shouldRetryWithNextKey(%d, ...) quota = %v, want %v", tt.statusCode, gotQuota, tt.wantQuota)
+				t.Errorf("shouldRetryWithNextKey(%d, ..., false) quota = %v, want %v", tt.statusCode, gotQuota, tt.wantQuota)
+			}
+		})
+	}
+}
+
+// TestShouldRetryWithNextKeyFuzzyMode 测试 Fuzzy 模式下的错误分类
+// Fuzzy 模式：所有非 2xx 错误都触发 failover
+func TestShouldRetryWithNextKeyFuzzyMode(t *testing.T) {
+	tests := []struct {
+		name         string
+		statusCode   int
+		wantFailover bool
+		wantQuota    bool
+	}{
+		// 2xx 成功响应不 failover
+		{
+			name:         "200 OK - no failover",
+			statusCode:   200,
+			wantFailover: false,
+			wantQuota:    false,
+		},
+		{
+			name:         "201 Created - no failover",
+			statusCode:   201,
+			wantFailover: false,
+			wantQuota:    false,
+		},
+		// 3xx 重定向在 Fuzzy 模式下触发 failover
+		{
+			name:         "301 Redirect - failover in fuzzy mode",
+			statusCode:   301,
+			wantFailover: true,
+			wantQuota:    false,
+		},
+		{
+			name:         "302 Found - failover in fuzzy mode",
+			statusCode:   302,
+			wantFailover: true,
+			wantQuota:    false,
+		},
+		// 4xx 客户端错误在 Fuzzy 模式下都触发 failover
+		{
+			name:         "400 Bad Request - failover in fuzzy mode",
+			statusCode:   400,
+			wantFailover: true,
+			wantQuota:    false,
+		},
+		{
+			name:         "401 Unauthorized - failover in fuzzy mode",
+			statusCode:   401,
+			wantFailover: true,
+			wantQuota:    false,
+		},
+		{
+			name:         "402 Payment Required - failover with quota",
+			statusCode:   402,
+			wantFailover: true,
+			wantQuota:    true, // 配额相关
+		},
+		{
+			name:         "403 Forbidden - failover in fuzzy mode",
+			statusCode:   403,
+			wantFailover: true,
+			wantQuota:    false,
+		},
+		{
+			name:         "404 Not Found - failover in fuzzy mode",
+			statusCode:   404,
+			wantFailover: true,
+			wantQuota:    false,
+		},
+		{
+			name:         "422 Unprocessable Entity - failover in fuzzy mode",
+			statusCode:   422,
+			wantFailover: true,
+			wantQuota:    false,
+		},
+		{
+			name:         "429 Too Many Requests - failover with quota",
+			statusCode:   429,
+			wantFailover: true,
+			wantQuota:    true, // 配额相关
+		},
+		// 5xx 服务端错误在 Fuzzy 模式下触发 failover
+		{
+			name:         "500 Internal Server Error - failover in fuzzy mode",
+			statusCode:   500,
+			wantFailover: true,
+			wantQuota:    false,
+		},
+		{
+			name:         "502 Bad Gateway - failover in fuzzy mode",
+			statusCode:   502,
+			wantFailover: true,
+			wantQuota:    false,
+		},
+		{
+			name:         "503 Service Unavailable - failover in fuzzy mode",
+			statusCode:   503,
+			wantFailover: true,
+			wantQuota:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 测试 Fuzzy 模式（所有非 2xx 都 failover）
+			gotFailover, gotQuota := shouldRetryWithNextKey(tt.statusCode, nil, true)
+			if gotFailover != tt.wantFailover {
+				t.Errorf("shouldRetryWithNextKey(%d, nil, true) failover = %v, want %v", tt.statusCode, gotFailover, tt.wantFailover)
+			}
+			if gotQuota != tt.wantQuota {
+				t.Errorf("shouldRetryWithNextKey(%d, nil, true) quota = %v, want %v", tt.statusCode, gotQuota, tt.wantQuota)
 			}
 		})
 	}
