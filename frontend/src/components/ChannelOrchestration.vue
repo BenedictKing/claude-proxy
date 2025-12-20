@@ -233,6 +233,7 @@
           <v-expand-transition>
             <div v-if="expandedChannelIndex === element.index" class="channel-chart-wrapper">
               <KeyTrendChart
+                :key="`chart-${channelType}-${element.index}`"
                 :channel-id="element.index"
                 :is-responses="channelType === 'responses'"
                 @close="expandedChannelIndex = null"
@@ -400,11 +401,25 @@ const isMultiChannelMode = computed(() => {
 })
 
 // 初始化活跃渠道列表 - active + suspended 都参与故障转移序列
+// 优化：只在结构变化时更新，避免频繁重建导致子组件销毁
 const initActiveChannels = () => {
-  const active = props.channels
+  const newActive = props.channels
     .filter(ch => ch.status !== 'disabled')
     .sort((a, b) => (a.priority ?? a.index) - (b.priority ?? b.index))
-  activeChannels.value = [...active]
+
+  // 检查是否需要更新：比较 index 列表是否变化
+  const currentIndexes = activeChannels.value.map(ch => ch.index).join(',')
+  const newIndexes = newActive.map(ch => ch.index).join(',')
+
+  if (currentIndexes !== newIndexes) {
+    // 结构变化（新增/删除/重排），需要重建数组
+    activeChannels.value = [...newActive]
+  } else {
+    // 结构未变，只更新现有对象的属性（保持引用不变）
+    activeChannels.value.forEach((ch, i) => {
+      Object.assign(ch, newActive[i])
+    })
+  }
 }
 
 // 监听 channels 变化

@@ -54,6 +54,7 @@
     <!-- 图表区域 -->
     <div v-else class="chart-area">
       <apexchart
+        ref="chartRef"
         type="area"
         height="280"
         :options="chartOptions"
@@ -125,8 +126,11 @@ const historyData = ref<ChannelKeyMetricsHistoryResponse | null>(null)
 const showError = ref(false)
 const errorMessage = ref('')
 
-// Auto refresh timer (1 minute interval)
-const AUTO_REFRESH_INTERVAL = 60 * 1000
+// Chart ref for updateSeries
+const chartRef = ref<InstanceType<typeof VueApexCharts> | null>(null)
+
+// Auto refresh timer (2 seconds interval, same as global refresh)
+const AUTO_REFRESH_INTERVAL = 2000
 let autoRefreshTimer: ReturnType<typeof setInterval> | null = null
 
 const startAutoRefresh = () => {
@@ -134,7 +138,7 @@ const startAutoRefresh = () => {
   autoRefreshTimer = setInterval(() => {
     // Skip if already loading to prevent concurrent requests
     if (!isLoading.value) {
-      refreshData()
+      refreshData(true) // true = auto refresh, use updateSeries
     }
   }, AUTO_REFRESH_INTERVAL)
 }
@@ -262,14 +266,14 @@ const chartOptions = computed(() => {
   }
 })
 
-// Computed: chart series data
-const chartSeries = computed(() => {
-  if (!historyData.value?.keys) return []
+// Build chart series from data
+const buildChartSeries = (data: ChannelKeyMetricsHistoryResponse | null) => {
+  if (!data?.keys) return []
 
   const mode = selectedView.value
   const result: { name: string; data: { x: number; y: number }[] }[] = []
 
-  historyData.value.keys.forEach((keyData, keyIndex) => {
+  data.keys.forEach((keyData, keyIndex) => {
     const color = keyColors[keyIndex % keyColors.length]
 
     if (mode === 'traffic') {
@@ -317,7 +321,10 @@ const chartSeries = computed(() => {
   })
 
   return result
-})
+}
+
+// Computed: chart series data
+const chartSeries = computed(() => buildChartSeries(historyData.value))
 
 // Computed: Key 快照数据（当前时间窗口的汇总）
 const keySnapshots = computed(() => {
@@ -463,14 +470,34 @@ const getChartColors = (): string[] => {
 }
 
 // Fetch data
-const refreshData = async () => {
-  isLoading.value = true
+const refreshData = async (isAutoRefresh = false) => {
+  // Auto refresh uses silent update without loading state
+  if (!isAutoRefresh) {
+    isLoading.value = true
+  }
   errorMessage.value = ''
   try {
+    let newData: ChannelKeyMetricsHistoryResponse
     if (props.isResponses) {
-      historyData.value = await api.getResponsesChannelKeyMetricsHistory(props.channelId, selectedDuration.value)
+      newData = await api.getResponsesChannelKeyMetricsHistory(props.channelId, selectedDuration.value)
     } else {
-      historyData.value = await api.getChannelKeyMetricsHistory(props.channelId, selectedDuration.value)
+      newData = await api.getChannelKeyMetricsHistory(props.channelId, selectedDuration.value)
+    }
+
+    // Check if we can use updateSeries (same keys structure)
+    const canUpdateInPlace = isAutoRefresh &&
+      chartRef.value &&
+      historyData.value?.keys?.length === newData.keys?.length &&
+      historyData.value?.keys?.every((k, i) => k.keyMask === newData.keys[i].keyMask)
+
+    if (canUpdateInPlace) {
+      // Update data in place and use updateSeries for smooth update
+      historyData.value = newData
+      const newSeries = buildChartSeries(newData)
+      chartRef.value.updateSeries(newSeries, false) // false = no animation reset
+    } else {
+      // Full update (initial load or structure changed)
+      historyData.value = newData
     }
   } catch (error) {
     console.error('Failed to fetch key metrics history:', error)
@@ -478,7 +505,9 @@ const refreshData = async () => {
     showError.value = true
     historyData.value = null
   } finally {
-    isLoading.value = false
+    if (!isAutoRefresh) {
+      isLoading.value = false
+    }
   }
 }
 

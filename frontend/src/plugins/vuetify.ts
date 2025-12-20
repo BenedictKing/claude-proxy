@@ -94,6 +94,7 @@ import {
   mdiShieldOffOutline,
   mdiAlertCircleOutline,
   mdiChartLine,
+  mdiChartTimelineVariant,
   mdiDatabase,
 } from '@mdi/js'
 
@@ -238,6 +239,7 @@ const iconMap: Record<string, string> = {
 
   // 图表与数据
   'chart-line': mdiChartLine,
+  'chart-timeline-variant': mdiChartTimelineVariant,
   'database': mdiDatabase,
 }
 
