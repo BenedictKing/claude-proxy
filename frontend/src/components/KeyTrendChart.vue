@@ -8,25 +8,9 @@
       </template>
     </v-snackbar>
 
-    <!-- 头部：视图切换 + 时间范围选择 -->
+    <!-- 头部：时间范围选择（左） + 视图切换（右） -->
     <div class="chart-header d-flex align-center justify-space-between mb-3">
       <div class="d-flex align-center ga-2">
-        <!-- 视图切换按钮 -->
-        <v-btn-toggle v-model="selectedView" mandatory density="compact" variant="outlined" divided :disabled="isLoading">
-          <v-btn value="traffic" size="x-small">
-            <v-icon size="small" class="mr-1">mdi-chart-line</v-icon>
-            流量
-          </v-btn>
-          <v-btn value="tokens" size="x-small">
-            <v-icon size="small" class="mr-1">mdi-chart-line</v-icon>
-            Token I/O
-          </v-btn>
-          <v-btn value="cache" size="x-small">
-            <v-icon size="small" class="mr-1">mdi-database</v-icon>
-            缓存 R/W
-          </v-btn>
-        </v-btn-toggle>
-
         <!-- 时间范围选择器 -->
         <v-btn-toggle v-model="selectedDuration" mandatory density="compact" variant="outlined" divided :disabled="isLoading">
           <v-btn value="1h" size="x-small">1小时</v-btn>
@@ -38,6 +22,22 @@
           <v-icon size="small">mdi-refresh</v-icon>
         </v-btn>
       </div>
+
+      <!-- 视图切换按钮 -->
+      <v-btn-toggle v-model="selectedView" mandatory density="compact" variant="outlined" divided :disabled="isLoading">
+        <v-btn value="traffic" size="x-small">
+          <v-icon size="small" class="mr-1">mdi-chart-line</v-icon>
+          流量
+        </v-btn>
+        <v-btn value="tokens" size="x-small">
+          <v-icon size="small" class="mr-1">mdi-chart-line</v-icon>
+          Token I/O
+        </v-btn>
+        <v-btn value="cache" size="x-small">
+          <v-icon size="small" class="mr-1">mdi-database</v-icon>
+          缓存 R/W
+        </v-btn>
+      </v-btn-toggle>
     </div>
 
     <!-- Loading state -->
@@ -77,17 +77,12 @@
                 <div class="key-color-dot" :style="{ backgroundColor: snapshot.color }" />
                 <span class="text-caption font-weight-medium">{{ snapshot.keyMask }}</span>
               </div>
-              <div class="snapshot-stats">
-                <div class="text-caption">
-                  <span class="text-medium-emphasis">RPM:</span>
-                  <span class="ml-1">{{ snapshot.rpm.toFixed(1) }}</span>
-                </div>
+              <!-- 只在有 Token 数据时显示 -->
+              <div v-if="snapshot.inputTokens > 0 || snapshot.outputTokens > 0" class="snapshot-stats">
                 <div class="text-caption">
                   <span class="text-medium-emphasis">In:</span>
                   <span class="ml-1">{{ formatNumber(snapshot.inputTokens) }}</span>
-                </div>
-                <div class="text-caption">
-                  <span class="text-medium-emphasis">Out:</span>
+                  <span class="text-medium-emphasis ml-2">Out:</span>
                   <span class="ml-1">{{ formatNumber(snapshot.outputTokens) }}</span>
                 </div>
               </div>
@@ -124,7 +119,7 @@ const isDark = computed(() => theme.global.current.value.dark)
 
 // State
 const selectedView = ref<ViewMode>('traffic')
-const selectedDuration = ref<Duration>('6h')
+const selectedDuration = ref<Duration>('1h')
 const isLoading = ref(false)
 const historyData = ref<ChannelKeyMetricsHistoryResponse | null>(null)
 const showError = ref(false)
@@ -159,13 +154,14 @@ const chartOptions = computed(() => {
     }
   }
 
-  // 双向模式（Tokens I/O, Cache R/W）需要负值范围
+  // 双向模式（Tokens I/O, Cache R/W）使用独立的正负范围
   if (mode === 'tokens' || mode === 'cache') {
-    const maxVal = getMaxAbsValue(mode)
+    const { maxPositive, maxNegative } = getMaxValues(mode)
     yaxisConfig = {
       ...yaxisConfig,
-      min: -maxVal * 1.1,
-      max: maxVal * 1.1
+      min: -maxNegative * 1.1,
+      max: maxPositive * 1.1,
+      tickAmount: 6
     }
   } else {
     yaxisConfig.min = 0
@@ -265,9 +261,12 @@ const chartSeries = computed(() => {
       })
     } else {
       // 双向模式：每个 key 创建两个 series（Input/Output 或 Read/Creation）
+      const inLabel = mode === 'tokens' ? 'Input' : 'Cache Read'
+      const outLabel = mode === 'tokens' ? 'Output' : 'Cache Write'
+
       // 正向（Input/Read）
       result.push({
-        name: `${keyData.keyMask} (In)`,
+        name: `${keyData.keyMask} ${inLabel}`,
         data: keyData.dataPoints.map(dp => {
           let value = 0
           if (mode === 'tokens') {
@@ -281,7 +280,7 @@ const chartSeries = computed(() => {
 
       // 负向（Output/Creation）- 使用虚线
       result.push({
-        name: `${keyData.keyMask} (Out)`,
+        name: `${keyData.keyMask} ${outLabel}`,
         data: keyData.dataPoints.map(dp => {
           let value = 0
           if (mode === 'tokens') {
@@ -319,18 +318,14 @@ const keySnapshots = computed(() => {
     const totalInput = windowData.reduce((sum, dp) => sum + dp.inputTokens, 0)
     const totalOutput = windowData.reduce((sum, dp) => sum + dp.outputTokens, 0)
     const totalRequests = windowData.reduce((sum, dp) => sum + dp.requestCount, 0)
-
-    // 计算 RPM（每分钟请求数）
-    const rpm = totalRequests / (windowMs / 60000)
+    const totalFailures = windowData.reduce((sum, dp) => sum + dp.failureCount, 0)
 
     // 检查是否有错误（失败率 > 10%）
-    const totalFailures = windowData.reduce((sum, dp) => sum + dp.failureCount, 0)
     const hasError = totalRequests > 0 && (totalFailures / totalRequests) > 0.1
 
     return {
       keyMask: keyData.keyMask,
       color,
-      rpm,
       inputTokens: totalInput,
       outputTokens: totalOutput,
       hasError
@@ -364,40 +359,37 @@ const formatTooltipValue = (val: number, mode: ViewMode): string => {
     case 'traffic':
       return `${Math.round(val)} 请求`
     case 'tokens':
-      if (val >= 0) {
-        return `${formatNumber(val)} Input`
-      } else {
-        return `${formatNumber(-val)} Output`
-      }
     case 'cache':
-      if (val >= 0) {
-        return `${formatNumber(val)} Cache Read`
-      } else {
-        return `${formatNumber(-val)} Cache Creation`
-      }
+      return formatNumber(Math.abs(val))
     default:
       return val.toString()
   }
 }
 
-// Helper: get maximum absolute value for y-axis scaling
-const getMaxAbsValue = (mode: ViewMode): number => {
-  if (!historyData.value?.keys) return 1000
+// Helper: get max values for positive and negative directions separately
+const getMaxValues = (mode: ViewMode): { maxPositive: number; maxNegative: number } => {
+  if (!historyData.value?.keys) return { maxPositive: 1000, maxNegative: 1000 }
 
-  let maxVal = 0
+  let maxPositive = 0
+  let maxNegative = 0
   for (const keyData of historyData.value.keys) {
     for (const dp of keyData.dataPoints) {
       switch (mode) {
         case 'tokens':
-          maxVal = Math.max(maxVal, dp.inputTokens, dp.outputTokens)
+          maxPositive = Math.max(maxPositive, dp.inputTokens)
+          maxNegative = Math.max(maxNegative, dp.outputTokens)
           break
         case 'cache':
-          maxVal = Math.max(maxVal, dp.cacheCreationTokens, dp.cacheReadTokens)
+          maxPositive = Math.max(maxPositive, dp.cacheReadTokens)
+          maxNegative = Math.max(maxNegative, dp.cacheCreationTokens)
           break
       }
     }
   }
-  return maxVal || 1000
+  return {
+    maxPositive: maxPositive || 1000,
+    maxNegative: maxNegative || 1000
+  }
 }
 
 // Helper: get duration in milliseconds

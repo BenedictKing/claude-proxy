@@ -333,15 +333,9 @@ func GetChannelMetricsHistory(metricsManager *metrics.MetricsManager, cfgManager
 				interval = time.Minute
 			}
 		} else {
-			// 根据 duration 自动选择合适的 interval
-			switch {
-			case duration <= time.Hour:
-				interval = 5 * time.Minute
-			case duration <= 6*time.Hour:
-				interval = 15 * time.Minute
-			default:
-				interval = time.Hour
-			}
+			// 统一使用 1 分钟聚合粒度，提供更精确的时间序列数据
+			// 1h = 60 points, 6h = 360 points, 24h = 1440 points
+			interval = time.Minute
 		}
 
 		cfg := cfgManager.GetConfig()
@@ -421,15 +415,9 @@ func GetChannelKeyMetricsHistory(metricsManager *metrics.MetricsManager, cfgMana
 				interval = time.Minute
 			}
 		} else {
-			// 根据 duration 自动选择合适的 interval
-			switch {
-			case duration <= time.Hour:
-				interval = 5 * time.Minute
-			case duration <= 6*time.Hour:
-				interval = 15 * time.Minute
-			default:
-				interval = time.Hour
-			}
+			// 统一使用 1 分钟聚合粒度，提供更精确的时间序列数据
+			// 1h = 60 points, 6h = 360 points, 24h = 1440 points
+			interval = time.Minute
 		}
 
 		// 解析 channel ID

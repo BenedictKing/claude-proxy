@@ -42,22 +42,28 @@
       >
         <template #item="{ element, index }">
           <div class="channel-item-wrapper">
-            <div class="channel-row" :class="{ 'is-suspended': element.status === 'suspended' }">
+            <div
+              class="channel-row"
+              :class="{ 'is-suspended': element.status === 'suspended' }"
+              @click="toggleChannelChart(element.index)"
+            >
             <!-- 拖拽手柄 -->
-            <div class="drag-handle">
+            <div class="drag-handle" @click.stop>
               <v-icon size="small" color="grey">mdi-drag-vertical</v-icon>
             </div>
 
             <!-- 优先级序号 -->
-            <div class="priority-number">
+            <div class="priority-number" @click.stop>
               <span class="text-caption font-weight-bold">{{ index + 1 }}</span>
             </div>
 
             <!-- 状态指示器 -->
-            <ChannelStatusBadge :status="element.status || 'active'" :metrics="getChannelMetrics(element.index)" />
+            <div @click.stop>
+              <ChannelStatusBadge :status="element.status || 'active'" :metrics="getChannelMetrics(element.index)" />
+            </div>
 
-            <!-- 渠道名称和描述 + 可点击空白区域 -->
-            <div class="channel-name" @click="toggleChannelChart(element.index)" title="点击查看使用趋势">
+            <!-- 渠道名称和描述 -->
+            <div class="channel-name">
               <span
                 class="font-weight-medium channel-name-link"
                 tabindex="0"
@@ -92,7 +98,7 @@
             </div>
 
             <!-- 指标显示 -->
-            <div class="channel-metrics">
+            <div class="channel-metrics" @click.stop>
               <template v-if="getChannelMetrics(element.index)">
                 <v-tooltip location="top" :open-delay="200">
                   <template #activator="{ props: tooltipProps }">
@@ -138,7 +144,7 @@
             </div>
 
             <!-- API密钥数量 -->
-            <div class="channel-keys">
+            <div class="channel-keys" @click.stop>
               <v-chip size="x-small" variant="outlined" class="keys-chip" @click="$emit('edit', element)">
                 <v-icon start size="x-small">mdi-key</v-icon>
                 {{ element.apiKeys?.length || 0 }}
@@ -146,7 +152,7 @@
             </div>
 
             <!-- 操作按钮 -->
-            <div class="channel-actions">
+            <div class="channel-actions" @click.stop>
               <!-- suspended 状态显示恢复按钮 -->
               <v-btn
                 v-if="element.status === 'suspended'"
@@ -639,6 +645,7 @@ defineExpose({
   box-shadow: 4px 4px 0 0 rgb(var(--v-theme-on-surface));
   min-height: 56px;
   transition: all 0.1s ease;
+  cursor: pointer;
 }
 
 /* 图表展开区域 */
@@ -736,11 +743,6 @@ defineExpose({
   display: flex;
   align-items: center;
   overflow: hidden;
-  cursor: pointer;
-}
-
-.channel-name:hover {
-  background: rgba(var(--v-theme-primary), 0.05);
 }
 
 .channel-name .expand-icon {
