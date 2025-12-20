@@ -41,7 +41,8 @@
         class="channel-list"
       >
         <template #item="{ element, index }">
-          <div class="channel-row" :class="{ 'is-suspended': element.status === 'suspended' }">
+          <div class="channel-item-wrapper">
+            <div class="channel-row" :class="{ 'is-suspended': element.status === 'suspended' }">
             <!-- 拖拽手柄 -->
             <div class="drag-handle">
               <v-icon size="small" color="grey">mdi-drag-vertical</v-icon>
@@ -55,15 +56,15 @@
             <!-- 状态指示器 -->
             <ChannelStatusBadge :status="element.status || 'active'" :metrics="getChannelMetrics(element.index)" />
 
-            <!-- 渠道名称和描述 -->
-            <div class="channel-name">
+            <!-- 渠道名称和描述 + 可点击空白区域 -->
+            <div class="channel-name" @click="toggleChannelChart(element.index)" title="点击查看使用趋势">
               <span
                 class="font-weight-medium channel-name-link"
                 tabindex="0"
                 role="button"
-                @click="$emit('edit', element)"
-                @keydown.enter="$emit('edit', element)"
-                @keydown.space.prevent="$emit('edit', element)"
+                @click.stop="$emit('edit', element)"
+                @keydown.enter.stop="$emit('edit', element)"
+                @keydown.space.stop="$emit('edit', element)"
               >{{ element.name }}</span>
               <!-- 官网链接按钮 -->
               <v-btn
@@ -76,11 +77,18 @@
                 color="primary"
                 class="ml-1"
                 title="打开官网"
+                @click.stop
               >
                 <v-icon size="14">mdi-open-in-new</v-icon>
               </v-btn>
               <span class="text-caption text-medium-emphasis ml-2">{{ element.serviceType }}</span>
               <span v-if="element.description" class="text-caption text-disabled ml-3">{{ element.description }}</span>
+              <!-- 展开图标 -->
+              <v-icon
+                size="x-small"
+                class="ml-auto expand-icon"
+                :color="expandedChannelIndex === element.index ? 'primary' : 'grey-lighten-1'"
+              >{{ expandedChannelIndex === element.index ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
             </div>
 
             <!-- 指标显示 -->
@@ -214,6 +222,19 @@
               </v-menu>
             </div>
           </div>
+
+          <!-- 展开的图表区域 -->
+          <v-expand-transition>
+            <div v-if="expandedChannelIndex === element.index" class="channel-chart-wrapper">
+              <ChannelMetricsChart
+                :channel-type="channelType"
+                :channel-index="element.index"
+                :channel-name="element.name"
+                @close="expandedChannelIndex = null"
+              />
+            </div>
+          </v-expand-transition>
+          </div>
         </template>
       </draggable>
 
@@ -315,6 +336,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import draggable from 'vuedraggable'
 import { api, type Channel, type ChannelMetrics, type ChannelStatus, type TimeWindowStats } from '../services/api'
 import ChannelStatusBadge from './ChannelStatusBadge.vue'
+import ChannelMetricsChart from './ChannelMetricsChart.vue'
 
 const props = defineProps<{
   channels: Channel[]
@@ -343,6 +365,14 @@ const schedulerStats = ref<{
 } | null>(null)
 const isLoadingMetrics = ref(false)
 const isSavingOrder = ref(false)
+
+// 图表展开状态
+const expandedChannelIndex = ref<number | null>(null)
+
+// 切换渠道图表展开/收起
+const toggleChannelChart = (channelIndex: number) => {
+  expandedChannelIndex.value = expandedChannelIndex.value === channelIndex ? null : channelIndex
+}
 
 // 活跃渠道（可拖拽排序）- 包含 active 和 suspended 状态
 const activeChannels = ref<Channel[]>([])
@@ -374,6 +404,12 @@ const initActiveChannels = () => {
 
 // 监听 channels 变化
 watch(() => props.channels, initActiveChannels, { immediate: true, deep: true })
+
+// 监听 channelType 变化 - 切换时刷新指标并收起图表
+watch(() => props.channelType, () => {
+  expandedChannelIndex.value = null // 收起展开的图表
+  refreshMetrics()
+})
 
 // 获取渠道指标
 const getChannelMetrics = (channelIndex: number): ChannelMetrics | undefined => {
@@ -576,6 +612,11 @@ defineExpose({
   gap: 8px;
 }
 
+.channel-item-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
 .channel-row {
   display: grid;
   grid-template-columns: 36px 36px 110px 1fr 130px 90px 80px;
@@ -588,6 +629,11 @@ defineExpose({
   box-shadow: 4px 4px 0 0 rgb(var(--v-theme-on-surface));
   min-height: 56px;
   transition: all 0.1s ease;
+}
+
+/* 图表展开区域 */
+.channel-chart-wrapper {
+  margin: 0 2px 8px 2px;
 }
 
 .channel-row:hover {
@@ -677,13 +723,23 @@ defineExpose({
 }
 
 .channel-name {
+  display: flex;
+  align-items: center;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  cursor: pointer;
+}
+
+.channel-name:hover {
+  background: rgba(var(--v-theme-primary), 0.05);
+}
+
+.channel-name .expand-icon {
+  flex-shrink: 0;
 }
 
 .channel-name .font-weight-medium {
   font-size: 0.95rem;
+  flex-shrink: 0;
 }
 
 .channel-name-link {

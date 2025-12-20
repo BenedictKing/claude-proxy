@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "@mdi/js": "^7.4.47",
+    "apexcharts": "^5.3.6",
     "vue": "^3.5.24",
+    "vue3-apexcharts": "^1.10.0",
     "vuedraggable": "^4.1.0",
     "vuetify": "^3.11.3"
   },

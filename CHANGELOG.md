@@ -4,6 +4,90 @@
 
 ---
 
+## [Unreleased]
+
+### ✨ 新功能
+
+- **新增渠道指标历史数据 API 和时间序列图表**
+  - 后端新增 `/api/channels/metrics/history` 和 `/api/responses/channels/metrics/history` 端点
+  - 支持 `duration` (1h, 6h, 24h) 和 `interval` (5m, 15m, 1h) 参数查询历史指标
+  - 新增 `HistoryDataPoint` 结构体，包含请求数、成功数、失败数、成功率
+  - 新增 `GetHistoricalStats` 和 `GetAllKeysHistoricalStats` 方法实现数据聚合
+  - 涉及文件：`backend-go/internal/handlers/channel_metrics_handler.go`, `backend-go/internal/metrics/channel_metrics.go`, `backend-go/main.go`
+
+- **前端新增渠道指标时间序列图表组件**
+  - 引入 ApexCharts 库（apexcharts, vue3-apexcharts）
+  - 新增 `ChannelMetricsChart.vue` 组件，支持展开/收起交互
+  - 渠道列表中新增图表展开按钮，点击查看使用趋势
+  - 新增 `getChannelMetricsHistory` 和 `getResponsesChannelMetricsHistory` API 方法
+  - 涉及文件：`frontend/src/components/ChannelMetricsChart.vue`, `frontend/src/components/ChannelOrchestration.vue`, `frontend/src/services/api.ts`
+
+### 🐛 Bug 修复
+
+- **修复历史数据查询的 divide-by-zero 风险**
+  - 在 `GetHistoricalStats` 和 `GetAllKeysHistoricalStats` 函数开头添加参数验证
+  - 防止 `interval <= 0` 或 `duration <= 0` 时导致的 panic
+
+- **修复历史数据聚合的性能问题**
+  - 将双重循环 O(records × buckets) 改为单次遍历 O(records)
+  - 使用 map[int64]*bucketData 结构按时间分桶
+  - 涉及文件：`backend-go/internal/metrics/channel_metrics.go`
+
+- **修复时间边界对齐问题**
+  - 使用 `Truncate(interval)` 对齐时间边界，使桶分布均匀
+  - 涉及文件：`backend-go/internal/metrics/channel_metrics.go`
+
+- **移除未使用的代码**
+  - 删除 `GetAggregatedMetricsHistory` handler 函数（死代码）
+  - 涉及文件：`backend-go/internal/handlers/channel_metrics_handler.go`
+
+### 🔧 改进
+
+- **改进前端图表加载体验**
+  - 加载数据时禁用时间范围切换按钮
+  - 添加错误 snackbar 通知用户
+  - 涉及文件：`frontend/src/components/ChannelMetricsChart.vue`
+
+- **修复边界数据丢失问题**
+  - endTime 延伸一个 interval，确保当前时间段的请求也被包含
+  - 防止落在 interval 边界的请求丢失
+  - 涉及文件：`backend-go/internal/metrics/channel_metrics.go`
+
+- **修复 channelType 切换不刷新问题**
+  - 添加对 channelType 的 watch，切换时自动刷新数据
+  - 防止跨渠道数据残留
+  - 涉及文件：`frontend/src/components/ChannelMetricsChart.vue`
+
+- **修复事件冒泡问题**
+  - 官网链接按钮添加 `@click.stop` 修饰符
+  - 防止点击链接时触发图表展开
+  - 涉及文件：`frontend/src/components/ChannelOrchestration.vue`
+
+- **修复当前时间段数据丢失问题**
+  - numPoints 增加 1，确保当前时间段的数据被正确包含
+  - 防止图表不显示最近的流量数据
+  - 涉及文件：`backend-go/internal/metrics/channel_metrics.go`
+
+- **修复 ChannelOrchestration 切换类型不刷新问题**
+  - 添加对 channelType 的 watch，切换时刷新指标并收起图表
+  - 防止 Messages/Responses 切换时显示旧数据
+  - 涉及文件：`frontend/src/components/ChannelOrchestration.vue`
+
+- **添加 interval 参数最小值限制**
+  - 限制 interval 最小值为 1 分钟，防止生成过多 bucket
+  - 防止恶意请求导致服务器资源耗尽
+  - 涉及文件：`backend-go/internal/handlers/channel_metrics_handler.go`
+
+- **修复 endTime 边界数据丢失问题**
+  - 使用 `Before(endTime)` 替代 `!After(endTime)`，排除恰好落在边界的记录
+  - 防止 offset 越界导致数据丢失
+  - 涉及文件：`backend-go/internal/metrics/channel_metrics.go`
+
+- **修复空桶成功率误导问题**
+  - 空桶成功率默认值从 100% 改为 0%
+  - 避免无请求时显示 100% 成功率造成误导
+  - 涉及文件：`backend-go/internal/metrics/channel_metrics.go`
+
 ## [v2.1.32] - 2025-12-19
 
 ### 🐛 Bug 修复

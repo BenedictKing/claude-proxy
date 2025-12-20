@@ -95,6 +95,22 @@ export interface PingResult {
   error?: string
 }
 
+// 历史数据点（用于时间序列图表）
+export interface HistoryDataPoint {
+  timestamp: string
+  requestCount: number
+  successCount: number
+  failureCount: number
+  successRate: number
+}
+
+// 渠道历史指标响应
+export interface MetricsHistoryResponse {
+  channelIndex: number
+  channelName: string
+  dataPoints: HistoryDataPoint[]
+}
+
 class ApiService {
   private apiKey: string | null = null
 
@@ -391,6 +407,18 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify({ duration: durationSeconds })
     })
+  }
+
+  // ============== 历史指标 API ==============
+
+  // 获取 Messages 渠道历史指标（用于时间序列图表）
+  async getChannelMetricsHistory(duration: '1h' | '6h' | '24h' = '24h'): Promise<MetricsHistoryResponse[]> {
+    return this.request(`/channels/metrics/history?duration=${duration}`)
+  }
+
+  // 获取 Responses 渠道历史指标
+  async getResponsesChannelMetricsHistory(duration: '1h' | '6h' | '24h' = '24h'): Promise<MetricsHistoryResponse[]> {
+    return this.request(`/responses/channels/metrics/history?duration=${duration}`)
   }
 }
 

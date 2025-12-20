@@ -847,3 +847,164 @@ func (m *MetricsManager) ShouldSuspendKey(baseURL, apiKey string) bool {
 
 	return m.calculateKeyFailureRateInternal(metrics) >= m.failureThreshold
 }
+
+// ============ 历史数据查询方法（用于图表可视化）============
+
+// HistoryDataPoint 历史数据点（用于时间序列图表）
+type HistoryDataPoint struct {
+	Timestamp    time.Time `json:"timestamp"`
+	RequestCount int64     `json:"requestCount"`
+	SuccessCount int64     `json:"successCount"`
+	FailureCount int64     `json:"failureCount"`
+	SuccessRate  float64   `json:"successRate"`
+}
+
+// GetHistoricalStats 获取历史统计数据（按时间间隔聚合）
+// duration: 查询时间范围 (如 1h, 6h, 24h)
+// interval: 聚合间隔 (如 5m, 15m, 1h)
+func (m *MetricsManager) GetHistoricalStats(baseURL string, activeKeys []string, duration, interval time.Duration) []HistoryDataPoint {
+	// 参数验证
+	if interval <= 0 || duration <= 0 {
+		return []HistoryDataPoint{}
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	now := time.Now()
+	// 时间对齐到 interval 边界
+	startTime := now.Add(-duration).Truncate(interval)
+	// endTime 延伸一个 interval，确保当前时间段的请求也被包含
+	endTime := now.Truncate(interval).Add(interval)
+
+	// 计算需要多少个数据点（+1 用于包含延伸的当前时间段）
+	numPoints := int(duration / interval)
+	if numPoints <= 0 {
+		numPoints = 1
+	}
+	numPoints++ // 额外的一个桶用于当前时间段
+
+	// 使用 map 按时间分桶，优化性能：O(records) 而不是 O(records * numPoints)
+	buckets := make(map[int64]*bucketData)
+	for i := 0; i < numPoints; i++ {
+		buckets[int64(i)] = &bucketData{}
+	}
+
+	// 收集所有相关 Key 的请求历史并放入对应桶
+	for _, apiKey := range activeKeys {
+		metricsKey := generateMetricsKey(baseURL, apiKey)
+		if metrics, exists := m.keyMetrics[metricsKey]; exists {
+			for _, record := range metrics.requestHistory {
+				// 使用 Before(endTime) 排除恰好落在 endTime 的记录，避免 offset 越界
+				if record.Timestamp.After(startTime) && record.Timestamp.Before(endTime) {
+					// 计算记录应该属于哪个桶
+					offset := int64(record.Timestamp.Sub(startTime) / interval)
+					if offset >= 0 && offset < int64(numPoints) {
+						b := buckets[offset]
+						b.requestCount++
+						if record.Success {
+							b.successCount++
+						} else {
+							b.failureCount++
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 构建结果
+	result := make([]HistoryDataPoint, numPoints)
+	for i := 0; i < numPoints; i++ {
+		b := buckets[int64(i)]
+		// 空桶成功率默认为 0，避免误导（100% 暗示完美成功）
+		successRate := float64(0)
+		if b.requestCount > 0 {
+			successRate = float64(b.successCount) / float64(b.requestCount) * 100
+		}
+		result[i] = HistoryDataPoint{
+			Timestamp:    startTime.Add(time.Duration(i+1) * interval),
+			RequestCount: b.requestCount,
+			SuccessCount: b.successCount,
+			FailureCount: b.failureCount,
+			SuccessRate:  successRate,
+		}
+	}
+
+	return result
+}
+
+// bucketData 用于时间分桶的辅助结构
+type bucketData struct {
+	requestCount int64
+	successCount int64
+	failureCount int64
+}
+
+// GetAllKeysHistoricalStats 获取所有 Key 的历史统计（不区分渠道）
+func (m *MetricsManager) GetAllKeysHistoricalStats(duration, interval time.Duration) []HistoryDataPoint {
+	// 参数验证
+	if interval <= 0 || duration <= 0 {
+		return []HistoryDataPoint{}
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	now := time.Now()
+	// 时间对齐到 interval 边界
+	startTime := now.Add(-duration).Truncate(interval)
+	// endTime 延伸一个 interval，确保当前时间段的请求也被包含
+	endTime := now.Truncate(interval).Add(interval)
+
+	numPoints := int(duration / interval)
+	if numPoints <= 0 {
+		numPoints = 1
+	}
+	numPoints++ // 额外的一个桶用于当前时间段
+
+	// 使用 map 按时间分桶，优化性能
+	buckets := make(map[int64]*bucketData)
+	for i := 0; i < numPoints; i++ {
+		buckets[int64(i)] = &bucketData{}
+	}
+
+	// 收集所有 Key 的请求历史并放入对应桶
+	for _, metrics := range m.keyMetrics {
+		for _, record := range metrics.requestHistory {
+			// 使用 Before(endTime) 排除恰好落在 endTime 的记录，避免 offset 越界
+			if record.Timestamp.After(startTime) && record.Timestamp.Before(endTime) {
+				offset := int64(record.Timestamp.Sub(startTime) / interval)
+				if offset >= 0 && offset < int64(numPoints) {
+					b := buckets[offset]
+					b.requestCount++
+					if record.Success {
+						b.successCount++
+					} else {
+						b.failureCount++
+					}
+				}
+			}
+		}
+	}
+
+	// 构建结果
+	result := make([]HistoryDataPoint, numPoints)
+	for i := 0; i < numPoints; i++ {
+		b := buckets[int64(i)]
+		// 空桶成功率默认为 0，避免误导（100% 暗示完美成功）
+		successRate := float64(0)
+		if b.requestCount > 0 {
+			successRate = float64(b.successCount) / float64(b.requestCount) * 100
+		}
+		result[i] = HistoryDataPoint{
+			Timestamp:    startTime.Add(time.Duration(i+1) * interval),
+			RequestCount: b.requestCount,
+			SuccessCount: b.successCount,
+			FailureCount: b.failureCount,
+			SuccessRate:  successRate,
+		}
+	}
+
+	return result
+}

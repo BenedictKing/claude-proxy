@@ -292,3 +292,77 @@ type ConfigManager interface {
 type ResponsesConfigManager interface {
 	SetResponsesChannelPromotion(index int, duration time.Duration) error
 }
+
+// MetricsHistoryResponse 历史指标响应
+type MetricsHistoryResponse struct {
+	ChannelIndex int                        `json:"channelIndex"`
+	ChannelName  string                     `json:"channelName"`
+	DataPoints   []metrics.HistoryDataPoint `json:"dataPoints"`
+}
+
+// GetChannelMetricsHistory 获取渠道指标历史数据（用于时间序列图表）
+// Query params:
+//   - duration: 时间范围 (1h, 6h, 24h)，默认 24h
+//   - interval: 时间间隔 (5m, 15m, 1h)，默认根据 duration 自动选择
+func GetChannelMetricsHistory(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager, isResponses bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 解析 duration 参数
+		durationStr := c.DefaultQuery("duration", "24h")
+		duration, err := time.ParseDuration(durationStr)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid duration parameter"})
+			return
+		}
+
+		// 限制最大查询范围为 24 小时
+		if duration > 24*time.Hour {
+			duration = 24 * time.Hour
+		}
+
+		// 解析或自动选择 interval
+		intervalStr := c.Query("interval")
+		var interval time.Duration
+		if intervalStr != "" {
+			interval, err = time.ParseDuration(intervalStr)
+			if err != nil {
+				c.JSON(400, gin.H{"error": "Invalid interval parameter"})
+				return
+			}
+			// 限制 interval 最小值为 1 分钟，防止生成过多 bucket
+			if interval < time.Minute {
+				interval = time.Minute
+			}
+		} else {
+			// 根据 duration 自动选择合适的 interval
+			switch {
+			case duration <= time.Hour:
+				interval = 5 * time.Minute
+			case duration <= 6*time.Hour:
+				interval = 15 * time.Minute
+			default:
+				interval = time.Hour
+			}
+		}
+
+		cfg := cfgManager.GetConfig()
+		var upstreams []config.UpstreamConfig
+		if isResponses {
+			upstreams = cfg.ResponsesUpstream
+		} else {
+			upstreams = cfg.Upstream
+		}
+
+		result := make([]MetricsHistoryResponse, 0, len(upstreams))
+		for i, upstream := range upstreams {
+			dataPoints := metricsManager.GetHistoricalStats(upstream.BaseURL, upstream.APIKeys, duration, interval)
+
+			result = append(result, MetricsHistoryResponse{
+				ChannelIndex: i,
+				ChannelName:  upstream.Name,
+				DataPoints:   dataPoints,
+			})
+		}
+
+		c.JSON(200, result)
+	}
+}
