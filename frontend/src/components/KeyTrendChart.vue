@@ -150,8 +150,19 @@ const stopAutoRefresh = () => {
   }
 }
 
-// Key colors (与后端一致)
-const keyColors = ['#3b82f6', '#f97316', '#10b981', '#8b5cf6', '#ec4899']
+// Key colors - 支持最多 10 个 key
+const keyColors = [
+  '#3b82f6', // 蓝色
+  '#f97316', // 橙色
+  '#10b981', // 绿色
+  '#8b5cf6', // 紫色
+  '#ec4899', // 粉色
+  '#eab308', // 黄色
+  '#06b6d4', // 青色
+  '#f43f5e', // 玫红
+  '#84cc16', // 酸橙绿
+  '#6366f1', // 靛蓝
+]
 
 // Computed: check if has data
 const hasData = computed(() => {
