@@ -122,6 +122,7 @@ func main() {
 		apiGroup.GET("/channels/metrics/history", handlers.GetChannelMetricsHistory(messagesMetricsManager, cfgManager, false))
 		apiGroup.GET("/channels/:id/keys/metrics/history", handlers.GetChannelKeyMetricsHistory(messagesMetricsManager, cfgManager, false))
 		apiGroup.GET("/channels/scheduler/stats", handlers.GetSchedulerStats(channelScheduler))
+		apiGroup.GET("/channels/dashboard", handlers.GetChannelDashboard(cfgManager, channelScheduler))
 
 		// Responses 渠道管理
 		apiGroup.GET("/responses/channels", handlers.GetResponsesUpstreams(cfgManager))

@@ -311,6 +311,8 @@
           :channels="currentChannelsData.channels"
           :current-channel-index="currentChannelsData.current ?? 0"
           :channel-type="activeTab"
+          :dashboard-metrics="dashboardMetrics"
+          :dashboard-stats="dashboardStats"
           @edit="editChannel"
           @delete="deleteChannel"
           @ping="pingChannel"
@@ -391,7 +393,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useTheme } from 'vuetify'
-import { api, fetchHealth, type Channel, type ChannelsResponse } from './services/api'
+import { api, fetchHealth, type Channel, type ChannelsResponse, type ChannelMetrics, type ChannelDashboardResponse } from './services/api'
 import { versionService, type VersionInfo } from './services/version'
 import AddChannelModal from './components/AddChannelModal.vue'
 import ChannelOrchestration from './components/ChannelOrchestration.vue'
@@ -414,6 +416,9 @@ const AUTO_REFRESH_INTERVAL = 2000 // 2秒
 const activeTab = ref<'messages' | 'responses'>('messages') // Tab 切换状态
 const channelsData = ref<ChannelsResponse>({ channels: [], current: -1, loadBalance: 'round-robin' })
 const responsesChannelsData = ref<ChannelsResponse>({ channels: [], current: -1, loadBalance: 'round-robin' }) // Responses渠道数据
+// Dashboard 数据（合并的 metrics 和 stats）
+const dashboardMetrics = ref<ChannelMetrics[]>([])
+const dashboardStats = ref<ChannelDashboardResponse['stats'] | undefined>(undefined)
 const showAddChannelModal = ref(false)
 const showAddKeyModalRef = ref(false)
 const editingChannel = ref<Channel | null>(null)
@@ -517,11 +522,26 @@ const showSuccessToast = (message: string) => {
 // 主要功能函数
 const refreshChannels = async () => {
   try {
+    // 使用合并的 dashboard 接口
+    const dashboard = await api.getChannelDashboard(activeTab.value)
+
     if (activeTab.value === 'messages') {
-      channelsData.value = await api.getChannels()
+      channelsData.value = {
+        channels: dashboard.channels,
+        current: channelsData.value.current, // 保留当前选中状态
+        loadBalance: dashboard.loadBalance
+      }
     } else {
-      responsesChannelsData.value = await api.getResponsesChannels()
+      responsesChannelsData.value = {
+        channels: dashboard.channels,
+        current: responsesChannelsData.value.current, // 保留当前选中状态
+        loadBalance: dashboard.loadBalance
+      }
     }
+
+    // 同时更新 metrics 和 stats
+    dashboardMetrics.value = dashboard.metrics
+    dashboardStats.value = dashboard.stats
   } catch (error) {
     handleAuthError(error)
   }
@@ -1013,14 +1033,27 @@ const startAutoRefresh = () => {
   autoRefreshTimer = setInterval(async () => {
     if (isAuthenticated.value) {
       try {
-        // 静默刷新渠道数据
+        // 使用合并的 dashboard 接口，减少网络请求
+        const dashboard = await api.getChannelDashboard(activeTab.value)
+
+        // 更新渠道数据，保留当前选中状态
         if (activeTab.value === 'messages') {
-          channelsData.value = await api.getChannels()
+          channelsData.value = {
+            channels: dashboard.channels,
+            current: channelsData.value.current, // 保留当前选中状态
+            loadBalance: dashboard.loadBalance
+          }
         } else {
-          responsesChannelsData.value = await api.getResponsesChannels()
+          responsesChannelsData.value = {
+            channels: dashboard.channels,
+            current: responsesChannelsData.value.current, // 保留当前选中状态
+            loadBalance: dashboard.loadBalance
+          }
         }
-        // 同时刷新渠道指标
-        channelOrchestrationRef.value?.refreshMetrics()
+
+        // 更新 metrics 和 stats
+        dashboardMetrics.value = dashboard.metrics
+        dashboardStats.value = dashboard.stats
       } catch (error) {
         // 静默处理错误，避免刷新失败时干扰用户
         console.warn('自动刷新失败:', error)
@@ -1040,9 +1073,27 @@ const stopAutoRefresh = () => {
 // 监听 Tab 切换，刷新对应数据
 watch(activeTab, async () => {
   if (isAuthenticated.value) {
-    await refreshChannels()
-    // 切换 Tab 时立即刷新指标
-    channelOrchestrationRef.value?.refreshMetrics()
+    // 使用 dashboard 接口刷新所有数据
+    try {
+      const dashboard = await api.getChannelDashboard(activeTab.value)
+      if (activeTab.value === 'messages') {
+        channelsData.value = {
+          channels: dashboard.channels,
+          current: channelsData.value.current, // 保留当前选中状态
+          loadBalance: dashboard.loadBalance
+        }
+      } else {
+        responsesChannelsData.value = {
+          channels: dashboard.channels,
+          current: responsesChannelsData.value.current, // 保留当前选中状态
+          loadBalance: dashboard.loadBalance
+        }
+      }
+      dashboardMetrics.value = dashboard.metrics
+      dashboardStats.value = dashboard.stats
+    } catch (error) {
+      console.error('切换 Tab 刷新失败:', error)
+    }
   }
 })
 

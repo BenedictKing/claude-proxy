@@ -21,6 +21,11 @@
 
 ### 🔧 改进
 
+- **合并 Dashboard API 减少网络请求**
+  - 新增 `GET /api/channels/dashboard?type=messages|responses` 接口
+  - 将原本 3 个并行请求（channels + metrics + stats）合并为 1 个
+  - 前端自动刷新从每 2 秒 3 个请求优化为每 2 秒 1 个请求
+  - 涉及文件：`backend-go/internal/handlers/channel_metrics_handler.go`, `backend-go/main.go`, `frontend/src/services/api.ts`, `frontend/src/App.vue`, `frontend/src/components/ChannelOrchestration.vue`
 - **Key 趋势图表自动刷新及线条样式优化**
   - 图表展开时启动每分钟自动刷新，关闭时自动停止
   - 自动刷新跳过正在加载中的请求，避免并发竞争

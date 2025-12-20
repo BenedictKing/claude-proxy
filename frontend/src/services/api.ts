@@ -88,6 +88,22 @@ export interface ChannelsResponse {
   loadBalance: string
 }
 
+// 渠道仪表盘响应（合并 channels + metrics + stats）
+export interface ChannelDashboardResponse {
+  channels: Channel[]
+  loadBalance: string
+  metrics: ChannelMetrics[]
+  stats: {
+    multiChannelMode: boolean
+    activeChannelCount: number
+    traceAffinityCount: number
+    traceAffinityTTL: string
+    failureThreshold: number
+    windowSize: number
+    circuitRecoveryTime: string
+  }
+}
+
 export interface PingResult {
   success: boolean
   latency: number
@@ -386,6 +402,12 @@ class ApiService {
   }> {
     const query = type === 'responses' ? '?type=responses' : ''
     return this.request(`/channels/scheduler/stats${query}`)
+  }
+
+  // 获取渠道仪表盘数据（合并 channels + metrics + stats）
+  async getChannelDashboard(type: 'messages' | 'responses' = 'messages'): Promise<ChannelDashboardResponse> {
+    const query = type === 'responses' ? '?type=responses' : ''
+    return this.request(`/channels/dashboard${query}`)
   }
 
   // ============== Responses 多渠道调度 API ==============

@@ -484,3 +484,101 @@ func truncateKeyMask(keyMask string, maxLen int) string {
 	}
 	return keyMask[:maxLen]
 }
+
+// GetChannelDashboard 获取渠道仪表盘数据（合并 channels + metrics + stats）
+// GET /api/channels/dashboard?type=messages|responses
+// 将原本需要 3 个请求的数据合并为 1 个请求，减少网络开销
+func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.ChannelScheduler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 获取 type 参数，默认为 messages
+		isResponses := strings.ToLower(c.Query("type")) == "responses"
+
+		cfg := cfgManager.GetConfig()
+		var upstreams []config.UpstreamConfig
+		var loadBalance string
+		var metricsManager *metrics.MetricsManager
+
+		if isResponses {
+			upstreams = cfg.ResponsesUpstream
+			loadBalance = cfg.ResponsesLoadBalance
+			metricsManager = sch.GetResponsesMetricsManager()
+		} else {
+			upstreams = cfg.Upstream
+			loadBalance = cfg.LoadBalance
+			metricsManager = sch.GetMessagesMetricsManager()
+		}
+
+		// 1. 构建 channels 数据
+		channels := make([]gin.H, len(upstreams))
+		for i, up := range upstreams {
+			status := config.GetChannelStatus(&up)
+			priority := config.GetChannelPriority(&up, i)
+
+			channels[i] = gin.H{
+				"index":              i,
+				"name":               up.Name,
+				"serviceType":        up.ServiceType,
+				"baseUrl":            up.BaseURL,
+				"apiKeys":            up.APIKeys,
+				"description":        up.Description,
+				"website":            up.Website,
+				"insecureSkipVerify": up.InsecureSkipVerify,
+				"modelMapping":       up.ModelMapping,
+				"latency":            nil,
+				"status":             status,
+				"priority":           priority,
+			}
+		}
+
+		// 2. 构建 metrics 数据
+		metricsResult := make([]gin.H, 0, len(upstreams))
+		for i, upstream := range upstreams {
+			resp := metricsManager.ToResponse(i, upstream.BaseURL, upstream.APIKeys, 0)
+
+			item := gin.H{
+				"channelIndex":        i,
+				"channelName":         upstream.Name,
+				"requestCount":        resp.RequestCount,
+				"successCount":        resp.SuccessCount,
+				"failureCount":        resp.FailureCount,
+				"successRate":         resp.SuccessRate,
+				"errorRate":           resp.ErrorRate,
+				"consecutiveFailures": resp.ConsecutiveFailures,
+				"latency":             resp.Latency,
+				"keyMetrics":          resp.KeyMetrics,
+				"timeWindows":         resp.TimeWindows,
+			}
+
+			if resp.LastSuccessAt != nil {
+				item["lastSuccessAt"] = *resp.LastSuccessAt
+			}
+			if resp.LastFailureAt != nil {
+				item["lastFailureAt"] = *resp.LastFailureAt
+			}
+			if resp.CircuitBrokenAt != nil {
+				item["circuitBrokenAt"] = *resp.CircuitBrokenAt
+			}
+
+			metricsResult = append(metricsResult, item)
+		}
+
+		// 3. 构建 stats 数据
+		stats := gin.H{
+			"multiChannelMode":    sch.IsMultiChannelMode(isResponses),
+			"activeChannelCount":  sch.GetActiveChannelCount(isResponses),
+			"traceAffinityCount":  sch.GetTraceAffinityManager().Size(),
+			"traceAffinityTTL":    sch.GetTraceAffinityManager().GetTTL().String(),
+			"failureThreshold":    metricsManager.GetFailureThreshold() * 100,
+			"windowSize":          metricsManager.GetWindowSize(),
+			"circuitRecoveryTime": metricsManager.GetCircuitRecoveryTime().String(),
+		}
+
+		// 返回合并数据
+		c.JSON(200, gin.H{
+			"channels":    channels,
+			"loadBalance": loadBalance,
+			"metrics":     metricsResult,
+			"stats":       stats,
+		})
+	}
+}

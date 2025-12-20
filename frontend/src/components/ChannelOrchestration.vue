@@ -348,6 +348,17 @@ const props = defineProps<{
   channels: Channel[]
   currentChannelIndex: number
   channelType: 'messages' | 'responses'
+  // 可选：从父组件传入的 metrics 和 stats（使用 dashboard 接口时）
+  dashboardMetrics?: ChannelMetrics[]
+  dashboardStats?: {
+    multiChannelMode: boolean
+    activeChannelCount: number
+    traceAffinityCount: number
+    traceAffinityTTL: string
+    failureThreshold: number
+    windowSize: number
+    circuitRecoveryTime?: string
+  }
 }>()
 
 const emit = defineEmits<{
@@ -425,10 +436,26 @@ const initActiveChannels = () => {
 // 监听 channels 变化
 watch(() => props.channels, initActiveChannels, { immediate: true, deep: true })
 
+// 监听 dashboard props 变化（从父组件传入的合并数据）
+watch(() => props.dashboardMetrics, (newMetrics) => {
+  if (newMetrics) {
+    metrics.value = newMetrics
+  }
+}, { immediate: true })
+
+watch(() => props.dashboardStats, (newStats) => {
+  if (newStats) {
+    schedulerStats.value = newStats
+  }
+}, { immediate: true })
+
 // 监听 channelType 变化 - 切换时刷新指标并收起图表
 watch(() => props.channelType, () => {
   expandedChannelIndex.value = null // 收起展开的图表
-  refreshMetrics()
+  // 如果没有使用 dashboard props，则自己刷新
+  if (!props.dashboardMetrics) {
+    refreshMetrics()
+  }
 })
 
 // 获取渠道指标
