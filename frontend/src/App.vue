@@ -1845,11 +1845,27 @@ onUnmounted(() => {
 
   .action-bar-right {
     width: 100%;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+  }
+
+  .action-bar-right .action-btn {
+    min-width: 0;
+    flex-shrink: 1;
   }
 
   .action-bar-right .load-balance-btn {
     width: 100%;
     justify-content: center;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .action-bar-right .load-balance-btn :deep(.v-btn__content) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   /* --- 渠道编排容器 --- */
