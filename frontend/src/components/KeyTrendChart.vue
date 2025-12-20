@@ -182,25 +182,48 @@ const allDataPoints = computed(() => {
 const chartOptions = computed(() => {
   const mode = selectedView.value
 
-  // 根据视图模式确定 yaxis 配置
-  let yaxisConfig: any = {
-    labels: {
-      formatter: (val: number) => formatAxisValue(val, mode),
-      style: { fontSize: '11px' }
-    }
-  }
-
-  // 双向模式（Tokens I/O, Cache R/W）使用独立的正负范围
+  // Token/Cache 模式使用双 Y 轴（左侧 Input/Read，右侧 Output/Write）
+  // 解决数量级差异大（如 Input 几十K，Output 几百）导致小值不可见的问题
+  let yaxisConfig: any
   if (mode === 'tokens' || mode === 'cache') {
-    const { maxPositive, maxNegative } = getMaxValues(mode)
-    yaxisConfig = {
-      ...yaxisConfig,
-      min: -maxNegative * 1.1,
-      max: maxPositive * 1.1,
-      tickAmount: 6
+    const keyCount = historyData.value?.keys?.length || 1
+    yaxisConfig = []
+    // 为每个 key 的 Input 和 Output 分别配置 Y 轴
+    for (let i = 0; i < keyCount; i++) {
+      // Input/Read - 左侧 Y 轴（只第一个显示标签）
+      yaxisConfig.push({
+        seriesName: historyData.value?.keys?.[i]?.keyMask
+          ? `${historyData.value.keys[i].keyMask} ${mode === 'tokens' ? 'Input' : 'Cache Read'}`
+          : undefined,
+        show: i === 0,
+        labels: {
+          formatter: (val: number) => formatAxisValue(val, mode),
+          style: { fontSize: '11px' }
+        },
+        min: 0
+      })
+      // Output/Write - 右侧 Y 轴（只第一个显示标签）
+      yaxisConfig.push({
+        seriesName: historyData.value?.keys?.[i]?.keyMask
+          ? `${historyData.value.keys[i].keyMask} ${mode === 'tokens' ? 'Output' : 'Cache Write'}`
+          : undefined,
+        opposite: true,
+        show: i === 0,
+        labels: {
+          formatter: (val: number) => formatAxisValue(val, mode),
+          style: { fontSize: '11px' }
+        },
+        min: 0
+      })
     }
   } else {
-    yaxisConfig.min = 0
+    yaxisConfig = {
+      labels: {
+        formatter: (val: number) => formatAxisValue(val, mode),
+        style: { fontSize: '11px' }
+      },
+      min: 0
+    }
   }
 
   return {
@@ -236,12 +259,11 @@ const chartOptions = computed(() => {
     stroke: {
       curve: 'smooth',
       width: 2,
-      // traffic 模式全用实线；双向模式(tokens/cache)：正向(Input/Read)实线，负向(Output/Write)虚线
+      // traffic 模式全用实线；tokens/cache 模式：Input/Read 实线，Output/Write 虚线
       dashArray: getDashArray()
     },
     grid: {
       borderColor: isDark.value ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-      strokeDashArray: mode === 'traffic' ? 0 : 3,
       padding: { left: 10, right: 10 }
     },
     xaxis: {
@@ -265,14 +287,6 @@ const chartOptions = computed(() => {
     },
     legend: {
       show: false
-    },
-    annotations: {
-      yaxis: [{
-        y: 0,
-        borderColor: isDark.value ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)',
-        strokeDashArray: 5,
-        opacity: 0.8
-      }]
     }
   }
 })
@@ -315,15 +329,15 @@ const buildChartSeries = (data: ChannelKeyMetricsHistoryResponse | null) => {
         })
       })
 
-      // 负向（Output/Creation）- 使用虚线
+      // Output/Write - 使用虚线区分
       result.push({
         name: `${keyData.keyMask} ${outLabel}`,
         data: keyData.dataPoints.map(dp => {
           let value = 0
           if (mode === 'tokens') {
-            value = -dp.outputTokens
+            value = dp.outputTokens
           } else {
-            value = -dp.cacheCreationTokens
+            value = dp.cacheCreationTokens
           }
           return { x: new Date(dp.timestamp).getTime(), y: value }
         })
@@ -403,32 +417,6 @@ const formatTooltipValue = (val: number, mode: ViewMode): string => {
       return formatNumber(Math.abs(val))
     default:
       return val.toString()
-  }
-}
-
-// Helper: get max values for positive and negative directions separately
-const getMaxValues = (mode: ViewMode): { maxPositive: number; maxNegative: number } => {
-  if (!historyData.value?.keys) return { maxPositive: 1000, maxNegative: 1000 }
-
-  let maxPositive = 0
-  let maxNegative = 0
-  for (const keyData of historyData.value.keys) {
-    for (const dp of keyData.dataPoints) {
-      switch (mode) {
-        case 'tokens':
-          maxPositive = Math.max(maxPositive, dp.inputTokens)
-          maxNegative = Math.max(maxNegative, dp.outputTokens)
-          break
-        case 'cache':
-          maxPositive = Math.max(maxPositive, dp.cacheReadTokens)
-          maxNegative = Math.max(maxNegative, dp.cacheCreationTokens)
-          break
-      }
-    }
-  }
-  return {
-    maxPositive: maxPositive || 1000,
-    maxNegative: maxNegative || 1000
   }
 }
 
