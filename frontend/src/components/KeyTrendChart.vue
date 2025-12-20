@@ -95,7 +95,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useTheme } from 'vuetify'
 import VueApexCharts from 'vue3-apexcharts'
 import { api, type ChannelKeyMetricsHistoryResponse, type KeyHistoryData } from '../services/api'
@@ -124,6 +124,27 @@ const isLoading = ref(false)
 const historyData = ref<ChannelKeyMetricsHistoryResponse | null>(null)
 const showError = ref(false)
 const errorMessage = ref('')
+
+// Auto refresh timer (1 minute interval)
+const AUTO_REFRESH_INTERVAL = 60 * 1000
+let autoRefreshTimer: ReturnType<typeof setInterval> | null = null
+
+const startAutoRefresh = () => {
+  stopAutoRefresh()
+  autoRefreshTimer = setInterval(() => {
+    // Skip if already loading to prevent concurrent requests
+    if (!isLoading.value) {
+      refreshData()
+    }
+  }, AUTO_REFRESH_INTERVAL)
+}
+
+const stopAutoRefresh = () => {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer)
+    autoRefreshTimer = null
+  }
+}
 
 // Key colors (与后端一致)
 const keyColors = ['#3b82f6', '#f97316', '#10b981', '#8b5cf6', '#ec4899']
@@ -184,7 +205,7 @@ const chartOptions = computed(() => {
     theme: {
       mode: isDark.value ? 'dark' : 'light'
     },
-    colors: historyData.value?.keys.map((_, i) => keyColors[i % keyColors.length]) || keyColors,
+    colors: getChartColors(),
     fill: {
       type: 'gradient',
       gradient: {
@@ -200,7 +221,8 @@ const chartOptions = computed(() => {
     stroke: {
       curve: 'smooth',
       width: 2,
-      dashArray: selectedView.value === 'traffic' ? 0 : 5  // 双向模式使用虚线
+      // traffic 模式全用实线；双向模式(tokens/cache)：正向(Input/Read)实线，负向(Output/Write)虚线
+      dashArray: getDashArray()
     },
     grid: {
       borderColor: isDark.value ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
@@ -402,6 +424,44 @@ const getDurationMs = (duration: Duration): number => {
   }
 }
 
+// Helper: get dash array for stroke style
+// traffic 模式：全部实线
+// tokens/cache 模式：每个 key 有两个 series（正向实线、负向虚线）
+const getDashArray = (): number | number[] => {
+  if (selectedView.value === 'traffic') {
+    return 0 // 全部实线
+  }
+  // 双向模式：每个 key 产生 2 个 series [正向实线, 负向虚线]
+  const keyCount = historyData.value?.keys?.length || 0
+  const dashArray: number[] = []
+  for (let i = 0; i < keyCount; i++) {
+    dashArray.push(0)  // 正向（Input/Read）- 实线
+    dashArray.push(5)  // 负向（Output/Write）- 虚线
+  }
+  return dashArray.length > 0 ? dashArray : 0
+}
+
+// Helper: get chart colors aligned with series count
+// traffic 模式：每个 key 一个 series，一种颜色
+// tokens/cache 模式：每个 key 两个 series（Input/Output），使用相同颜色
+const getChartColors = (): string[] => {
+  const keyCount = historyData.value?.keys?.length || 0
+  if (keyCount === 0) return keyColors
+
+  if (selectedView.value === 'traffic') {
+    // 流量模式：每个 key 一种颜色
+    return historyData.value!.keys.map((_, i) => keyColors[i % keyColors.length])
+  }
+  // 双向模式：每个 key 复制颜色（Input 和 Output 同色）
+  const colors: string[] = []
+  for (let i = 0; i < keyCount; i++) {
+    const color = keyColors[i % keyColors.length]
+    colors.push(color)  // 正向
+    colors.push(color)  // 负向（同色）
+  }
+  return colors
+}
+
 // Fetch data
 const refreshData = async () => {
   isLoading.value = true
@@ -431,9 +491,15 @@ watch(selectedView, () => {
   // View change doesn't need to refetch, just re-render chart
 })
 
-// Initial load
+// Initial load and start auto refresh
 onMounted(() => {
   refreshData()
+  startAutoRefresh()
+})
+
+// Cleanup timer on unmount
+onUnmounted(() => {
+  stopAutoRefresh()
 })
 
 // Expose refresh method

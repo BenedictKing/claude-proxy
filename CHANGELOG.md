@@ -21,6 +21,12 @@
 
 ### 🔧 改进
 
+- **Key 趋势图表自动刷新及线条样式优化**
+  - 图表展开时启动每分钟自动刷新，关闭时自动停止
+  - 自动刷新跳过正在加载中的请求，避免并发竞争
+  - Token I/O 和缓存 R/W 模式下区分线条样式：0轴上方（Input/Read）实线，0轴下方（Output/Write）虚线
+  - 修复双向模式下颜色映射错误，同一 Key 的 Input/Output 现在使用相同颜色
+  - 涉及文件：`frontend/src/components/KeyTrendChart.vue`
 - 优化请求成功记录逻辑，在响应完成后记录 Usage 数据
 - 调度器新增 `RecordSuccessWithUsage` 方法支持传递 Token 统计
 - **Key 趋势图表 UI 优化**
