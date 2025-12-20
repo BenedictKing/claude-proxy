@@ -10,6 +10,7 @@ import (
 	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/metrics"
 	"github.com/BenedictKing/claude-proxy/internal/session"
+	"github.com/BenedictKing/claude-proxy/internal/types"
 )
 
 // ChannelScheduler 多渠道调度器
@@ -292,6 +293,11 @@ func (s *ChannelScheduler) getUpstreamByIndex(index int, isResponses bool) *conf
 // RecordSuccess 记录渠道成功（使用 baseURL + apiKey）
 func (s *ChannelScheduler) RecordSuccess(baseURL, apiKey string, isResponses bool) {
 	s.getMetricsManager(isResponses).RecordSuccess(baseURL, apiKey)
+}
+
+// RecordSuccessWithUsage 记录渠道成功（带 Usage 数据）
+func (s *ChannelScheduler) RecordSuccessWithUsage(baseURL, apiKey string, usage *types.Usage, isResponses bool) {
+	s.getMetricsManager(isResponses).RecordSuccessWithUsage(baseURL, apiKey, usage)
 }
 
 // RecordFailure 记录渠道失败（使用 baseURL + apiKey）

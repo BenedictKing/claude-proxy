@@ -233,7 +233,7 @@
                   :loading="fuzzyModeLoading"
                   :disabled="fuzzyModeLoadError"
                   :color="fuzzyModeLoadError ? 'error' : (fuzzyModeEnabled ? 'warning' : 'default')"
-                  class="action-btn mr-2"
+                  class="action-btn"
                 >
                   <v-icon start size="20">
                     {{ fuzzyModeLoadError ? 'mdi-alert-circle-outline' : (fuzzyModeEnabled ? 'mdi-shield-refresh' : 'mdi-shield-off-outline') }}
@@ -1612,6 +1612,7 @@ onUnmounted(() => {
 .action-bar-right {
   display: flex;
   align-items: center;
+  gap: 12px;
 }
 
 .action-btn {

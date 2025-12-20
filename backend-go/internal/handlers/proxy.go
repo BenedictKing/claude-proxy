@@ -326,9 +326,9 @@ func tryChannelWithAllKeys(
 		}
 
 		if claudeReq.Stream {
-			handleStreamResponse(c, resp, provider, envCfg, startTime, upstream, bodyBytes)
+			handleStreamResponse(c, resp, provider, envCfg, startTime, upstream, bodyBytes, channelScheduler, apiKey)
 		} else {
-			handleNormalResponse(c, resp, provider, envCfg, startTime, bodyBytes)
+			handleNormalResponse(c, resp, provider, envCfg, startTime, bodyBytes, channelScheduler, upstream, apiKey)
 		}
 		return true, apiKey, nil
 	}
@@ -546,8 +546,7 @@ func handleSingleChannelProxy(
 		}
 
 		// 处理成功响应
-		channelScheduler.RecordSuccess(upstream.BaseURL, apiKey, false)
-
+		// 先处理去优先级候选（配额相关错误的 key）
 		if len(deprioritizeCandidates) > 0 {
 			for key := range deprioritizeCandidates {
 				if err := cfgManager.DeprioritizeAPIKey(key); err != nil {
@@ -557,9 +556,9 @@ func handleSingleChannelProxy(
 		}
 
 		if claudeReq.Stream {
-			handleStreamResponse(c, resp, provider, envCfg, startTime, upstream, bodyBytes)
+			handleStreamResponse(c, resp, provider, envCfg, startTime, upstream, bodyBytes, channelScheduler, apiKey)
 		} else {
-			handleNormalResponse(c, resp, provider, envCfg, startTime, bodyBytes)
+			handleNormalResponse(c, resp, provider, envCfg, startTime, bodyBytes, channelScheduler, upstream, apiKey)
 		}
 		return
 	}
@@ -666,7 +665,7 @@ func sendRequest(req *http.Request, upstream *config.UpstreamConfig, envCfg *con
 }
 
 // handleNormalResponse 处理非流式响应
-func handleNormalResponse(c *gin.Context, resp *http.Response, provider providers.Provider, envCfg *config.EnvConfig, startTime time.Time, requestBody []byte) {
+func handleNormalResponse(c *gin.Context, resp *http.Response, provider providers.Provider, envCfg *config.EnvConfig, startTime time.Time, requestBody []byte, channelScheduler *scheduler.ChannelScheduler, upstream *config.UpstreamConfig, apiKey string) {
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
@@ -779,6 +778,9 @@ func handleNormalResponse(c *gin.Context, resp *http.Response, provider provider
 
 	c.JSON(200, claudeResp)
 
+	// 响应完成后记录成功指标（传入 Usage 数据）
+	channelScheduler.RecordSuccessWithUsage(upstream.BaseURL, apiKey, claudeResp.Usage, false)
+
 	// 响应完成后记录
 	if envCfg.EnableResponseLogs {
 		responseTime := time.Since(startTime).Milliseconds()
@@ -787,7 +789,7 @@ func handleNormalResponse(c *gin.Context, resp *http.Response, provider provider
 }
 
 // handleStreamResponse 处理流式响应
-func handleStreamResponse(c *gin.Context, resp *http.Response, provider providers.Provider, envCfg *config.EnvConfig, startTime time.Time, upstream *config.UpstreamConfig, requestBody []byte) {
+func handleStreamResponse(c *gin.Context, resp *http.Response, provider providers.Provider, envCfg *config.EnvConfig, startTime time.Time, upstream *config.UpstreamConfig, requestBody []byte, channelScheduler *scheduler.ChannelScheduler, apiKey string) {
 	defer resp.Body.Close()
 
 	eventChan, errChan, err := provider.HandleStreamResponse(resp.Body)
@@ -811,7 +813,7 @@ func handleStreamResponse(c *gin.Context, resp *http.Response, provider provider
 	ctx := newStreamContext(envCfg, upstream)
 
 	// 事件循环
-	processStreamEvents(c, w, flusher, eventChan, errChan, ctx, envCfg, startTime, requestBody)
+	processStreamEvents(c, w, flusher, eventChan, errChan, ctx, envCfg, startTime, requestBody, channelScheduler, upstream, apiKey)
 }
 
 // setupStreamHeaders 设置流式响应头
@@ -852,12 +854,12 @@ func newStreamContext(envCfg *config.EnvConfig, upstream *config.UpstreamConfig)
 }
 
 // processStreamEvents 处理流事件循环
-func processStreamEvents(c *gin.Context, w gin.ResponseWriter, flusher http.Flusher, eventChan <-chan string, errChan <-chan error, ctx *streamContext, envCfg *config.EnvConfig, startTime time.Time, requestBody []byte) {
+func processStreamEvents(c *gin.Context, w gin.ResponseWriter, flusher http.Flusher, eventChan <-chan string, errChan <-chan error, ctx *streamContext, envCfg *config.EnvConfig, startTime time.Time, requestBody []byte, channelScheduler *scheduler.ChannelScheduler, upstream *config.UpstreamConfig, apiKey string) {
 	for {
 		select {
 		case event, ok := <-eventChan:
 			if !ok {
-				logStreamCompletion(ctx, envCfg, startTime)
+				logStreamCompletion(ctx, envCfg, startTime, channelScheduler, upstream, apiKey)
 				return
 			}
 			processStreamEvent(c, w, flusher, event, ctx, envCfg, requestBody)
@@ -974,15 +976,28 @@ func isClientDisconnectError(err error) bool {
 }
 
 // logStreamCompletion 记录流完成日志
-func logStreamCompletion(ctx *streamContext, envCfg *config.EnvConfig, startTime time.Time) {
-	if !envCfg.EnableResponseLogs {
-		return
+func logStreamCompletion(ctx *streamContext, envCfg *config.EnvConfig, startTime time.Time, channelScheduler *scheduler.ChannelScheduler, upstream *config.UpstreamConfig, apiKey string) {
+	if envCfg.EnableResponseLogs {
+		log.Printf("⏱️ 流式响应完成: %dms", time.Since(startTime).Milliseconds())
 	}
-	log.Printf("⏱️ 流式响应完成: %dms", time.Since(startTime).Milliseconds())
 
 	if envCfg.IsDevelopment() {
 		logSynthesizedContent(ctx)
 	}
+
+	// 将累积的 usage 数据转换为 *types.Usage
+	var usage *types.Usage
+	if ctx.collectedUsage.InputTokens > 0 || ctx.collectedUsage.OutputTokens > 0 {
+		usage = &types.Usage{
+			InputTokens:              ctx.collectedUsage.InputTokens,
+			OutputTokens:             ctx.collectedUsage.OutputTokens,
+			CacheCreationInputTokens: ctx.collectedUsage.CacheCreationInputTokens,
+			CacheReadInputTokens:     ctx.collectedUsage.CacheReadInputTokens,
+		}
+	}
+
+	// 记录成功指标（传入 Usage 数据）
+	channelScheduler.RecordSuccessWithUsage(upstream.BaseURL, apiKey, usage, false)
 }
 
 // logPartialResponse 记录部分响应日志

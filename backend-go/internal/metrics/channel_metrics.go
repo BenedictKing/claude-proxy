@@ -4,16 +4,22 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"log"
+	"sort"
 	"sync"
 	"time"
 
+	"github.com/BenedictKing/claude-proxy/internal/types"
 	"github.com/BenedictKing/claude-proxy/internal/utils"
 )
 
-// RequestRecord 带时间戳的请求记录
+// RequestRecord 带时间戳的请求记录（扩展版，支持 Token 和 Cache 数据）
 type RequestRecord struct {
-	Timestamp time.Time
-	Success   bool
+	Timestamp                time.Time
+	Success                  bool
+	InputTokens              int64
+	OutputTokens             int64
+	CacheCreationInputTokens int64
+	CacheReadInputTokens     int64
 }
 
 // KeyMetrics 单个 Key 的指标（绑定到 BaseURL + Key 组合）
@@ -127,6 +133,11 @@ func (m *MetricsManager) getOrCreateKey(baseURL, apiKey string) *KeyMetrics {
 
 // RecordSuccess 记录成功请求（新方法，使用 baseURL + apiKey）
 func (m *MetricsManager) RecordSuccess(baseURL, apiKey string) {
+	m.RecordSuccessWithUsage(baseURL, apiKey, nil)
+}
+
+// RecordSuccessWithUsage 记录成功请求（带 Usage 数据）
+func (m *MetricsManager) RecordSuccessWithUsage(baseURL, apiKey string, usage *types.Usage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -147,8 +158,17 @@ func (m *MetricsManager) RecordSuccess(baseURL, apiKey string) {
 	// 更新滑动窗口
 	m.appendToWindowKey(metrics, true)
 
+	// 提取 Token 数据（如果有）
+	var inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64
+	if usage != nil {
+		inputTokens = int64(usage.InputTokens)
+		outputTokens = int64(usage.OutputTokens)
+		cacheCreationTokens = int64(usage.CacheCreationInputTokens)
+		cacheReadTokens = int64(usage.CacheReadInputTokens)
+	}
+
 	// 记录带时间戳的请求
-	m.appendToHistoryKey(metrics, now, true)
+	m.appendToHistoryKeyWithUsage(metrics, now, true, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
 }
 
 // RecordFailure 记录失败请求（新方法，使用 baseURL + apiKey）
@@ -212,9 +232,18 @@ func (m *MetricsManager) appendToWindowKey(metrics *KeyMetrics, success bool) {
 
 // appendToHistoryKey 向 Key 历史记录添加请求（保留24小时）
 func (m *MetricsManager) appendToHistoryKey(metrics *KeyMetrics, timestamp time.Time, success bool) {
+	m.appendToHistoryKeyWithUsage(metrics, timestamp, success, 0, 0, 0, 0)
+}
+
+// appendToHistoryKeyWithUsage 向 Key 历史记录添加请求（带 Usage 数据）
+func (m *MetricsManager) appendToHistoryKeyWithUsage(metrics *KeyMetrics, timestamp time.Time, success bool, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64) {
 	metrics.requestHistory = append(metrics.requestHistory, RequestRecord{
-		Timestamp: timestamp,
-		Success:   success,
+		Timestamp:                timestamp,
+		Success:                  success,
+		InputTokens:              inputTokens,
+		OutputTokens:             outputTokens,
+		CacheCreationInputTokens: cacheCreationTokens,
+		CacheReadInputTokens:     cacheReadTokens,
 	})
 
 	// 清理超过24小时的记录
@@ -402,6 +431,107 @@ func (m *MetricsManager) GetChannelAggregatedMetrics(channelIndex int, baseURL s
 	aggregated.ConsecutiveFailures = maxConsecutiveFailures
 
 	return aggregated
+}
+
+// KeyUsageInfo Key 使用信息（用于排序筛选）
+type KeyUsageInfo struct {
+	APIKey       string
+	KeyMask      string
+	RequestCount int64
+	LastUsedAt   *time.Time
+}
+
+// GetChannelKeyUsageInfo 获取渠道下所有 Key 的使用信息（用于排序筛选）
+// 返回的 keys 已按最近使用时间排序
+func (m *MetricsManager) GetChannelKeyUsageInfo(baseURL string, apiKeys []string) []KeyUsageInfo {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	infos := make([]KeyUsageInfo, 0, len(apiKeys))
+
+	for _, apiKey := range apiKeys {
+		metricsKey := generateMetricsKey(baseURL, apiKey)
+		metrics, exists := m.keyMetrics[metricsKey]
+
+		var keyMask string
+		var requestCount int64
+		var lastUsedAt *time.Time
+
+		if exists {
+			keyMask = metrics.KeyMask
+			requestCount = metrics.RequestCount
+			lastUsedAt = metrics.LastSuccessAt
+			if lastUsedAt == nil {
+				lastUsedAt = metrics.LastFailureAt
+			}
+		} else {
+			// Key 还没有指标记录，使用默认脱敏
+			keyMask = utils.MaskAPIKey(apiKey)
+			requestCount = 0
+		}
+
+		infos = append(infos, KeyUsageInfo{
+			APIKey:       apiKey,
+			KeyMask:      keyMask,
+			RequestCount: requestCount,
+			LastUsedAt:   lastUsedAt,
+		})
+	}
+
+	// 按最近使用时间排序（最近的在前面）
+	sort.Slice(infos, func(i, j int) bool {
+		if infos[i].LastUsedAt == nil && infos[j].LastUsedAt == nil {
+			return infos[i].RequestCount > infos[j].RequestCount // 都未使用时，按访问量排序
+		}
+		if infos[i].LastUsedAt == nil {
+			return false // i 未使用，排后面
+		}
+		if infos[j].LastUsedAt == nil {
+			return true // j 未使用，i 排前面
+		}
+		return infos[i].LastUsedAt.After(*infos[j].LastUsedAt)
+	})
+
+	return infos
+}
+
+// SelectTopKeys 筛选展示的 Key
+// 策略：先取最近使用的 5 个，再从其他 Key 中按访问量补全到 10 个
+func SelectTopKeys(infos []KeyUsageInfo, maxDisplay int) []KeyUsageInfo {
+	if len(infos) <= maxDisplay {
+		return infos
+	}
+
+	// 分离：最近使用的和未使用的
+	var recentKeys []KeyUsageInfo
+	var otherKeys []KeyUsageInfo
+
+	for i, info := range infos {
+		if i < 5 {
+			recentKeys = append(recentKeys, info)
+		} else {
+			otherKeys = append(otherKeys, info)
+		}
+	}
+
+	// 其他 Key 按访问量排序（降序）
+	sort.Slice(otherKeys, func(i, j int) bool {
+		return otherKeys[i].RequestCount > otherKeys[j].RequestCount
+	})
+
+	// 补全到 maxDisplay 个
+	result := make([]KeyUsageInfo, 0, maxDisplay)
+	result = append(result, recentKeys...)
+
+	needCount := maxDisplay - len(recentKeys)
+	if needCount > 0 && len(otherKeys) > 0 {
+		if len(otherKeys) > needCount {
+			otherKeys = otherKeys[:needCount]
+		}
+		result = append(result, otherKeys...)
+	}
+
+	return result
 }
 
 // GetAllKeyMetrics 获取所有 Key 的指标
@@ -859,6 +989,19 @@ type HistoryDataPoint struct {
 	SuccessRate  float64   `json:"successRate"`
 }
 
+// KeyHistoryDataPoint Key 级别历史数据点（包含 Token 和 Cache 数据）
+type KeyHistoryDataPoint struct {
+	Timestamp                time.Time `json:"timestamp"`
+	RequestCount             int64     `json:"requestCount"`
+	SuccessCount             int64     `json:"successCount"`
+	FailureCount             int64     `json:"failureCount"`
+	SuccessRate              float64   `json:"successRate"`
+	InputTokens              int64     `json:"inputTokens"`
+	OutputTokens             int64     `json:"outputTokens"`
+	CacheCreationInputTokens int64     `json:"cacheCreationTokens"`
+	CacheReadInputTokens     int64     `json:"cacheReadTokens"`
+}
+
 // GetHistoricalStats 获取历史统计数据（按时间间隔聚合）
 // duration: 查询时间范围 (如 1h, 6h, 24h)
 // interval: 聚合间隔 (如 5m, 15m, 1h)
@@ -1007,4 +1150,104 @@ func (m *MetricsManager) GetAllKeysHistoricalStats(duration, interval time.Durat
 	}
 
 	return result
+}
+
+// GetKeyHistoricalStats 获取单个 Key 的历史统计数据（包含 Token 和 Cache 数据）
+func (m *MetricsManager) GetKeyHistoricalStats(baseURL, apiKey string, duration, interval time.Duration) []KeyHistoryDataPoint {
+	// 参数验证
+	if interval <= 0 || duration <= 0 {
+		return []KeyHistoryDataPoint{}
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	now := time.Now()
+	// 时间对齐到 interval 边界
+	startTime := now.Add(-duration).Truncate(interval)
+	// endTime 延伸一个 interval，确保当前时间段的请求也被包含
+	endTime := now.Truncate(interval).Add(interval)
+
+	numPoints := int(duration / interval)
+	if numPoints <= 0 {
+		numPoints = 1
+	}
+	numPoints++ // 额外的一个桶用于当前时间段
+
+	// 使用 map 按时间分桶
+	buckets := make(map[int64]*keyBucketData)
+	for i := 0; i < numPoints; i++ {
+		buckets[int64(i)] = &keyBucketData{}
+	}
+
+	// 获取 Key 的指标
+	metricsKey := generateMetricsKey(baseURL, apiKey)
+	metrics, exists := m.keyMetrics[metricsKey]
+	if !exists {
+		// Key 不存在，返回空数据点
+		result := make([]KeyHistoryDataPoint, numPoints)
+		for i := 0; i < numPoints; i++ {
+			result[i] = KeyHistoryDataPoint{
+				Timestamp: startTime.Add(time.Duration(i+1) * interval),
+			}
+		}
+		return result
+	}
+
+	// 收集该 Key 的请求历史并放入对应桶
+	for _, record := range metrics.requestHistory {
+		// 使用 Before(endTime) 排除恰好落在 endTime 的记录，避免 offset 越界
+		if record.Timestamp.After(startTime) && record.Timestamp.Before(endTime) {
+			offset := int64(record.Timestamp.Sub(startTime) / interval)
+			if offset >= 0 && offset < int64(numPoints) {
+				b := buckets[offset]
+				b.requestCount++
+				if record.Success {
+					b.successCount++
+				} else {
+					b.failureCount++
+				}
+				// 累加 Token 数据
+				b.inputTokens += record.InputTokens
+				b.outputTokens += record.OutputTokens
+				b.cacheCreationTokens += record.CacheCreationInputTokens
+				b.cacheReadTokens += record.CacheReadInputTokens
+			}
+		}
+	}
+
+	// 构建结果
+	result := make([]KeyHistoryDataPoint, numPoints)
+	for i := 0; i < numPoints; i++ {
+		b := buckets[int64(i)]
+		// 空桶成功率默认为 0，避免误导（100% 暗示完美成功）
+		successRate := float64(0)
+		if b.requestCount > 0 {
+			successRate = float64(b.successCount) / float64(b.requestCount) * 100
+		}
+		result[i] = KeyHistoryDataPoint{
+			Timestamp:                startTime.Add(time.Duration(i+1) * interval),
+			RequestCount:             b.requestCount,
+			SuccessCount:             b.successCount,
+			FailureCount:             b.failureCount,
+			SuccessRate:              successRate,
+			InputTokens:              b.inputTokens,
+			OutputTokens:             b.outputTokens,
+			CacheCreationInputTokens: b.cacheCreationTokens,
+			CacheReadInputTokens:     b.cacheReadTokens,
+		}
+	}
+
+	return result
+}
+
+// keyBucketData Key 级别时间分桶的辅助结构（包含 Token 数据）
+type keyBucketData struct {
+	requestCount        int64
+	successCount        int64
+	failureCount        int64
+	inputTokens         int64
+	outputTokens        int64
+	cacheCreationTokens int64
+	cacheReadTokens     int64
 }

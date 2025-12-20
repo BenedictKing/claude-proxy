@@ -4,6 +4,28 @@
 
 ---
 
+## [Unreleased]
+
+### ✨ 新功能
+
+- **新增 Key 级别使用趋势图表**
+  - 支持三种视图模式：流量（Traffic）、Token I/O、缓存 R/W
+  - Token I/O 和缓存模式使用双向面积图显示（上方 Input/Read，下方 Output/Creation）
+  - **Key 筛选逻辑**：当 key 超过 10 个时，先取最近使用的 5 个，再从其他 key 中按访问量补全到 10 个
+  - Key 名称显示前 8 个字符以保持简洁
+  - 多 Key 曲线使用不同颜色（蓝、橙、绿、紫、粉）
+  - 底部快照卡片实时显示各 Key 的 RPM、Input tokens、Output tokens
+  - 后端扩展 `RequestRecord` 结构记录 Token 和 Cache 数据
+  - 新增 `/api/channels/:id/keys/metrics/history` 和 `/api/responses/channels/:id/keys/metrics/history` 端点
+  - 涉及文件：`backend-go/internal/metrics/channel_metrics.go`, `backend-go/internal/handlers/channel_metrics_handler.go`, `backend-go/main.go`, `frontend/src/components/KeyTrendChart.vue`, `frontend/src/services/api.ts`
+
+### 🔧 改进
+
+- 优化请求成功记录逻辑，在响应完成后记录 Usage 数据
+- 调度器新增 `RecordSuccessWithUsage` 方法支持传递 Token 统计
+
+---
+
 ## [v2.1.33] - 2025-12-20
 
 ### ✨ 新功能

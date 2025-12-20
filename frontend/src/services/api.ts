@@ -111,6 +111,33 @@ export interface MetricsHistoryResponse {
   dataPoints: HistoryDataPoint[]
 }
 
+// Key 级别历史数据点（包含 Token 数据）
+export interface KeyHistoryDataPoint {
+  timestamp: string
+  requestCount: number
+  successCount: number
+  failureCount: number
+  successRate: number
+  inputTokens: number
+  outputTokens: number
+  cacheCreationTokens: number
+  cacheReadTokens: number
+}
+
+// 单个 Key 的历史数据
+export interface KeyHistoryData {
+  keyMask: string
+  color: string
+  dataPoints: KeyHistoryDataPoint[]
+}
+
+// 渠道 Key 级别历史指标响应
+export interface ChannelKeyMetricsHistoryResponse {
+  channelIndex: number
+  channelName: string
+  keys: KeyHistoryData[]
+}
+
 class ApiService {
   private apiKey: string | null = null
 
@@ -434,6 +461,18 @@ class ApiService {
   // 获取 Responses 渠道历史指标
   async getResponsesChannelMetricsHistory(duration: '1h' | '6h' | '24h' = '24h'): Promise<MetricsHistoryResponse[]> {
     return this.request(`/responses/channels/metrics/history?duration=${duration}`)
+  }
+
+  // ============== Key 级别历史指标 API ==============
+
+  // 获取 Messages 渠道 Key 级别历史指标（用于 Key 趋势图表）
+  async getChannelKeyMetricsHistory(channelId: number, duration: '1h' | '6h' | '24h' = '6h'): Promise<ChannelKeyMetricsHistoryResponse> {
+    return this.request(`/channels/${channelId}/keys/metrics/history?duration=${duration}`)
+  }
+
+  // 获取 Responses 渠道 Key 级别历史指标
+  async getResponsesChannelKeyMetricsHistory(channelId: number, duration: '1h' | '6h' | '24h' = '6h'): Promise<ChannelKeyMetricsHistoryResponse> {
+    return this.request(`/responses/channels/${channelId}/keys/metrics/history?duration=${duration}`)
   }
 }
 

@@ -226,10 +226,9 @@
           <!-- 展开的图表区域 -->
           <v-expand-transition>
             <div v-if="expandedChannelIndex === element.index" class="channel-chart-wrapper">
-              <ChannelMetricsChart
-                :channel-type="channelType"
-                :channel-index="element.index"
-                :channel-name="element.name"
+              <KeyTrendChart
+                :channel-id="element.index"
+                :is-responses="channelType === 'responses'"
                 @close="expandedChannelIndex = null"
               />
             </div>
@@ -336,7 +335,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import draggable from 'vuedraggable'
 import { api, type Channel, type ChannelMetrics, type ChannelStatus, type TimeWindowStats } from '../services/api'
 import ChannelStatusBadge from './ChannelStatusBadge.vue'
-import ChannelMetricsChart from './ChannelMetricsChart.vue'
+import KeyTrendChart from './KeyTrendChart.vue'
 
 const props = defineProps<{
   channels: Channel[]
