@@ -133,14 +133,8 @@ func ClaudeResponseToResponses(claudeResp map[string]interface{}, sessionID stri
 		}
 	}
 
-	// 提取 usage
-	usageMap, _ := claudeResp["usage"].(map[string]interface{})
-	usage := types.ResponsesUsage{}
-	if usageMap != nil {
-		usage.PromptTokens, _ = usageMap["input_tokens"].(int)
-		usage.CompletionTokens, _ = usageMap["output_tokens"].(int)
-		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
-	}
+	// 提取 usage（使用统一入口自动检测格式）
+	usage := ExtractUsageMetrics(claudeResp["usage"])
 
 	// 生成 response ID
 	responseID := generateResponseID()
@@ -256,18 +250,8 @@ func OpenAIChatResponseToResponses(openaiResp map[string]interface{}, sessionID 
 		}
 	}
 
-	// 提取 usage
-	usageMap, _ := openaiResp["usage"].(map[string]interface{})
-	usage := types.ResponsesUsage{}
-	if usageMap != nil {
-		promptTokens, _ := usageMap["prompt_tokens"].(float64)
-		completionTokens, _ := usageMap["completion_tokens"].(float64)
-		totalTokens, _ := usageMap["total_tokens"].(float64)
-
-		usage.PromptTokens = int(promptTokens)
-		usage.CompletionTokens = int(completionTokens)
-		usage.TotalTokens = int(totalTokens)
-	}
+	// 提取 usage（使用统一入口自动检测格式）
+	usage := ExtractUsageMetrics(openaiResp["usage"])
 
 	// 生成 response ID
 	responseID := generateResponseID()
@@ -422,17 +406,8 @@ func OpenAICompletionsResponseToResponses(completionsResp map[string]interface{}
 		}
 	}
 
-	usage := types.ResponsesUsage{}
-	usageMap, _ := completionsResp["usage"].(map[string]interface{})
-	if usageMap != nil {
-		promptTokens, _ := usageMap["prompt_tokens"].(float64)
-		completionTokens, _ := usageMap["completion_tokens"].(float64)
-		totalTokens, _ := usageMap["total_tokens"].(float64)
-
-		usage.PromptTokens = int(promptTokens)
-		usage.CompletionTokens = int(completionTokens)
-		usage.TotalTokens = int(totalTokens)
-	}
+	// 提取 usage（使用统一入口自动检测格式）
+	usage := ExtractUsageMetrics(completionsResp["usage"])
 
 	responseID := generateResponseID()
 
@@ -451,4 +426,227 @@ func JSONToMap(data []byte) (map[string]interface{}, error) {
 	var result map[string]interface{}
 	err := json.Unmarshal(data, &result)
 	return result, err
+}
+
+// getIntFromMap 从 map 中安全提取整数值
+// 支持 float64（JSON 反序列化）和 int/int64（内部构造）两种类型
+func getIntFromMap(m map[string]interface{}, key string) (int, bool) {
+	v, exists := m[key]
+	if !exists {
+		return 0, false
+	}
+	switch val := v.(type) {
+	case float64:
+		return int(val), true
+	case int:
+		return val, true
+	case int64:
+		return int(val), true
+	case int32:
+		return int(val), true
+	default:
+		return 0, false
+	}
+}
+
+// parseResponsesUsage 解析 Responses API 的 usage 字段
+// 完整支持 OpenAI Responses API 的详细 usage 结构
+func parseResponsesUsage(usageRaw interface{}) types.ResponsesUsage {
+	usage := types.ResponsesUsage{}
+
+	usageMap, ok := usageRaw.(map[string]interface{})
+	if !ok {
+		return usage
+	}
+
+	// 解析基础字段（兼容两种命名风格）
+	// OpenAI Responses API: input_tokens / output_tokens
+	// OpenAI Chat API: prompt_tokens / completion_tokens
+	if v, ok := getIntFromMap(usageMap, "input_tokens"); ok {
+		usage.InputTokens = v
+	} else if v, ok := getIntFromMap(usageMap, "prompt_tokens"); ok {
+		usage.InputTokens = v
+	}
+
+	if v, ok := getIntFromMap(usageMap, "output_tokens"); ok {
+		usage.OutputTokens = v
+	} else if v, ok := getIntFromMap(usageMap, "completion_tokens"); ok {
+		usage.OutputTokens = v
+	}
+
+	if v, ok := getIntFromMap(usageMap, "total_tokens"); ok {
+		usage.TotalTokens = v
+	} else {
+		usage.TotalTokens = usage.InputTokens + usage.OutputTokens
+	}
+
+	// 解析 input_tokens_details（兼容 prompt_tokens_details）
+	inputDetailsRaw := usageMap["input_tokens_details"]
+	if inputDetailsRaw == nil {
+		inputDetailsRaw = usageMap["prompt_tokens_details"]
+	}
+	if detailsMap, ok := inputDetailsRaw.(map[string]interface{}); ok {
+		usage.InputTokensDetails = &types.InputTokensDetails{}
+		if v, ok := getIntFromMap(detailsMap, "cached_tokens"); ok {
+			usage.InputTokensDetails.CachedTokens = v
+		}
+	}
+
+	// 解析 output_tokens_details（兼容 completion_tokens_details）
+	outputDetailsRaw := usageMap["output_tokens_details"]
+	if outputDetailsRaw == nil {
+		outputDetailsRaw = usageMap["completion_tokens_details"]
+	}
+	if detailsMap, ok := outputDetailsRaw.(map[string]interface{}); ok {
+		usage.OutputTokensDetails = &types.OutputTokensDetails{}
+		if v, ok := getIntFromMap(detailsMap, "reasoning_tokens"); ok {
+			usage.OutputTokensDetails.ReasoningTokens = v
+		}
+	}
+
+	return usage
+}
+
+// parseClaudeUsage 解析 Claude API 的 usage 字段
+// 完整支持 Claude 的缓存统计，包括 TTL 细分 (5m/1h)
+// 参考 claude-code-hub 的 extractUsageMetrics 实现
+func parseClaudeUsage(usageRaw interface{}) types.ResponsesUsage {
+	usage := types.ResponsesUsage{}
+
+	usageMap, ok := usageRaw.(map[string]interface{})
+	if !ok {
+		return usage
+	}
+
+	// 基础字段
+	if v, ok := getIntFromMap(usageMap, "input_tokens"); ok {
+		usage.InputTokens = v
+	}
+	if v, ok := getIntFromMap(usageMap, "output_tokens"); ok {
+		usage.OutputTokens = v
+	}
+	usage.TotalTokens = usage.InputTokens + usage.OutputTokens
+
+	// Claude 缓存创建统计（区分 TTL）
+	var cacheCreation, cacheCreation5m, cacheCreation1h int
+	var has5m, has1h bool
+
+	// 总缓存创建量
+	if v, ok := getIntFromMap(usageMap, "cache_creation_input_tokens"); ok {
+		cacheCreation = v
+		usage.CacheCreationInputTokens = cacheCreation
+	}
+
+	// 5分钟 TTL 缓存创建
+	if v, ok := getIntFromMap(usageMap, "cache_creation_5m_input_tokens"); ok {
+		cacheCreation5m = v
+		usage.CacheCreation5mInputTokens = cacheCreation5m
+		has5m = cacheCreation5m > 0
+	}
+
+	// 1小时 TTL 缓存创建
+	if v, ok := getIntFromMap(usageMap, "cache_creation_1h_input_tokens"); ok {
+		cacheCreation1h = v
+		usage.CacheCreation1hInputTokens = cacheCreation1h
+		has1h = cacheCreation1h > 0
+	}
+
+	// 缓存读取
+	var cacheRead int
+	if v, ok := getIntFromMap(usageMap, "cache_read_input_tokens"); ok {
+		cacheRead = v
+		usage.CacheReadInputTokens = cacheRead
+	}
+
+	// 设置缓存 TTL 标识
+	if has5m && has1h {
+		usage.CacheTTL = "mixed"
+	} else if has1h {
+		usage.CacheTTL = "1h"
+	} else if has5m {
+		usage.CacheTTL = "5m"
+	}
+
+	// 同时设置 InputTokensDetails（兼容 OpenAI 格式）
+	// CachedTokens = cache_read（仅缓存读取，不包含缓存创建）
+	// 注意：cache_creation 是新创建的缓存，不是"已缓存的 token"
+	if cacheRead > 0 {
+		usage.InputTokensDetails = &types.InputTokensDetails{
+			CachedTokens: cacheRead,
+		}
+	}
+
+	return usage
+}
+
+// parseGeminiUsage 解析 Gemini API 的 usage 字段
+// Gemini 使用 promptTokenCount/candidatesTokenCount，需要特殊处理缓存去重
+// 参考 claude-code-hub: Gemini 的 promptTokenCount 已包含 cachedContentTokenCount，需要扣除避免重复计费
+func parseGeminiUsage(usageRaw interface{}) types.ResponsesUsage {
+	usage := types.ResponsesUsage{}
+
+	usageMap, ok := usageRaw.(map[string]interface{})
+	if !ok {
+		return usage
+	}
+
+	var promptTokens, cachedTokens, outputTokens int
+
+	// Gemini 字段名
+	if v, ok := getIntFromMap(usageMap, "promptTokenCount"); ok {
+		promptTokens = v
+	}
+	if v, ok := getIntFromMap(usageMap, "cachedContentTokenCount"); ok {
+		cachedTokens = v
+	}
+	if v, ok := getIntFromMap(usageMap, "candidatesTokenCount"); ok {
+		outputTokens = v
+	}
+
+	// 关键处理：Gemini 的 promptTokenCount 已包含 cachedContentTokenCount
+	// 为避免重复计费，实际输入 token = promptTokenCount - cachedContentTokenCount
+	actualInputTokens := promptTokens - cachedTokens
+	if actualInputTokens < 0 {
+		actualInputTokens = 0
+	}
+
+	usage.InputTokens = actualInputTokens
+	usage.OutputTokens = outputTokens
+	usage.TotalTokens = actualInputTokens + outputTokens
+
+	// 缓存读取统计
+	if cachedTokens > 0 {
+		usage.CacheReadInputTokens = cachedTokens
+		usage.InputTokensDetails = &types.InputTokensDetails{
+			CachedTokens: cachedTokens,
+		}
+	}
+
+	return usage
+}
+
+// ExtractUsageMetrics 多格式 Token 提取统一入口
+// 自动检测并解析 Claude/Gemini/OpenAI 三种格式的 usage
+// 参考 claude-code-hub 的 extractUsageMetrics 实现
+func ExtractUsageMetrics(usageRaw interface{}) types.ResponsesUsage {
+	usageMap, ok := usageRaw.(map[string]interface{})
+	if !ok {
+		return types.ResponsesUsage{}
+	}
+
+	// 1. 检测 Claude 格式：有 cache_creation_input_tokens 或 cache_read_input_tokens
+	if _, hasCacheCreation := usageMap["cache_creation_input_tokens"]; hasCacheCreation {
+		return parseClaudeUsage(usageRaw)
+	}
+	if _, hasCacheRead := usageMap["cache_read_input_tokens"]; hasCacheRead {
+		return parseClaudeUsage(usageRaw)
+	}
+
+	// 2. 检测 Gemini 格式：有 promptTokenCount
+	if _, hasPromptTokenCount := usageMap["promptTokenCount"]; hasPromptTokenCount {
+		return parseGeminiUsage(usageRaw)
+	}
+
+	// 3. 默认 OpenAI 格式
+	return parseResponsesUsage(usageRaw)
 }

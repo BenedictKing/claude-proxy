@@ -111,13 +111,19 @@ type OpenAIChoice struct {
 }
 
 // Usage 使用情况统计
+// 完整支持 Claude API 的详细 usage 字段，包括缓存 TTL 细分
 type Usage struct {
 	InputTokens              int `json:"input_tokens,omitempty"`
 	OutputTokens             int `json:"output_tokens,omitempty"`
 	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
 	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
-	PromptTokens             int `json:"prompt_tokens,omitempty"`
-	CompletionTokens         int `json:"completion_tokens,omitempty"`
+	// 缓存 TTL 细分（参考 claude-code-hub）
+	CacheCreation5mInputTokens int    `json:"cache_creation_5m_input_tokens,omitempty"` // 5分钟 TTL
+	CacheCreation1hInputTokens int    `json:"cache_creation_1h_input_tokens,omitempty"` // 1小时 TTL
+	CacheTTL                   string `json:"cache_ttl,omitempty"`                      // "5m" | "1h" | "mixed"
+	// OpenAI 兼容字段
+	PromptTokens     int `json:"prompt_tokens,omitempty"`
+	CompletionTokens int `json:"completion_tokens,omitempty"`
 }
 
 // ProviderRequest 提供商请求（通用）

@@ -1,5 +1,80 @@
 # Changelog
 
+## [Unreleased]
+
+### Added - 完整的 Responses API Token Usage 统计
+
+**功能描述**：参考 claude-code-hub 实现，扩展 `/v1/responses` 接口的 token usage 统计，支持多格式自动检测（Claude/Gemini/OpenAI）、缓存 TTL 细分统计（5m/1h）、Gemini 缓存去重处理。
+
+**涉及文件**：
+- `internal/types/responses.go` - 扩展 `ResponsesUsage` 结构，新增缓存 TTL 细分字段
+- `internal/converters/responses_converter.go` - 新增多格式 Token 提取函数
+- `internal/converters/responses_passthrough.go` - 使用统一解析入口
+- `internal/converters/chat_to_responses.go` - 流式/非流式转换支持完整 usage 解析
+
+**新增类型/字段**：
+- `ResponsesUsage.CacheCreationInputTokens` - 总缓存创建 token
+- `ResponsesUsage.CacheCreation5mInputTokens` - 5分钟 TTL 缓存创建
+- `ResponsesUsage.CacheCreation1hInputTokens` - 1小时 TTL 缓存创建
+- `ResponsesUsage.CacheReadInputTokens` - 缓存读取 token
+- `ResponsesUsage.CacheTTL` - TTL 标识 ("5m"/"1h"/"mixed")
+
+**新增函数**：
+- `ExtractUsageMetrics()` - 多格式 Token 提取统一入口，自动检测 Claude/Gemini/OpenAI 格式
+- `parseClaudeUsage()` - Claude API usage 解析，支持 TTL 细分
+- `parseGeminiUsage()` - Gemini API usage 解析，自动扣除缓存避免重复计费
+- `parseResponsesUsage()` - OpenAI Responses API usage 解析
+
+**关键特性**：
+- 缓存 TTL 细分：区分 5 分钟和 1 小时 TTL 的缓存创建统计
+- Gemini 去重：自动从 promptTokenCount 扣除 cachedContentTokenCount
+- 多格式兼容：统一入口自动检测并使用对应解析器
+
+### Fixed - Usage 解析数值类型健壮性
+
+**问题描述**：`ExtractUsageMetrics` 系列函数仅支持 `float64` 类型（JSON 反序列化默认类型），当内部构造的 map 使用 `int` 类型时，所有 usage 字段会保持为零。
+
+**修复方案**：新增 `getIntFromMap()` 辅助函数，支持 `float64`、`int`、`int64`、`int32` 四种数值类型的安全提取。
+
+**涉及文件**：
+- `internal/converters/responses_converter.go` - 新增 `getIntFromMap()` 函数，更新所有 usage 解析函数
+
+### Added - Messages API 缓存 TTL 细分统计
+
+**功能描述**：参考 claude-code-hub 实现，扩展 `/v1/messages` 接口的 token usage 统计，支持缓存 TTL 细分（5m/1h）。
+
+**涉及文件**：
+- `internal/types/types.go` - 扩展 `Usage` 结构体，新增缓存 TTL 细分字段
+- `internal/handlers/proxy.go` - 流式/非流式响应支持完整 usage 解析和合并
+
+**新增字段**：
+- `Usage.CacheCreation5mInputTokens` - 5分钟 TTL 缓存创建
+- `Usage.CacheCreation1hInputTokens` - 1小时 TTL 缓存创建
+- `Usage.CacheTTL` - TTL 标识 ("5m"/"1h"/"mixed")
+
+**关键特性**：
+- SSE 事件合并：正确合并 `message_start` 和 `message_delta` 中分散的 token 数据
+- 缓存 TTL 细分：区分 5 分钟和 1 小时 TTL 的缓存创建统计
+- 日志增强：Token 统计日志包含完整的 TTL 细分信息
+
+### Fixed - CachedTokens 重复计算
+
+**问题描述**：`parseClaudeUsage()` 中 `InputTokensDetails.CachedTokens` 错误地设置为 `cache_read + cache_creation`，导致缓存 token 膨胀。
+
+**修复方案**：`CachedTokens` 仅包含 `cache_read`（缓存读取），`cache_creation` 是新创建的缓存，不是"已缓存的 token"。
+
+**涉及文件**：
+- `internal/converters/responses_converter.go:570-577`
+
+### Fixed - 流式响应纯缓存场景 Usage 丢失
+
+**问题描述**：流式响应结束时，仅当 `input_tokens > 0 || output_tokens > 0` 时才记录 usage，导致纯缓存场景（如缓存预热）的 TTL 统计丢失。
+
+**修复方案**：当有任何 usage 字段时都记录（包括 `cache_creation_*`、`cache_read_*` 等）。
+
+**涉及文件**：
+- `internal/handlers/proxy.go:999-1018`
+
 ## [v2.1.25] - 2025-12-18
 
 ### Added - TransformerMetadata 和 CacheControl 支持

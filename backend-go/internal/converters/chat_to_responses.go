@@ -30,10 +30,17 @@ type chatToResponsesState struct {
 	ReasoningBuf       strings.Builder
 	ReasoningPartAdded bool
 	ReasoningIndex     int
-	// usage
-	InputTokens  int64
-	OutputTokens int64
-	UsageSeen    bool
+	// usage（完整支持详细字段，参考 claude-code-hub）
+	InputTokens     int64
+	OutputTokens    int64
+	CachedTokens    int64 // input_tokens_details.cached_tokens / cache_read_input_tokens
+	ReasoningTokens int64 // output_tokens_details.reasoning_tokens
+	UsageSeen       bool
+	// Claude 缓存 TTL 细分
+	CacheCreationTokens   int64  // cache_creation_input_tokens
+	CacheCreation5mTokens int64  // cache_creation_5m_input_tokens
+	CacheCreation1hTokens int64  // cache_creation_1h_input_tokens
+	CacheTTL              string // "5m" | "1h" | "mixed"
 	// 首次消息标记
 	FirstChunk bool
 }
@@ -106,6 +113,12 @@ func ConvertOpenAIChatToResponses(ctx context.Context, modelName string, origina
 		st.FuncCallIDs = make(map[int]string)
 		st.InputTokens = 0
 		st.OutputTokens = 0
+		st.CachedTokens = 0
+		st.ReasoningTokens = 0
+		st.CacheCreationTokens = 0
+		st.CacheCreation5mTokens = 0
+		st.CacheCreation1hTokens = 0
+		st.CacheTTL = ""
 		st.UsageSeen = false
 
 		// 发送 response.created
@@ -313,15 +326,73 @@ func ConvertOpenAIChatToResponses(ctx context.Context, modelName string, origina
 		}
 	}
 
-	// 处理 usage（如果存在）
+	// 处理 usage（完整支持多格式详细字段，参考 claude-code-hub）
 	if usage := root.Get("usage"); usage.Exists() {
+		st.UsageSeen = true
+
+		// OpenAI 格式基础字段
 		if v := usage.Get("prompt_tokens"); v.Exists() {
 			st.InputTokens = v.Int()
-			st.UsageSeen = true
 		}
 		if v := usage.Get("completion_tokens"); v.Exists() {
 			st.OutputTokens = v.Int()
-			st.UsageSeen = true
+		}
+
+		// OpenAI 格式详细字段
+		if v := usage.Get("prompt_tokens_details.cached_tokens"); v.Exists() {
+			st.CachedTokens = v.Int()
+		}
+		if v := usage.Get("completion_tokens_details.reasoning_tokens"); v.Exists() {
+			st.ReasoningTokens = v.Int()
+		}
+
+		// Claude 格式基础字段（优先级高于 OpenAI）
+		if v := usage.Get("input_tokens"); v.Exists() {
+			st.InputTokens = v.Int()
+		}
+		if v := usage.Get("output_tokens"); v.Exists() {
+			st.OutputTokens = v.Int()
+		}
+
+		// Claude 格式缓存字段
+		if v := usage.Get("cache_read_input_tokens"); v.Exists() {
+			st.CachedTokens = v.Int()
+		}
+		if v := usage.Get("cache_creation_input_tokens"); v.Exists() {
+			st.CacheCreationTokens = v.Int()
+		}
+		if v := usage.Get("cache_creation_5m_input_tokens"); v.Exists() {
+			st.CacheCreation5mTokens = v.Int()
+		}
+		if v := usage.Get("cache_creation_1h_input_tokens"); v.Exists() {
+			st.CacheCreation1hTokens = v.Int()
+		}
+
+		// 设置缓存 TTL 标识
+		has5m := st.CacheCreation5mTokens > 0
+		has1h := st.CacheCreation1hTokens > 0
+		if has5m && has1h {
+			st.CacheTTL = "mixed"
+		} else if has1h {
+			st.CacheTTL = "1h"
+		} else if has5m {
+			st.CacheTTL = "5m"
+		}
+
+		// Gemini 格式（自动去重）
+		if v := usage.Get("promptTokenCount"); v.Exists() {
+			promptTokens := v.Int()
+			cachedTokens := usage.Get("cachedContentTokenCount").Int()
+			// Gemini 的 promptTokenCount 已包含 cachedContentTokenCount，需要扣除
+			actualInput := promptTokens - cachedTokens
+			if actualInput < 0 {
+				actualInput = 0
+			}
+			st.InputTokens = actualInput
+			st.CachedTokens = cachedTokens
+		}
+		if v := usage.Get("candidatesTokenCount"); v.Exists() {
+			st.OutputTokens = v.Int()
 		}
 	}
 
@@ -600,22 +671,46 @@ func (st *chatToResponsesState) generateCompletedEvents(originalRequestRawJSON [
 		completed, _ = sjson.Set(completed, "response.output", outputs)
 	}
 
-	// 添加 usage
-	reasoningTokens := int64(0)
-	if st.ReasoningBuf.Len() > 0 {
+	// 添加 usage（完整支持多格式详细字段，参考 claude-code-hub）
+	// 如果有 reasoning buffer 但上游没有返回 reasoning_tokens，则估算
+	reasoningTokens := st.ReasoningTokens
+	if reasoningTokens == 0 && st.ReasoningBuf.Len() > 0 {
 		reasoningTokens = int64(st.ReasoningBuf.Len() / 4)
 	}
+
 	usagePresent := st.UsageSeen || reasoningTokens > 0
 	if usagePresent {
+		// 基础字段
 		completed, _ = sjson.Set(completed, "response.usage.input_tokens", st.InputTokens)
-		completed, _ = sjson.Set(completed, "response.usage.input_tokens_details.cached_tokens", 0)
 		completed, _ = sjson.Set(completed, "response.usage.output_tokens", st.OutputTokens)
+		total := st.InputTokens + st.OutputTokens
+		completed, _ = sjson.Set(completed, "response.usage.total_tokens", total)
+
+		// input_tokens_details
+		if st.CachedTokens > 0 {
+			completed, _ = sjson.Set(completed, "response.usage.input_tokens_details.cached_tokens", st.CachedTokens)
+		}
+
+		// output_tokens_details
 		if reasoningTokens > 0 {
 			completed, _ = sjson.Set(completed, "response.usage.output_tokens_details.reasoning_tokens", reasoningTokens)
 		}
-		total := st.InputTokens + st.OutputTokens
-		if total > 0 || st.UsageSeen {
-			completed, _ = sjson.Set(completed, "response.usage.total_tokens", total)
+
+		// Claude 缓存 TTL 细分字段
+		if st.CacheCreationTokens > 0 {
+			completed, _ = sjson.Set(completed, "response.usage.cache_creation_input_tokens", st.CacheCreationTokens)
+		}
+		if st.CacheCreation5mTokens > 0 {
+			completed, _ = sjson.Set(completed, "response.usage.cache_creation_5m_input_tokens", st.CacheCreation5mTokens)
+		}
+		if st.CacheCreation1hTokens > 0 {
+			completed, _ = sjson.Set(completed, "response.usage.cache_creation_1h_input_tokens", st.CacheCreation1hTokens)
+		}
+		if st.CachedTokens > 0 {
+			completed, _ = sjson.Set(completed, "response.usage.cache_read_input_tokens", st.CachedTokens)
+		}
+		if st.CacheTTL != "" {
+			completed, _ = sjson.Set(completed, "response.usage.cache_ttl", st.CacheTTL)
 		}
 	}
 
@@ -784,22 +879,111 @@ func ConvertOpenAIChatToResponsesNonStream(_ context.Context, _ string, original
 		out, _ = sjson.Set(out, "output", outputs)
 	}
 
-	// 处理 usage
+	// 处理 usage（完整支持多格式详细字段，参考 claude-code-hub）
 	if usage := root.Get("usage"); usage.Exists() {
-		inputTokens := usage.Get("prompt_tokens").Int()
-		outputTokens := usage.Get("completion_tokens").Int()
-		totalTokens := usage.Get("total_tokens").Int()
+		var inputTokens, outputTokens, totalTokens, cachedTokens int64
+		var cacheCreation, cacheCreation5m, cacheCreation1h int64
+		var cacheTTL string
 
+		// OpenAI 格式
+		if v := usage.Get("prompt_tokens"); v.Exists() {
+			inputTokens = v.Int()
+		}
+		if v := usage.Get("completion_tokens"); v.Exists() {
+			outputTokens = v.Int()
+		}
+		if v := usage.Get("total_tokens"); v.Exists() {
+			totalTokens = v.Int()
+		}
+		if v := usage.Get("prompt_tokens_details.cached_tokens"); v.Exists() {
+			cachedTokens = v.Int()
+		}
+		reasoningTokensFromUsage := usage.Get("completion_tokens_details.reasoning_tokens").Int()
+
+		// Claude 格式（优先级高于 OpenAI）
+		if v := usage.Get("input_tokens"); v.Exists() {
+			inputTokens = v.Int()
+		}
+		if v := usage.Get("output_tokens"); v.Exists() {
+			outputTokens = v.Int()
+		}
+		if v := usage.Get("cache_read_input_tokens"); v.Exists() {
+			cachedTokens = v.Int()
+		}
+		if v := usage.Get("cache_creation_input_tokens"); v.Exists() {
+			cacheCreation = v.Int()
+		}
+		if v := usage.Get("cache_creation_5m_input_tokens"); v.Exists() {
+			cacheCreation5m = v.Int()
+		}
+		if v := usage.Get("cache_creation_1h_input_tokens"); v.Exists() {
+			cacheCreation1h = v.Int()
+		}
+
+		// 设置缓存 TTL 标识
+		if cacheCreation5m > 0 && cacheCreation1h > 0 {
+			cacheTTL = "mixed"
+		} else if cacheCreation1h > 0 {
+			cacheTTL = "1h"
+		} else if cacheCreation5m > 0 {
+			cacheTTL = "5m"
+		}
+
+		// Gemini 格式（自动去重）
+		if v := usage.Get("promptTokenCount"); v.Exists() {
+			promptTokens := v.Int()
+			geminiCached := usage.Get("cachedContentTokenCount").Int()
+			// Gemini 的 promptTokenCount 已包含 cachedContentTokenCount，需要扣除
+			actualInput := promptTokens - geminiCached
+			if actualInput < 0 {
+				actualInput = 0
+			}
+			inputTokens = actualInput
+			cachedTokens = geminiCached
+		}
+		if v := usage.Get("candidatesTokenCount"); v.Exists() {
+			outputTokens = v.Int()
+		}
+
+		// 计算总量
+		if totalTokens == 0 {
+			totalTokens = inputTokens + outputTokens
+		}
+
+		// 写入基础字段
 		out, _ = sjson.Set(out, "usage.input_tokens", inputTokens)
 		out, _ = sjson.Set(out, "usage.output_tokens", outputTokens)
 		out, _ = sjson.Set(out, "usage.total_tokens", totalTokens)
 
-		// reasoning tokens 估算
-		if reasoningBuf.Len() > 0 {
-			reasoningTokens := int64(reasoningBuf.Len() / 4)
-			if reasoningTokens > 0 {
-				out, _ = sjson.Set(out, "usage.output_tokens_details.reasoning_tokens", reasoningTokens)
-			}
+		// input_tokens_details
+		if cachedTokens > 0 {
+			out, _ = sjson.Set(out, "usage.input_tokens_details.cached_tokens", cachedTokens)
+		}
+
+		// output_tokens_details
+		reasoningTokens := reasoningTokensFromUsage
+		if reasoningTokens == 0 && reasoningBuf.Len() > 0 {
+			reasoningTokens = int64(reasoningBuf.Len() / 4)
+		}
+		if reasoningTokens > 0 {
+			out, _ = sjson.Set(out, "usage.output_tokens_details.reasoning_tokens", reasoningTokens)
+		}
+
+		// Claude 缓存 TTL 细分字段
+		if cacheCreation > 0 {
+			out, _ = sjson.Set(out, "usage.cache_creation_input_tokens", cacheCreation)
+		}
+		if cacheCreation5m > 0 {
+			out, _ = sjson.Set(out, "usage.cache_creation_5m_input_tokens", cacheCreation5m)
+		}
+		if cacheCreation1h > 0 {
+			out, _ = sjson.Set(out, "usage.cache_creation_1h_input_tokens", cacheCreation1h)
+		}
+		if cachedTokens > 0 {
+			out, _ = sjson.Set(out, "usage.cache_read_input_tokens", cachedTokens)
+		}
+		if cacheTTL != "" {
+			out, _ = sjson.Set(out, "usage.cache_ttl", cacheTTL)
 		}
 	}
 

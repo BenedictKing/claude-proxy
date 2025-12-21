@@ -59,19 +59,8 @@ func (c *ResponsesPassthroughConverter) FromProviderResponse(resp map[string]int
 		}
 	}
 
-	// 解析 usage
-	usage := types.ResponsesUsage{}
-	if usageMap, ok := resp["usage"].(map[string]interface{}); ok {
-		if promptTokens, ok := usageMap["prompt_tokens"].(float64); ok {
-			usage.PromptTokens = int(promptTokens)
-		}
-		if completionTokens, ok := usageMap["completion_tokens"].(float64); ok {
-			usage.CompletionTokens = int(completionTokens)
-		}
-		if totalTokens, ok := usageMap["total_tokens"].(float64); ok {
-			usage.TotalTokens = int(totalTokens)
-		}
-	}
+	// 解析 usage（使用统一入口自动检测格式：Claude/Gemini/OpenAI）
+	usage := ExtractUsageMetrics(resp["usage"])
 
 	return &types.ResponsesResponse{
 		ID:         id,

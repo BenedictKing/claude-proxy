@@ -752,11 +752,12 @@ func handleNormalResponse(c *gin.Context, resp *http.Response, provider provider
 				log.Printf("🔢 [Token补全] 虚假值: InputTokens=%d→%d, OutputTokens=%d→%d",
 					originalInput, claudeResp.Usage.InputTokens, originalOutput, claudeResp.Usage.OutputTokens)
 			}
-			// 记录完整的 token 信息
-			log.Printf("🔢 [Token统计] InputTokens=%d, OutputTokens=%d, CacheCreationInputTokens=%d, CacheReadInputTokens=%d, PromptTokens=%d, CompletionTokens=%d",
+			// 记录完整的 token 信息（包含缓存 TTL 细分）
+			log.Printf("🔢 [Token统计] InputTokens=%d, OutputTokens=%d, CacheCreationInputTokens=%d, CacheReadInputTokens=%d, CacheCreation5m=%d, CacheCreation1h=%d, CacheTTL=%s",
 				claudeResp.Usage.InputTokens, claudeResp.Usage.OutputTokens,
 				claudeResp.Usage.CacheCreationInputTokens, claudeResp.Usage.CacheReadInputTokens,
-				claudeResp.Usage.PromptTokens, claudeResp.Usage.CompletionTokens)
+				claudeResp.Usage.CacheCreation5mInputTokens, claudeResp.Usage.CacheCreation1hInputTokens,
+				claudeResp.Usage.CacheTTL)
 		}
 	}
 
@@ -910,6 +911,16 @@ func processStreamEvent(c *gin.Context, w gin.ResponseWriter, flusher http.Flush
 		if usageData.CacheReadInputTokens > 0 {
 			ctx.collectedUsage.CacheReadInputTokens = usageData.CacheReadInputTokens
 		}
+		// 缓存 TTL 细分字段（参考 claude-code-hub）
+		if usageData.CacheCreation5mInputTokens > 0 {
+			ctx.collectedUsage.CacheCreation5mInputTokens = usageData.CacheCreation5mInputTokens
+		}
+		if usageData.CacheCreation1hInputTokens > 0 {
+			ctx.collectedUsage.CacheCreation1hInputTokens = usageData.CacheCreation1hInputTokens
+		}
+		if usageData.CacheTTL != "" {
+			ctx.collectedUsage.CacheTTL = usageData.CacheTTL
+		}
 	}
 
 	// 日志缓存
@@ -986,13 +997,23 @@ func logStreamCompletion(ctx *streamContext, envCfg *config.EnvConfig, startTime
 	}
 
 	// 将累积的 usage 数据转换为 *types.Usage
+	// 当有任何 usage 字段时都应该记录（包括纯缓存场景）
 	var usage *types.Usage
-	if ctx.collectedUsage.InputTokens > 0 || ctx.collectedUsage.OutputTokens > 0 {
+	hasUsageData := ctx.collectedUsage.InputTokens > 0 ||
+		ctx.collectedUsage.OutputTokens > 0 ||
+		ctx.collectedUsage.CacheCreationInputTokens > 0 ||
+		ctx.collectedUsage.CacheReadInputTokens > 0 ||
+		ctx.collectedUsage.CacheCreation5mInputTokens > 0 ||
+		ctx.collectedUsage.CacheCreation1hInputTokens > 0
+	if hasUsageData {
 		usage = &types.Usage{
-			InputTokens:              ctx.collectedUsage.InputTokens,
-			OutputTokens:             ctx.collectedUsage.OutputTokens,
-			CacheCreationInputTokens: ctx.collectedUsage.CacheCreationInputTokens,
-			CacheReadInputTokens:     ctx.collectedUsage.CacheReadInputTokens,
+			InputTokens:                ctx.collectedUsage.InputTokens,
+			OutputTokens:               ctx.collectedUsage.OutputTokens,
+			CacheCreationInputTokens:   ctx.collectedUsage.CacheCreationInputTokens,
+			CacheReadInputTokens:       ctx.collectedUsage.CacheReadInputTokens,
+			CacheCreation5mInputTokens: ctx.collectedUsage.CacheCreation5mInputTokens,
+			CacheCreation1hInputTokens: ctx.collectedUsage.CacheCreation1hInputTokens,
+			CacheTTL:                   ctx.collectedUsage.CacheTTL,
 		}
 	}
 
@@ -1296,28 +1317,59 @@ func buildUsageEvent(requestBody []byte, outputText string) string {
 }
 
 // collectedUsageData 从流事件中收集的 usage 数据
+// 完整支持 Claude API 的缓存 TTL 细分统计
 type collectedUsageData struct {
 	InputTokens              int
 	OutputTokens             int
 	CacheCreationInputTokens int
 	CacheReadInputTokens     int
+	// 缓存 TTL 细分（参考 claude-code-hub）
+	CacheCreation5mInputTokens int
+	CacheCreation1hInputTokens int
+	CacheTTL                   string // "5m" | "1h" | "mixed"
 }
 
 // extractUsageFromMap 从 usage map 中提取 token 数据
+// 支持 Claude API 的完整 usage 字段，包括缓存 TTL 细分
 func extractUsageFromMap(usage map[string]interface{}) collectedUsageData {
 	var data collectedUsageData
+
+	// 基础字段
 	if v, ok := usage["input_tokens"].(float64); ok {
 		data.InputTokens = int(v)
 	}
 	if v, ok := usage["output_tokens"].(float64); ok {
 		data.OutputTokens = int(v)
 	}
+
+	// 缓存创建统计
 	if v, ok := usage["cache_creation_input_tokens"].(float64); ok {
 		data.CacheCreationInputTokens = int(v)
 	}
 	if v, ok := usage["cache_read_input_tokens"].(float64); ok {
 		data.CacheReadInputTokens = int(v)
 	}
+
+	// 缓存 TTL 细分（5m/1h）
+	var has5m, has1h bool
+	if v, ok := usage["cache_creation_5m_input_tokens"].(float64); ok {
+		data.CacheCreation5mInputTokens = int(v)
+		has5m = data.CacheCreation5mInputTokens > 0
+	}
+	if v, ok := usage["cache_creation_1h_input_tokens"].(float64); ok {
+		data.CacheCreation1hInputTokens = int(v)
+		has1h = data.CacheCreation1hInputTokens > 0
+	}
+
+	// 设置缓存 TTL 标识
+	if has5m && has1h {
+		data.CacheTTL = "mixed"
+	} else if has1h {
+		data.CacheTTL = "1h"
+	} else if has5m {
+		data.CacheTTL = "5m"
+	}
+
 	return data
 }
 
@@ -1488,8 +1540,9 @@ func patchUsageFieldsWithLog(usage map[string]interface{}, estimatedInput, estim
 	// 从当前事件读取缓存 token（仅用于日志输出，不用于判断是否补全）
 	cacheCreation, _ := usage["cache_creation_input_tokens"].(float64)
 	cacheRead, _ := usage["cache_read_input_tokens"].(float64)
-	promptTokens, _ := usage["prompt_tokens"].(float64)
-	completionTokens, _ := usage["completion_tokens"].(float64)
+	cacheCreation5m, _ := usage["cache_creation_5m_input_tokens"].(float64)
+	cacheCreation1h, _ := usage["cache_creation_1h_input_tokens"].(float64)
+	cacheTTL, _ := usage["cache_ttl"].(string)
 
 	// 补全 input_tokens：
 	// 1. 如果当前值 <= 1 且没有缓存 token，使用收集到的值
@@ -1518,9 +1571,9 @@ func patchUsageFieldsWithLog(usage map[string]interface{}, estimatedInput, estim
 			log.Printf("🔢 [Stream-Token补全] %s: InputTokens=%v→%v, OutputTokens=%v→%v",
 				location, originalInput, usage["input_tokens"], originalOutput, usage["output_tokens"])
 		}
-		// 记录完整的 token 信息
-		log.Printf("🔢 [Stream-Token统计] %s: InputTokens=%v, OutputTokens=%v, CacheCreationInputTokens=%.0f, CacheReadInputTokens=%.0f, PromptTokens=%.0f, CompletionTokens=%.0f",
-			location, usage["input_tokens"], usage["output_tokens"], cacheCreation, cacheRead, promptTokens, completionTokens)
+		// 记录完整的 token 信息（包含缓存 TTL 细分）
+		log.Printf("🔢 [Stream-Token统计] %s: InputTokens=%v, OutputTokens=%v, CacheCreationInputTokens=%.0f, CacheReadInputTokens=%.0f, CacheCreation5m=%.0f, CacheCreation1h=%.0f, CacheTTL=%s",
+			location, usage["input_tokens"], usage["output_tokens"], cacheCreation, cacheRead, cacheCreation5m, cacheCreation1h, cacheTTL)
 	}
 }
 

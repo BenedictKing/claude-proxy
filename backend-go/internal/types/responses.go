@@ -58,10 +58,31 @@ type ResponsesResponse struct {
 }
 
 // ResponsesUsage Responses API 使用统计
+// 完整支持 OpenAI Responses API 和 Claude API 的详细 usage 字段
+// 参考 claude-code-hub 实现，支持缓存 TTL 细分 (5m/1h)
 type ResponsesUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	InputTokens         int                  `json:"input_tokens"`
+	InputTokensDetails  *InputTokensDetails  `json:"input_tokens_details,omitempty"`
+	OutputTokens        int                  `json:"output_tokens"`
+	OutputTokensDetails *OutputTokensDetails `json:"output_tokens_details,omitempty"`
+	TotalTokens         int                  `json:"total_tokens"`
+
+	// Claude 扩展字段（缓存创建统计，用于精确计费）
+	CacheCreationInputTokens   int    `json:"cache_creation_input_tokens,omitempty"`
+	CacheCreation5mInputTokens int    `json:"cache_creation_5m_input_tokens,omitempty"` // 5分钟 TTL
+	CacheCreation1hInputTokens int    `json:"cache_creation_1h_input_tokens,omitempty"` // 1小时 TTL
+	CacheReadInputTokens       int    `json:"cache_read_input_tokens,omitempty"`
+	CacheTTL                   string `json:"cache_ttl,omitempty"` // "5m" | "1h" | "mixed"
+}
+
+// InputTokensDetails 输入 Token 详细统计
+type InputTokensDetails struct {
+	CachedTokens int `json:"cached_tokens"`
+}
+
+// OutputTokensDetails 输出 Token 详细统计
+type OutputTokensDetails struct {
+	ReasoningTokens int `json:"reasoning_tokens"`
 }
 
 // ResponsesStreamEvent Responses API 流式事件
