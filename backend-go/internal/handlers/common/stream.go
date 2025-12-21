@@ -65,6 +65,7 @@ func SetupStreamHeaders(c *gin.Context, resp *http.Response) {
 }
 
 // ProcessStreamEvents 处理流事件循环
+// 返回值: error 表示流处理过程中是否发生错误（用于调用方决定是否记录失败指标）
 func ProcessStreamEvents(
 	c *gin.Context,
 	w gin.ResponseWriter,
@@ -78,13 +79,13 @@ func ProcessStreamEvents(
 	channelScheduler *scheduler.ChannelScheduler,
 	upstream *config.UpstreamConfig,
 	apiKey string,
-) {
+) error {
 	for {
 		select {
 		case event, ok := <-eventChan:
 			if !ok {
 				logStreamCompletion(ctx, envCfg, startTime, channelScheduler, upstream, apiKey)
-				return
+				return nil
 			}
 			ProcessStreamEvent(c, w, flusher, event, ctx, envCfg, requestBody)
 
@@ -95,7 +96,18 @@ func ProcessStreamEvents(
 			if err != nil {
 				log.Printf("💥 流式传输错误: %v", err)
 				logPartialResponse(ctx, envCfg)
-				return
+
+				// 记录失败指标
+				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, false)
+
+				// 向客户端发送错误事件（如果连接仍然有效）
+				if !ctx.ClientGone {
+					errorEvent := BuildStreamErrorEvent(err)
+					w.Write([]byte(errorEvent))
+					flusher.Flush()
+				}
+
+				return err
 			}
 		}
 	}
@@ -536,6 +548,19 @@ func patchUsageFieldsWithLog(usage map[string]interface{}, estimatedInput, estim
 		log.Printf("🔢 [Stream-Token统计] %s: InputTokens=%v, OutputTokens=%v, CacheCreationInputTokens=%.0f, CacheReadInputTokens=%.0f, CacheCreation5m=%.0f, CacheCreation1h=%.0f, CacheTTL=%s",
 			location, usage["input_tokens"], usage["output_tokens"], cacheCreation, cacheRead, cacheCreation5m, cacheCreation1h, cacheTTL)
 	}
+}
+
+// BuildStreamErrorEvent 构建流错误 SSE 事件
+func BuildStreamErrorEvent(err error) string {
+	errorEvent := map[string]interface{}{
+		"type": "error",
+		"error": map[string]interface{}{
+			"type":    "stream_error",
+			"message": fmt.Sprintf("Stream processing error: %v", err),
+		},
+	}
+	eventJSON, _ := json.Marshal(errorEvent)
+	return fmt.Sprintf("event: error\ndata: %s\n\n", eventJSON)
 }
 
 // BuildUsageEvent 构建带 usage 的 message_delta SSE 事件

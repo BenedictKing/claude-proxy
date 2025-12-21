@@ -63,7 +63,7 @@ func Handler(
 		if isMultiChannel {
 			handleMultiChannel(c, envCfg, cfgManager, channelScheduler, sessionManager, bodyBytes, responsesReq, userID, startTime)
 		} else {
-			handleSingleChannel(c, envCfg, cfgManager, sessionManager, bodyBytes, responsesReq, startTime)
+			handleSingleChannel(c, envCfg, cfgManager, channelScheduler, sessionManager, bodyBytes, responsesReq, startTime)
 		}
 	})
 }
@@ -213,6 +213,8 @@ func tryChannelWithAllKeys(
 				continue
 			}
 
+			// 非 failover 错误，记录失败指标后返回
+			channelScheduler.RecordFailure(upstream.BaseURL, apiKey, true)
 			c.Data(resp.StatusCode, "application/json", respBodyBytes)
 			return true, "", nil
 		}
@@ -235,6 +237,7 @@ func handleSingleChannel(
 	c *gin.Context,
 	envCfg *config.EnvConfig,
 	cfgManager *config.ConfigManager,
+	channelScheduler *scheduler.ChannelScheduler,
 	sessionManager *session.SessionManager,
 	bodyBytes []byte,
 	responsesReq types.ResponsesRequest,
@@ -337,6 +340,7 @@ func handleSingleChannel(
 				continue
 			}
 
+			// 非 failover 错误，记录失败指标后返回
 			if envCfg.EnableResponseLogs {
 				log.Printf("⚠️ Responses 上游返回错误: %d", resp.StatusCode)
 				if envCfg.IsDevelopment() {
@@ -363,6 +367,7 @@ func handleSingleChannel(
 					log.Printf("📋 错误响应头:\n%s", string(respHeadersJSON))
 				}
 			}
+			channelScheduler.RecordFailure(upstream.BaseURL, apiKey, true)
 			c.Data(resp.StatusCode, "application/json", respBodyBytes)
 			return
 		}

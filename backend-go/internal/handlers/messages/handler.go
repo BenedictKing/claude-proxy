@@ -216,7 +216,8 @@ func tryChannelWithAllKeys(
 				continue
 			}
 
-			// 非 failover 错误，直接返回
+			// 非 failover 错误，记录失败指标后直接返回
+			channelScheduler.RecordFailure(upstream.BaseURL, apiKey, false)
 			c.Data(resp.StatusCode, "application/json", respBodyBytes)
 			return true, "", nil
 		}
@@ -371,7 +372,7 @@ func handleSingleChannel(
 				continue
 			}
 
-			// 非 failover 错误
+			// 非 failover 错误，记录失败指标后返回
 			if envCfg.EnableResponseLogs {
 				log.Printf("⚠️ 上游返回错误: %d", resp.StatusCode)
 				if envCfg.IsDevelopment() {
@@ -398,6 +399,7 @@ func handleSingleChannel(
 					log.Printf("📋 错误响应头:\n%s", string(respHeadersJSON))
 				}
 			}
+			channelScheduler.RecordFailure(upstream.BaseURL, apiKey, false)
 			c.Data(resp.StatusCode, "application/json", respBodyBytes)
 			return
 		}
@@ -557,9 +559,10 @@ func CountTokensHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManag
 			return
 		}
 
-		bodyBytes, err := io.ReadAll(c.Request.Body)
+		// 使用统一的请求体读取函数，应用大小限制
+		bodyBytes, err := common.ReadRequestBody(c, envCfg.MaxRequestBodySize)
 		if err != nil {
-			c.JSON(400, gin.H{"error": "Failed to read request body"})
+			// ReadRequestBody 已经返回了错误响应
 			return
 		}
 
