@@ -4,6 +4,27 @@
 
 ---
 
+## [v2.2.0] - 2025-12-21
+
+### 🔨 重构
+
+- **Handlers 模块重构为同级子包结构**
+  - 将 Messages API 和 Responses API 处理器重构为同级模块
+  - 新增 `handlers/common/` 包提取公共功能（failover、request、stream）
+  - 新增 `handlers/messages/` 包处理 Messages API（handler.go, channels.go）
+  - 新增 `handlers/responses/` 包处理 Responses API（handler.go, compact.go, channels.go）
+  - 新增 `handlers/settings.go` 处理 Fuzzy 模式设置
+  - 删除旧的 `proxy.go`（1,718 行）、`responses.go`（1,135 行）、`config.go`（748 行）
+  - 代码量减少约 180 行（-3.7%），结构更清晰
+  - 涉及文件：`backend-go/internal/handlers/`、`backend-go/main.go`
+
+### 📝 说明
+
+- **无破坏性变更**：所有 API 端点路径保持不变
+- **测试通过**：所有现有测试通过，`failover_test.go` 迁移到 `common/` 包
+
+---
+
 ## [v2.1.35] - 2025-12-21
 
 ### ✨ 新功能

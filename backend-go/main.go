@@ -13,6 +13,8 @@ import (
 
 	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/handlers"
+	"github.com/BenedictKing/claude-proxy/internal/handlers/messages"
+	"github.com/BenedictKing/claude-proxy/internal/handlers/responses"
 	"github.com/BenedictKing/claude-proxy/internal/logger"
 	"github.com/BenedictKing/claude-proxy/internal/metrics"
 	"github.com/BenedictKing/claude-proxy/internal/middleware"
@@ -103,41 +105,43 @@ func main() {
 	// Web 管理界面 API 路由
 	apiGroup := r.Group("/api")
 	{
-		// 渠道管理 (兼容前端 /api/channels 路由)
-		apiGroup.GET("/channels", handlers.GetUpstreams(cfgManager))
-		apiGroup.POST("/channels", handlers.AddUpstream(cfgManager))
-		apiGroup.PUT("/channels/:id", handlers.UpdateUpstream(cfgManager, channelScheduler))
-		apiGroup.DELETE("/channels/:id", handlers.DeleteUpstream(cfgManager))
-		apiGroup.POST("/channels/:id/keys", handlers.AddApiKey(cfgManager))
-		apiGroup.DELETE("/channels/:id/keys/:apiKey", handlers.DeleteApiKey(cfgManager))
-		apiGroup.POST("/channels/:id/keys/:apiKey/top", handlers.MoveApiKeyToTop(cfgManager))
-		apiGroup.POST("/channels/:id/keys/:apiKey/bottom", handlers.MoveApiKeyToBottom(cfgManager))
+		// Messages 渠道管理 (兼容前端 /api/channels 路由)
+		apiGroup.GET("/channels", messages.GetUpstreams(cfgManager))
+		apiGroup.POST("/channels", messages.AddUpstream(cfgManager))
+		apiGroup.PUT("/channels/:id", messages.UpdateUpstream(cfgManager, channelScheduler))
+		apiGroup.DELETE("/channels/:id", messages.DeleteUpstream(cfgManager))
+		apiGroup.POST("/channels/:id/keys", messages.AddApiKey(cfgManager))
+		apiGroup.DELETE("/channels/:id/keys/:apiKey", messages.DeleteApiKey(cfgManager))
+		apiGroup.POST("/channels/:id/keys/:apiKey/top", messages.MoveApiKeyToTop(cfgManager))
+		apiGroup.POST("/channels/:id/keys/:apiKey/bottom", messages.MoveApiKeyToBottom(cfgManager))
 
-		// 多渠道调度 API
-		apiGroup.POST("/channels/reorder", handlers.ReorderChannels(cfgManager))
-		apiGroup.PATCH("/channels/:id/status", handlers.SetChannelStatus(cfgManager))
+		// Messages 多渠道调度 API
+		apiGroup.POST("/channels/reorder", messages.ReorderChannels(cfgManager))
+		apiGroup.PATCH("/channels/:id/status", messages.SetChannelStatus(cfgManager))
 		apiGroup.POST("/channels/:id/resume", handlers.ResumeChannel(channelScheduler, false))
-		apiGroup.POST("/channels/:id/promotion", handlers.SetChannelPromotion(cfgManager))
+		apiGroup.POST("/channels/:id/promotion", messages.SetChannelPromotion(cfgManager))
 		apiGroup.GET("/channels/metrics", handlers.GetChannelMetricsWithConfig(messagesMetricsManager, cfgManager, false))
 		apiGroup.GET("/channels/metrics/history", handlers.GetChannelMetricsHistory(messagesMetricsManager, cfgManager, false))
 		apiGroup.GET("/channels/:id/keys/metrics/history", handlers.GetChannelKeyMetricsHistory(messagesMetricsManager, cfgManager, false))
 		apiGroup.GET("/channels/scheduler/stats", handlers.GetSchedulerStats(channelScheduler))
 		apiGroup.GET("/channels/dashboard", handlers.GetChannelDashboard(cfgManager, channelScheduler))
+		apiGroup.GET("/ping/:id", messages.PingChannel(cfgManager))
+		apiGroup.GET("/ping", messages.PingAllChannels(cfgManager))
 
 		// Responses 渠道管理
-		apiGroup.GET("/responses/channels", handlers.GetResponsesUpstreams(cfgManager))
-		apiGroup.POST("/responses/channels", handlers.AddResponsesUpstream(cfgManager))
-		apiGroup.PUT("/responses/channels/:id", handlers.UpdateResponsesUpstream(cfgManager, channelScheduler))
-		apiGroup.DELETE("/responses/channels/:id", handlers.DeleteResponsesUpstream(cfgManager))
-		apiGroup.POST("/responses/channels/:id/keys", handlers.AddResponsesApiKey(cfgManager))
-		apiGroup.DELETE("/responses/channels/:id/keys/:apiKey", handlers.DeleteResponsesApiKey(cfgManager))
-		apiGroup.POST("/responses/channels/:id/keys/:apiKey/top", handlers.MoveResponsesApiKeyToTop(cfgManager))
-		apiGroup.POST("/responses/channels/:id/keys/:apiKey/bottom", handlers.MoveResponsesApiKeyToBottom(cfgManager))
-		apiGroup.PUT("/responses/loadbalance", handlers.UpdateResponsesLoadBalance(cfgManager))
+		apiGroup.GET("/responses/channels", responses.GetUpstreams(cfgManager))
+		apiGroup.POST("/responses/channels", responses.AddUpstream(cfgManager))
+		apiGroup.PUT("/responses/channels/:id", responses.UpdateUpstream(cfgManager, channelScheduler))
+		apiGroup.DELETE("/responses/channels/:id", responses.DeleteUpstream(cfgManager))
+		apiGroup.POST("/responses/channels/:id/keys", responses.AddApiKey(cfgManager))
+		apiGroup.DELETE("/responses/channels/:id/keys/:apiKey", responses.DeleteApiKey(cfgManager))
+		apiGroup.POST("/responses/channels/:id/keys/:apiKey/top", responses.MoveApiKeyToTop(cfgManager))
+		apiGroup.POST("/responses/channels/:id/keys/:apiKey/bottom", responses.MoveApiKeyToBottom(cfgManager))
+		apiGroup.PUT("/responses/loadbalance", responses.UpdateLoadBalance(cfgManager))
 
 		// Responses 多渠道调度 API
-		apiGroup.POST("/responses/channels/reorder", handlers.ReorderResponsesChannels(cfgManager))
-		apiGroup.PATCH("/responses/channels/:id/status", handlers.SetResponsesChannelStatus(cfgManager))
+		apiGroup.POST("/responses/channels/reorder", responses.ReorderChannels(cfgManager))
+		apiGroup.PATCH("/responses/channels/:id/status", responses.SetChannelStatus(cfgManager))
 		apiGroup.POST("/responses/channels/:id/resume", handlers.ResumeChannel(channelScheduler, true))
 		apiGroup.POST("/responses/channels/:id/promotion", handlers.SetResponsesChannelPromotion(cfgManager))
 		apiGroup.GET("/responses/channels/metrics", handlers.GetChannelMetricsWithConfig(responsesMetricsManager, cfgManager, true))
@@ -145,24 +149,20 @@ func main() {
 		apiGroup.GET("/responses/channels/:id/keys/metrics/history", handlers.GetChannelKeyMetricsHistory(responsesMetricsManager, cfgManager, true))
 
 		// 负载均衡
-		apiGroup.PUT("/loadbalance", handlers.UpdateLoadBalance(cfgManager))
+		apiGroup.PUT("/loadbalance", messages.UpdateLoadBalance(cfgManager))
 
 		// Fuzzy 模式设置
 		apiGroup.GET("/settings/fuzzy-mode", handlers.GetFuzzyMode(cfgManager))
 		apiGroup.PUT("/settings/fuzzy-mode", handlers.SetFuzzyMode(cfgManager))
-
-		// Ping测试
-		apiGroup.GET("/ping/:id", handlers.PingChannel(cfgManager))
-		apiGroup.GET("/ping", handlers.PingAllChannels(cfgManager))
 	}
 
-	// 代理端点 - 统一入口
-	r.POST("/v1/messages", handlers.ProxyHandler(envCfg, cfgManager, channelScheduler))
-	r.POST("/v1/messages/count_tokens", handlers.CountTokensHandler(envCfg, cfgManager, channelScheduler))
+	// 代理端点 - Messages API
+	r.POST("/v1/messages", messages.Handler(envCfg, cfgManager, channelScheduler))
+	r.POST("/v1/messages/count_tokens", messages.CountTokensHandler(envCfg, cfgManager, channelScheduler))
 
-	// Responses API 端点
-	r.POST("/v1/responses", handlers.ResponsesHandler(envCfg, cfgManager, sessionManager, channelScheduler))
-	r.POST("/v1/responses/compact", handlers.CompactHandler(envCfg, cfgManager, sessionManager, channelScheduler))
+	// 代理端点 - Responses API
+	r.POST("/v1/responses", responses.Handler(envCfg, cfgManager, sessionManager, channelScheduler))
+	r.POST("/v1/responses/compact", responses.CompactHandler(envCfg, cfgManager, sessionManager, channelScheduler))
 
 	// 静态文件服务 (嵌入的前端)
 	if envCfg.EnableWebUI {

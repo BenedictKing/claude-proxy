@@ -1,4 +1,4 @@
-package handlers
+package common
 
 import (
 	"encoding/json"
@@ -358,7 +358,7 @@ func TestShouldRetryWithNextKey(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			bodyBytes, _ := json.Marshal(tt.body)
 			// 测试非 Fuzzy 模式（精确错误分类）
-			gotFailover, gotQuota := shouldRetryWithNextKey(tt.statusCode, bodyBytes, false)
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, bodyBytes, false)
 			if gotFailover != tt.wantFailover {
 				t.Errorf("shouldRetryWithNextKey(%d, ..., false) failover = %v, want %v", tt.statusCode, gotFailover, tt.wantFailover)
 			}
@@ -471,7 +471,7 @@ func TestShouldRetryWithNextKeyFuzzyMode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 测试 Fuzzy 模式（所有非 2xx 都 failover）
-			gotFailover, gotQuota := shouldRetryWithNextKey(tt.statusCode, nil, true)
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, nil, true)
 			if gotFailover != tt.wantFailover {
 				t.Errorf("shouldRetryWithNextKey(%d, nil, true) failover = %v, want %v", tt.statusCode, gotFailover, tt.wantFailover)
 			}
