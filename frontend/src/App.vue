@@ -223,7 +223,7 @@
 
           <div class="action-bar-right">
             <!-- Fuzzy 模式切换按钮 -->
-            <v-tooltip location="bottom">
+            <v-tooltip location="bottom" content-class="fuzzy-tooltip">
               <template v-slot:activator="{ props }">
                 <v-btn
                   v-bind="props"
@@ -2028,5 +2028,21 @@ onUnmounted(() => {
 
 .v-theme--dark .status-badge .badge-content {
   border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* Fuzzy tooltip 样式 - 复古像素主题 */
+.fuzzy-tooltip {
+  background: #1a1a1a !important;
+  color: #f5f5f5 !important;
+  border: 1px solid #333 !important;
+  border-radius: 0 !important;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.2) !important;
+  padding: 8px 12px !important;
+}
+
+.v-theme--dark .fuzzy-tooltip {
+  background: #2d2d2d !important;
+  color: #f5f5f5 !important;
+  border-color: #555 !important;
 }
 </style>
