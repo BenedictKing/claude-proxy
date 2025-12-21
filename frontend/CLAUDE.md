@@ -35,6 +35,33 @@ bun run preview   # 预览构建
 
 编辑 `src/plugins/vuetify.ts` 中的 `lightTheme` 和 `darkTheme`。
 
+## 图标系统
+
+项目使用 **SVG 按需导入** 方案，从 `@mdi/js` 导入单个图标 path，而非完整字体文件，显著减小打包体积。
+
+**配置文件**: `src/plugins/vuetify.ts`
+
+**新增图标步骤**:
+1. 从 `@mdi/js` 添加导入（驼峰命名）
+2. 在 `iconMap` 中添加映射（kebab-case）
+
+```typescript
+// 1. 导入
+import { mdiNewIcon } from '@mdi/js'
+
+// 2. 映射
+const iconMap = {
+  'new-icon': mdiNewIcon,
+}
+```
+
+**使用方式**: 模板中使用 `mdi-xxx` 格式
+```vue
+<v-icon>mdi-new-icon</v-icon>
+```
+
+**图标查找**: https://pictogrammers.com/library/mdi/
+
 ## 构建产物
 
 生产构建输出到 `dist/`，会被嵌入到 Go 后端二进制文件中（`embed.FS`）。

@@ -30,6 +30,18 @@ make build        # 构建二进制
 | `/api/channels/metrics` | GET | 渠道指标 |
 | `/api/channels/scheduler/stats` | GET | 调度器统计 |
 
+## 指标历史数据聚合粒度
+
+`/api/channels/:id/keys/metrics/history` 端点根据查询时间范围自动选择聚合间隔：
+
+| 时间范围 | 聚合间隔 | 数据点数 |
+|----------|----------|----------|
+| 1h       | 1 分钟   | ~60 点   |
+| 6h       | 5 分钟   | ~72 点   |
+| 24h      | 15 分钟  | ~96 点   |
+
+可通过 `interval` 参数手动指定（最小 1 分钟）。
+
 ## Provider 接口
 
 所有上游服务实现 `internal/providers/Provider` 接口：

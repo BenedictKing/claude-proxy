@@ -62,36 +62,6 @@
       />
     </div>
 
-    <!-- 底部 Key 快照卡片 -->
-    <div v-if="hasData && keySnapshots.length > 0" class="key-snapshots mt-3">
-      <v-row dense>
-        <v-col v-for="(snapshot, index) in keySnapshots" :key="index" cols="auto">
-          <v-card
-            :color="snapshot.hasError ? 'error' : undefined"
-            :class="snapshot.hasError ? 'text-white' : ''"
-            class="snapshot-card"
-            density="compact"
-            variant="outlined"
-          >
-            <v-card-text class="pa-2">
-              <div class="d-flex align-center ga-2 mb-1">
-                <div class="key-color-dot" :style="{ backgroundColor: snapshot.color }" />
-                <span class="text-caption font-weight-medium">{{ snapshot.keyMask }}</span>
-              </div>
-              <!-- 只在有 Token 数据时显示 -->
-              <div v-if="snapshot.inputTokens > 0 || snapshot.outputTokens > 0" class="snapshot-stats">
-                <div class="text-caption">
-                  <span class="text-medium-emphasis">In:</span>
-                  <span class="ml-1">{{ formatNumber(snapshot.inputTokens) }}</span>
-                  <span class="text-medium-emphasis ml-2">Out:</span>
-                  <span class="ml-1">{{ formatNumber(snapshot.outputTokens) }}</span>
-                </div>
-              </div>
-            </v-card-text>
-          </v-card>
-        </v-col>
-      </v-row>
-    </div>
   </div>
 </template>
 
@@ -351,42 +321,6 @@ const buildChartSeries = (data: ChannelKeyMetricsHistoryResponse | null) => {
 // Computed: chart series data
 const chartSeries = computed(() => buildChartSeries(historyData.value))
 
-// Computed: Key 快照数据（当前时间窗口的汇总）
-const keySnapshots = computed(() => {
-  if (!historyData.value?.keys) return []
-
-  const now = Date.now()
-  const windowMs = getDurationMs(selectedDuration.value)
-  const windowStart = now - windowMs
-
-  return historyData.value.keys.map((keyData, index) => {
-    const color = keyColors[index % keyColors.length]
-
-    // 只计算时间窗口内的数据
-    const windowData = keyData.dataPoints.filter(dp => {
-      const ts = new Date(dp.timestamp).getTime()
-      return ts >= windowStart && ts <= now
-    })
-
-    // 汇总统计
-    const totalInput = windowData.reduce((sum, dp) => sum + dp.inputTokens, 0)
-    const totalOutput = windowData.reduce((sum, dp) => sum + dp.outputTokens, 0)
-    const totalRequests = windowData.reduce((sum, dp) => sum + dp.requestCount, 0)
-    const totalFailures = windowData.reduce((sum, dp) => sum + dp.failureCount, 0)
-
-    // 检查是否有错误（失败率 > 10%）
-    const hasError = totalRequests > 0 && (totalFailures / totalRequests) > 0.1
-
-    return {
-      keyMask: keyData.keyMask,
-      color,
-      inputTokens: totalInput,
-      outputTokens: totalOutput,
-      hasError
-    }
-  })
-})
-
 // Helper: format number for display
 const formatNumber = (num: number): string => {
   if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
@@ -555,27 +489,5 @@ defineExpose({
 
 .chart-area {
   margin-top: 8px;
-}
-
-.key-color-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.snapshot-card {
-  min-width: 120px;
-  transition: all 0.2s ease;
-}
-
-.snapshot-card:hover {
-  transform: translateY(-2px);
-}
-
-.snapshot-stats {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 </style>
