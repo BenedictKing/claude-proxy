@@ -88,7 +88,7 @@
                 <v-icon size="14">mdi-open-in-new</v-icon>
               </v-btn>
               <span class="text-caption text-medium-emphasis ml-2">{{ element.serviceType }}</span>
-              <span v-if="element.description" class="text-caption text-disabled ml-3">{{ element.description }}</span>
+              <span v-if="element.description" class="text-caption text-disabled ml-3 channel-description">{{ element.description }}</span>
               <!-- 展开图标 -->
               <v-icon
                 size="x-small"
@@ -794,6 +794,18 @@ defineExpose({
 .channel-name .font-weight-medium {
   font-size: 0.95rem;
   flex-shrink: 0;
+}
+
+/* 描述文本限制最多两行 */
+.channel-description {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+  max-height: calc(1.4em * 2);
+  word-break: break-word;
 }
 
 .channel-name-link {
