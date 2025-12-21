@@ -773,7 +773,8 @@ const toggleDarkMode = () => {
 const setDarkMode = (themeName: 'light' | 'dark' | 'auto') => {
   darkModePreference.value = themeName
   const apply = (isDark: boolean) => {
-    theme.global.name.value = isDark ? 'dark' : 'light'
+    // 使用 Vuetify 3.9+ 推荐的 theme.change() API
+    theme.change(isDark ? 'dark' : 'light')
   }
 
   if (themeName === 'auto') {

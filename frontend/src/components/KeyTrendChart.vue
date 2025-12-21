@@ -134,12 +134,126 @@ const keyColors = [
   '#6366f1', // 靛蓝
 ]
 
+// 失败率阈值：超过此值显示红色背景
+const FAILURE_RATE_THRESHOLD = 0.1 // 10%
+
+// 聚合间隔配置（与后端保持一致）
+// 1h = 1m, 6h = 5m, 24h = 15m
+const AGGREGATION_INTERVALS: Record<Duration, number> = {
+  '1h': 60000,    // 1 分钟
+  '6h': 300000,   // 5 分钟
+  '24h': 900000   // 15 分钟
+}
+
+// 根据时间范围获取聚合间隔
+const getAggregationInterval = (duration: Duration): number => {
+  const interval = AGGREGATION_INTERVALS[duration]
+  if (interval === undefined) {
+    console.warn(`[KeyTrendChart] Unknown duration "${duration}", falling back to 1m interval`)
+    return 60000
+  }
+  return interval
+}
+
+// 将时间戳对齐到聚合桶（向下取整）
+const alignToBucket = (timestamp: number, interval: number): number => {
+  return Math.floor(timestamp / interval) * interval
+}
+
 // Computed: check if has data
 const hasData = computed(() => {
   if (!historyData.value) return false
   return historyData.value.keys &&
     historyData.value.keys.length > 0 &&
     historyData.value.keys.some(k => k.dataPoints && k.dataPoints.length > 0)
+})
+
+// Computed: 计算每个时间点的加权平均成功率，用于背景色带
+// 返回格式: { timestamp: number, failureRate: number }[]
+const timePointFailureRates = computed(() => {
+  if (!historyData.value?.keys?.length) return []
+
+  // 获取当前聚合间隔，与 tooltip 保持一致
+  const interval = getAggregationInterval(selectedDuration.value)
+
+  // 按对齐后的时间戳聚合所有 key 的数据（与 tooltip 逻辑一致）
+  const timeMap = new Map<number, { totalRequests: number; totalFailures: number }>()
+
+  historyData.value.keys.forEach(keyData => {
+    keyData.dataPoints?.forEach(dp => {
+      const rawTs = new Date(dp.timestamp).getTime()
+      // 使用 alignToBucket 对齐时间戳，确保与 tooltip 数据匹配
+      const alignedTs = alignToBucket(rawTs, interval)
+      const existing = timeMap.get(alignedTs) || { totalRequests: 0, totalFailures: 0 }
+      existing.totalRequests += dp.requestCount
+      existing.totalFailures += dp.failureCount
+      timeMap.set(alignedTs, existing)
+    })
+  })
+
+  // 转换为数组并计算失败率
+  return Array.from(timeMap.entries())
+    .map(([timestamp, data]) => ({
+      timestamp,
+      failureRate: data.totalRequests > 0 ? data.totalFailures / data.totalRequests : 0
+    }))
+    .sort((a, b) => a.timestamp - b.timestamp)
+})
+
+// Helper: 根据失败率计算透明度（失败率越高，颜色越深）
+// 10% -> 0.08, 20% -> 0.15, 30% -> 0.22, 50% -> 0.35, 70% -> 0.48, 100% -> 0.65
+const getFailureOpacity = (failureRate: number): number => {
+  const minOpacity = 0.08
+  const maxOpacity = 0.65
+  // 从阈值开始计算，到 100% 时达到最大透明度
+  const normalizedRate = Math.min((failureRate - FAILURE_RATE_THRESHOLD) / (1 - FAILURE_RATE_THRESHOLD), 1)
+  return minOpacity + normalizedRate * (maxOpacity - minOpacity)
+}
+
+// Computed: 生成 ApexCharts annotations（红色背景色带，深浅随失败率变化）
+const failureAnnotations = computed(() => {
+  if (selectedView.value !== 'traffic') return [] // 只在流量模式显示
+
+  const rates = timePointFailureRates.value
+  if (rates.length === 0) return []
+
+  const annotations: any[] = []
+
+  // 根据当前时间范围获取聚合间隔（与后端保持一致）
+  const DEFAULT_INTERVAL = getAggregationInterval(selectedDuration.value)
+  // 最大间隔限制：默认间隔的 2 倍，防止数据稀疏时色带过大
+  const MAX_INTERVAL = DEFAULT_INTERVAL * 2
+
+  // 为每个超过阈值的点单独创建一个 annotation
+  rates.forEach((point, index) => {
+    if (point.failureRate >= FAILURE_RATE_THRESHOLD) {
+      // 动态计算该点的时间间隔：优先使用与相邻点的实际间隔
+      let interval = DEFAULT_INTERVAL
+      if (rates.length > 1) {
+        if (index > 0) {
+          // 使用与前一个点的间隔
+          interval = point.timestamp - rates[index - 1].timestamp
+        } else if (index < rates.length - 1) {
+          // 第一个点：使用与后一个点的间隔
+          interval = rates[index + 1].timestamp - point.timestamp
+        }
+      }
+      // 限制最大间隔，避免数据稀疏时色带过大
+      interval = Math.min(interval, MAX_INTERVAL)
+
+      annotations.push({
+        x: point.timestamp - interval / 2,
+        x2: point.timestamp + interval / 2,
+        fillColor: '#ef4444',
+        opacity: getFailureOpacity(point.failureRate),
+        label: {
+          text: ''
+        }
+      })
+    }
+  })
+
+  return annotations
 })
 
 // Computed: get all data points flattened
@@ -247,13 +361,17 @@ const chartOptions = computed(() => {
       axisTicks: { show: false }
     },
     yaxis: yaxisConfig,
+    annotations: {
+      xaxis: failureAnnotations.value
+    },
     tooltip: {
       x: {
         format: 'MM-dd HH:mm'
       },
       y: {
         formatter: (val: number) => formatTooltipValue(val, mode)
-      }
+      },
+      custom: mode === 'traffic' ? buildTrafficTooltip : undefined
     },
     legend: {
       show: false
@@ -352,6 +470,107 @@ const formatTooltipValue = (val: number, mode: ViewMode): string => {
     default:
       return val.toString()
   }
+}
+
+// Helper: build custom tooltip for traffic mode (shows success/failure breakdown)
+const buildTrafficTooltip = ({ series, seriesIndex, dataPointIndex, w }: any): string => {
+  if (!historyData.value?.keys) return ''
+
+  const timestamp = w.globals.seriesX[seriesIndex][dataPointIndex]
+  const date = new Date(timestamp)
+  const timeStr = date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+
+  // 收集该时间点所有 key 的数据
+  const keyStats: { keyMask: string; success: number; failure: number; total: number; color: string }[] = []
+  let grandTotal = 0
+  let grandFailure = 0
+
+  // HTML 转义函数，防止 XSS
+  const escapeHtml = (str: string): string => {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+  }
+
+  // 获取当前聚合间隔，用于时间戳对齐匹配
+  const interval = getAggregationInterval(selectedDuration.value)
+  const alignedTimestamp = alignToBucket(timestamp, interval)
+
+  historyData.value.keys.forEach((keyData, keyIndex) => {
+    // 使用 filter 累加同一时间桶内的所有数据点（防御性编程）
+    const matchingPoints = keyData.dataPoints?.filter(p => {
+      const dpTimestamp = new Date(p.timestamp).getTime()
+      return alignToBucket(dpTimestamp, interval) === alignedTimestamp
+    }) || []
+
+    if (matchingPoints.length > 0) {
+      // 累加所有匹配点的统计数据
+      const aggregated = matchingPoints.reduce(
+        (acc, dp) => ({
+          success: acc.success + dp.successCount,
+          failure: acc.failure + dp.failureCount,
+          total: acc.total + dp.requestCount
+        }),
+        { success: 0, failure: 0, total: 0 }
+      )
+
+      if (aggregated.total > 0) {
+        keyStats.push({
+          keyMask: escapeHtml(keyData.keyMask),
+          success: aggregated.success,
+          failure: aggregated.failure,
+          total: aggregated.total,
+          color: keyColors[keyIndex % keyColors.length]
+        })
+        grandTotal += aggregated.total
+        grandFailure += aggregated.failure
+      }
+    }
+  })
+
+  if (keyStats.length === 0) return ''
+
+  const grandFailureRate = grandTotal > 0 ? (grandFailure / grandTotal * 100).toFixed(1) : '0'
+  const hasFailure = grandFailure > 0
+
+  // 构建 HTML
+  let html = `<div style="padding: 8px 12px; font-size: 12px;">`
+  html += `<div style="font-weight: 600; margin-bottom: 6px; color: ${hasFailure ? '#ef4444' : 'inherit'};">${timeStr}</div>`
+
+  // 每个 key 的详情
+  keyStats.forEach(stat => {
+    const failureRate = stat.total > 0 ? (stat.failure / stat.total * 100).toFixed(0) : '0'
+    const hasKeyFailure = stat.failure > 0
+    html += `<div style="display: flex; align-items: center; margin: 4px 0;">`
+    html += `<span style="width: 10px; height: 10px; border-radius: 50%; background: ${stat.color}; margin-right: 6px;"></span>`
+    html += `<span style="flex: 1;">${stat.keyMask}</span>`
+    html += `<span style="margin-left: 12px; font-weight: 500;">${stat.total}</span>`
+    if (hasKeyFailure) {
+      html += `<span style="margin-left: 6px; color: #ef4444; font-size: 11px;">(${stat.failure}失败, ${failureRate}%)</span>`
+    }
+    html += `</div>`
+  })
+
+  // 汇总行（如果有多个 key）
+  if (keyStats.length > 1) {
+    html += `<div style="border-top: 1px solid rgba(128,128,128,0.3); margin-top: 6px; padding-top: 6px; font-weight: 600;">`
+    html += `<span>合计: ${grandTotal} 请求</span>`
+    if (hasFailure) {
+      html += `<span style="color: #ef4444; margin-left: 8px;">${grandFailure} 失败 (${grandFailureRate}%)</span>`
+    }
+    html += `</div>`
+  }
+
+  html += `</div>`
+  return html
 }
 
 // Helper: get duration in milliseconds

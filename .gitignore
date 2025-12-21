@@ -199,7 +199,6 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
 # Custom
-docs/
 .claude/*
 !.claude/skills/
 .claude/skills/*
