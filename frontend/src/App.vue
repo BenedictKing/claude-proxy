@@ -177,14 +177,14 @@
           </v-col>
 
           <v-col cols="6" sm="4">
-            <div class="stat-card stat-card-emerald">
-              <div class="stat-card-icon pulse-animation">
-                <v-icon size="28">mdi-heart-pulse</v-icon>
+            <div class="stat-card" :class="systemStatus === 'running' ? 'stat-card-emerald' : 'stat-card-error'">
+              <div class="stat-card-icon" :class="{ 'pulse-animation': systemStatus === 'running' }">
+                <v-icon size="28">{{ systemStatus === 'running' ? 'mdi-heart-pulse' : 'mdi-alert-circle' }}</v-icon>
               </div>
               <div class="stat-card-content">
-                <div class="stat-card-value">运行中</div>
+                <div class="stat-card-value">{{ systemStatusText }}</div>
                 <div class="stat-card-label">系统状态</div>
-                <div class="stat-card-desc">服务正常运行</div>
+                <div class="stat-card-desc">{{ systemStatusDesc }}</div>
               </div>
               <div class="stat-card-glow"></div>
             </div>
@@ -430,6 +430,24 @@ const darkModePreference = ref<'light' | 'dark' | 'auto'>('auto')
 // Fuzzy 模式状态
 const fuzzyModeEnabled = ref(true)
 const fuzzyModeLoading = ref(false)
+
+// 系统连接状态
+type SystemStatus = 'running' | 'error' | 'connecting'
+const systemStatus = ref<SystemStatus>('connecting')
+const systemStatusText = computed(() => {
+  switch (systemStatus.value) {
+    case 'running': return '运行中'
+    case 'error': return '连接失败'
+    case 'connecting': return '连接中...'
+  }
+})
+const systemStatusDesc = computed(() => {
+  switch (systemStatus.value) {
+    case 'running': return '服务正常运行'
+    case 'error': return '无法连接后端'
+    case 'connecting': return '正在检测服务...'
+  }
+})
 
 // 版本信息
 const versionInfo = ref<VersionInfo>({
@@ -1023,6 +1041,8 @@ onMounted(async () => {
     await loadFuzzyModeStatus()
     // 启动自动刷新
     startAutoRefresh()
+    // 初始化成功，设置系统状态为运行中
+    systemStatus.value = 'running'
   }
 })
 
@@ -1055,8 +1075,12 @@ const startAutoRefresh = () => {
         // 更新 metrics 和 stats
         dashboardMetrics.value = dashboard.metrics
         dashboardStats.value = dashboard.stats
+
+        // 请求成功，更新系统状态为运行中
+        systemStatus.value = 'running'
       } catch (error) {
-        // 静默处理错误，避免刷新失败时干扰用户
+        // 请求失败，更新系统状态为错误
+        systemStatus.value = 'error'
         console.warn('自动刷新失败:', error)
       }
     }
@@ -1456,6 +1480,17 @@ onUnmounted(() => {
 }
 .v-theme--dark .stat-card-emerald .stat-card-value {
   color: #34d399;
+}
+
+.stat-card-error .stat-card-icon {
+  background: #dc2626;
+  color: white;
+}
+.stat-card-error .stat-card-value {
+  color: #dc2626;
+}
+.v-theme--dark .stat-card-error .stat-card-value {
+  color: #f87171;
 }
 
 /* =========================================
