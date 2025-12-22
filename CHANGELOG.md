@@ -21,6 +21,21 @@
 ### ✨ 新功能
 
 - **快速添加渠道支持引号内容提取** - 支持从双引号/单引号中提取 URL 和 API Key，可直接粘贴 Claude Code 环境变量 JSON 配置格式
+- **SQLite 指标持久化存储** - 服务重启后不再丢失历史指标数据，启动时自动加载最近 24 小时数据
+  - 新增 `METRICS_PERSISTENCE_ENABLED`（默认 true）和 `METRICS_RETENTION_DAYS`（默认 7）配置
+  - 异步批量写入（100 条/批或每 30 秒），WAL 模式高并发，自动清理过期数据
+- **完整的 Responses API Token Usage 统计** - 支持多格式自动检测（Claude/Gemini/OpenAI）、缓存 TTL 细分统计（5m/1h）
+- **Messages API 缓存 TTL 细分统计** - 区分 5 分钟和 1 小时 TTL 的缓存创建统计
+
+### 🔨 重构
+
+- **SQLite 驱动切换为纯 Go 实现** - 从 `go-sqlite3`（CGO）切换为 `modernc.org/sqlite`，简化交叉编译
+
+### 🐛 修复
+
+- **Usage 解析数值类型健壮性** - 支持 `float64`/`int`/`int64`/`int32` 四种数值类型
+- **CachedTokens 重复计算** - `CachedTokens` 仅包含 `cache_read`，不再包含 `cache_creation`
+- **流式响应纯缓存场景 Usage 丢失** - 有任何 usage 字段时都记录
 
 ---
 
@@ -58,7 +73,17 @@
 
 ---
 
-## [v2.1.32] - 2025-12-19
+## [v2.1.25] - 2025-12-18
+
+### ✨ 新功能
+
+- **TransformerMetadata 和 CacheControl 支持** - 转换器元数据保留原始格式信息，实现特性透传
+- **FinishReason 统一映射函数** - OpenAI/Anthropic/Responses 三种协议间双向映射
+- **原始日志输出开关** - `RAW_LOG_OUTPUT` 环境变量，开启后不进行格式化或截断
+
+---
+
+## [v2.1.23] - 2025-12-13
 
 - 修复编辑渠道弹窗中基础 URL 布局和验证问题
 
@@ -108,6 +133,23 @@
 
 ---
 
+## [v2.1.22] - 2025-12-13
+
+### 🐛 修复
+
+- **流式日志合成器类型修复** - 所有 Provider 的 HandleStreamResponse 都将响应转换为 Claude SSE 格式，日志合成器使用 "claude" 类型解析
+- **insecureSkipVerify 字段提交修复** - 修复前端 insecureSkipVerify 为 false 时不提交的问题
+
+---
+
+## [v2.1.21] - 2025-12-13
+
+### 🐛 修复
+
+- **促销渠道绕过健康检查** - 促销渠道现在绕过健康检查直接尝试使用，只有本次请求实际失败后才跳过
+
+---
+
 ## [v2.1.20] - 2025-12-12
 
 - 渠道名称支持点击打开编辑弹窗
@@ -118,6 +160,17 @@
 
 - 修复添加渠道弹窗密钥重复错误状态残留
 - 新增 `/v1/responses/compact` 端点
+
+---
+
+## [v2.1.15] - 2025-12-12
+
+### 🔒 安全加固
+
+- **请求体大小限制** - 新增 `MAX_REQUEST_BODY_SIZE_MB` 环境变量（默认 50MB），超限返回 413
+- **Goroutine 泄漏修复** - ConfigManager 添加 `stopChan` 和 `Close()` 方法释放资源
+- **数据竞争修复** - 负载均衡计数器改用 `sync/atomic` 原子操作
+- **优雅关闭** - 监听 SIGINT/SIGTERM，10 秒超时优雅关闭
 
 ---
 
@@ -147,7 +200,18 @@
 
 ## [v2.1.7] - 2025-12-11
 
+### 🐛 修复
+
 - 修复前端 MDI 图标无法显示
+- **Token 计数补全虚假值处理** - 当 `input_tokens <= 1` 或 `output_tokens == 0` 时用本地估算值覆盖
+
+---
+
+## [v2.1.6] - 2025-12-11
+
+### ✨ 新功能
+
+- **Messages API Token 计数补全** - 当上游不返回 usage 时，本地估算 token 数量并附加到响应中
 
 ---
 
@@ -159,7 +223,17 @@
 
 ## [v2.1.1] - 2025-12-11
 
-- 新增 `QUIET_POLLING_LOGS` 环境变量
+- 新增 `QUIET_POLLING_LOGS` 环境变量（默认 true），过滤前端轮询日志噪音
+
+---
+
+## [v2.1.0] - 2025-12-11
+
+### 🔨 重构
+
+- **指标系统重构：Key 级别绑定** - 指标键改为 `hash(baseURL + apiKey)`，每个 Key 独立追踪
+- **熔断器生效修复** - 在 `tryChannelWithAllKeys` 中调用 `ShouldSuspendKey()` 跳过熔断的 Key
+- **单渠道路径指标记录** - 转换失败、发送失败、failover、成功时正确记录指标
 
 ---
 
