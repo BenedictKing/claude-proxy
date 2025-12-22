@@ -1,6 +1,41 @@
 # Changelog
 
-## [Unreleased]
+## [v2.3.0] - 2025-12-22
+
+### Added - SQLite 指标持久化存储
+
+**功能描述**：新增 SQLite 持久化存储支持，服务重启后不再丢失历史指标数据。启动时自动加载最近 24 小时数据到内存，运行时完全在内存读写，SQLite 仅用于异步批量写入。
+
+**涉及文件**：
+- `internal/metrics/persistence.go` - 持久化接口定义
+- `internal/metrics/sqlite_store.go` - SQLite 存储实现（WAL 模式、批量写入、自动清理）
+- `internal/metrics/channel_metrics.go` - 新增 `NewMetricsManagerWithPersistence()` 构造函数
+- `internal/config/env.go` - 新增持久化配置项
+- `main.go` - 初始化 SQLite 存储并在关闭时清理
+
+**新增配置**：
+- `METRICS_PERSISTENCE_ENABLED` - 是否启用 SQLite 持久化（默认 true）
+- `METRICS_RETENTION_DAYS` - 数据保留天数（3-30，默认 7）
+
+**关键特性**：
+- 异步批量写入：100 条/批或每 30 秒，不阻塞请求处理
+- WAL 模式：高并发读写性能
+- 自动清理：每小时清理超过保留期的数据
+- 可选禁用：设置 `METRICS_PERSISTENCE_ENABLED=false` 回退到纯内存模式
+
+### Changed - SQLite 驱动切换为纯 Go 实现
+
+**变更描述**：将 SQLite 驱动从 `github.com/mattn/go-sqlite3`（CGO）切换为 `modernc.org/sqlite`（纯 Go），消除 CGO 依赖，简化交叉编译和部署。
+
+**涉及文件**：
+- `go.mod` - 替换 SQLite 依赖
+- `internal/metrics/sqlite_store.go` - 更新 import 路径
+
+**优势**：
+- 无需 CGO 编译器（gcc/clang）
+- 支持 `CGO_ENABLED=0` 静态编译
+- 简化 Docker 多阶段构建和交叉编译
+- 性能与 CGO 版本相当（纯 Go 实现已高度优化）
 
 ### Added - 完整的 Responses API Token Usage 统计
 

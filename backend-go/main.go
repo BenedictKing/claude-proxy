@@ -67,9 +67,33 @@ func main() {
 	)
 	log.Printf("✅ 会话管理器已初始化")
 
+	// 初始化指标持久化存储（可选）
+	var metricsStore *metrics.SQLiteStore
+	if envCfg.MetricsPersistenceEnabled {
+		var err error
+		metricsStore, err = metrics.NewSQLiteStore(&metrics.SQLiteStoreConfig{
+			DBPath:        ".config/metrics.db",
+			RetentionDays: envCfg.MetricsRetentionDays,
+		})
+		if err != nil {
+			log.Printf("⚠️ 初始化指标持久化存储失败: %v，将使用纯内存模式", err)
+			metricsStore = nil
+		}
+	} else {
+		log.Printf("📊 指标持久化已禁用，使用纯内存模式")
+	}
+
 	// 初始化多渠道调度器（Messages 和 Responses 使用独立的指标管理器）
-	messagesMetricsManager := metrics.NewMetricsManagerWithConfig(envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold)
-	responsesMetricsManager := metrics.NewMetricsManagerWithConfig(envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold)
+	var messagesMetricsManager, responsesMetricsManager *metrics.MetricsManager
+	if metricsStore != nil {
+		messagesMetricsManager = metrics.NewMetricsManagerWithPersistence(
+			envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold, metricsStore, "messages")
+		responsesMetricsManager = metrics.NewMetricsManagerWithPersistence(
+			envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold, metricsStore, "responses")
+	} else {
+		messagesMetricsManager = metrics.NewMetricsManagerWithConfig(envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold)
+		responsesMetricsManager = metrics.NewMetricsManagerWithConfig(envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold)
+	}
 	traceAffinityManager := session.NewTraceAffinityManager()
 	channelScheduler := scheduler.NewChannelScheduler(cfgManager, messagesMetricsManager, responsesMetricsManager, traceAffinityManager)
 	log.Printf("✅ 多渠道调度器已初始化 (失败率阈值: %.0f%%, 滑动窗口: %d)",
@@ -233,6 +257,16 @@ func main() {
 		} else {
 			log.Println("✅ 服务器已安全关闭")
 		}
+
+		// 关闭指标持久化存储
+		if metricsStore != nil {
+			if err := metricsStore.Close(); err != nil {
+				log.Printf("⚠️ 关闭指标存储时发生错误: %v", err)
+			} else {
+				log.Println("✅ 指标存储已安全关闭")
+			}
+		}
+
 		close(shutdownDone)
 	}()
 

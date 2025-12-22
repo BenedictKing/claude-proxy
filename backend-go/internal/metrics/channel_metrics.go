@@ -72,6 +72,10 @@ type MetricsManager struct {
 	failureThreshold    float64                // 失败率阈值
 	circuitRecoveryTime time.Duration          // 熔断恢复时间
 	stopCh              chan struct{}          // 用于停止清理 goroutine
+
+	// 持久化存储（可选）
+	store   PersistenceStore
+	apiType string // "messages" 或 "responses"
 }
 
 // NewMetricsManager 创建指标管理器
@@ -106,6 +110,121 @@ func NewMetricsManagerWithConfig(windowSize int, failureThreshold float64) *Metr
 	// 启动后台熔断恢复任务
 	go m.cleanupCircuitBreakers()
 	return m
+}
+
+// NewMetricsManagerWithPersistence 创建带持久化的指标管理器
+func NewMetricsManagerWithPersistence(windowSize int, failureThreshold float64, store PersistenceStore, apiType string) *MetricsManager {
+	if windowSize < 3 {
+		windowSize = 3
+	}
+	if failureThreshold <= 0 || failureThreshold > 1 {
+		failureThreshold = 0.5
+	}
+	m := &MetricsManager{
+		keyMetrics:          make(map[string]*KeyMetrics),
+		windowSize:          windowSize,
+		failureThreshold:    failureThreshold,
+		circuitRecoveryTime: 15 * time.Minute,
+		stopCh:              make(chan struct{}),
+		store:               store,
+		apiType:             apiType,
+	}
+
+	// 从持久化存储加载历史数据
+	if store != nil {
+		if err := m.loadFromStore(); err != nil {
+			log.Printf("⚠️ [%s] 加载历史指标数据失败: %v", apiType, err)
+		}
+	}
+
+	// 启动后台熔断恢复任务
+	go m.cleanupCircuitBreakers()
+	return m
+}
+
+// loadFromStore 从持久化存储加载数据
+func (m *MetricsManager) loadFromStore() error {
+	if m.store == nil {
+		return nil
+	}
+
+	// 加载最近 24 小时的数据
+	since := time.Now().Add(-24 * time.Hour)
+	records, err := m.store.LoadRecords(since, m.apiType)
+	if err != nil {
+		return err
+	}
+
+	if len(records) == 0 {
+		log.Printf("📊 [%s] 无历史指标数据需要加载", m.apiType)
+		return nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// 重建内存中的 KeyMetrics
+	for _, r := range records {
+		metrics := m.getOrCreateKeyLocked(r.BaseURL, r.MetricsKey, r.KeyMask)
+
+		// 重建请求历史
+		metrics.requestHistory = append(metrics.requestHistory, RequestRecord{
+			Timestamp:                r.Timestamp,
+			Success:                  r.Success,
+			InputTokens:              r.InputTokens,
+			OutputTokens:             r.OutputTokens,
+			CacheCreationInputTokens: r.CacheCreationTokens,
+			CacheReadInputTokens:     r.CacheReadTokens,
+		})
+
+		// 更新聚合计数
+		metrics.RequestCount++
+		if r.Success {
+			metrics.SuccessCount++
+			if metrics.LastSuccessAt == nil || r.Timestamp.After(*metrics.LastSuccessAt) {
+				t := r.Timestamp
+				metrics.LastSuccessAt = &t
+			}
+		} else {
+			metrics.FailureCount++
+			if metrics.LastFailureAt == nil || r.Timestamp.After(*metrics.LastFailureAt) {
+				t := r.Timestamp
+				metrics.LastFailureAt = &t
+			}
+		}
+	}
+
+	// 重建滑动窗口（取最近 windowSize 条记录）
+	for _, metrics := range m.keyMetrics {
+		n := len(metrics.requestHistory)
+		start := 0
+		if n > m.windowSize {
+			start = n - m.windowSize
+		}
+		metrics.recentResults = make([]bool, 0, m.windowSize)
+		for i := start; i < n; i++ {
+			metrics.recentResults = append(metrics.recentResults, metrics.requestHistory[i].Success)
+		}
+	}
+
+	log.Printf("✅ [%s] 已从持久化存储加载 %d 条历史记录，重建 %d 个 Key 指标",
+		m.apiType, len(records), len(m.keyMetrics))
+	return nil
+}
+
+// getOrCreateKeyLocked 获取或创建 Key 指标（用于加载时，已知 metricsKey 和 keyMask）
+func (m *MetricsManager) getOrCreateKeyLocked(baseURL, metricsKey, keyMask string) *KeyMetrics {
+	if metrics, exists := m.keyMetrics[metricsKey]; exists {
+		return metrics
+	}
+	metrics := &KeyMetrics{
+		MetricsKey:    metricsKey,
+		BaseURL:       baseURL,
+		KeyMask:       keyMask,
+		recentResults: make([]bool, 0, m.windowSize),
+	}
+	m.keyMetrics[metricsKey] = metrics
+	return metrics
 }
 
 // generateMetricsKey 生成指标键 hash(baseURL + apiKey)
@@ -169,6 +288,22 @@ func (m *MetricsManager) RecordSuccessWithUsage(baseURL, apiKey string, usage *t
 
 	// 记录带时间戳的请求
 	m.appendToHistoryKeyWithUsage(metrics, now, true, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
+
+	// 写入持久化存储（异步，不阻塞）
+	if m.store != nil {
+		m.store.AddRecord(PersistentRecord{
+			MetricsKey:          metrics.MetricsKey,
+			BaseURL:             baseURL,
+			KeyMask:             metrics.KeyMask,
+			Timestamp:           now,
+			Success:             true,
+			InputTokens:         inputTokens,
+			OutputTokens:        outputTokens,
+			CacheCreationTokens: cacheCreationTokens,
+			CacheReadTokens:     cacheReadTokens,
+			APIType:             m.apiType,
+		})
+	}
 }
 
 // RecordFailure 记录失败请求（新方法，使用 baseURL + apiKey）
@@ -195,6 +330,22 @@ func (m *MetricsManager) RecordFailure(baseURL, apiKey string) {
 
 	// 记录带时间戳的请求
 	m.appendToHistoryKey(metrics, now, false)
+
+	// 写入持久化存储（异步，不阻塞）
+	if m.store != nil {
+		m.store.AddRecord(PersistentRecord{
+			MetricsKey:          metrics.MetricsKey,
+			BaseURL:             baseURL,
+			KeyMask:             metrics.KeyMask,
+			Timestamp:           now,
+			Success:             false,
+			InputTokens:         0,
+			OutputTokens:        0,
+			CacheCreationTokens: 0,
+			CacheReadTokens:     0,
+			APIType:             m.apiType,
+		})
+	}
 }
 
 // isKeyCircuitBroken 判断 Key 是否达到熔断条件（内部方法，调用前需持有锁）

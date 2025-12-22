@@ -25,6 +25,9 @@ type EnvConfig struct {
 	// 指标配置
 	MetricsWindowSize       int     // 滑动窗口大小
 	MetricsFailureThreshold float64 // 失败率阈值
+	// 指标持久化配置
+	MetricsPersistenceEnabled bool // 是否启用 SQLite 持久化
+	MetricsRetentionDays      int  // 数据保留天数（3-30）
 	// 日志文件相关配置
 	LogDir        string
 	LogFile       string
@@ -62,6 +65,9 @@ func NewEnvConfig() *EnvConfig {
 		// 指标配置
 		MetricsWindowSize:       getEnvAsInt("METRICS_WINDOW_SIZE", 10),
 		MetricsFailureThreshold: getEnvAsFloat("METRICS_FAILURE_THRESHOLD", 0.5),
+		// 指标持久化配置
+		MetricsPersistenceEnabled: getEnv("METRICS_PERSISTENCE_ENABLED", "true") != "false",
+		MetricsRetentionDays:      clampInt(getEnvAsInt("METRICS_RETENTION_DAYS", 7), 3, 30),
 		// 日志文件配置
 		LogDir:        getEnv("LOG_DIR", "logs"),
 		LogFile:       getEnv("LOG_FILE", "app.log"),
@@ -141,4 +147,15 @@ func getEnvAsFloat(key string, defaultValue float64) float64 {
 		}
 	}
 	return defaultValue
+}
+
+// clampInt 将整数限制在指定范围内
+func clampInt(value, minVal, maxVal int) int {
+	if value < minVal {
+		return minVal
+	}
+	if value > maxVal {
+		return maxVal
+	}
+	return value
 }
