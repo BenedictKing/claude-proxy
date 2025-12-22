@@ -231,14 +231,8 @@ services:
 
 ```bash
 # 1. 连接 GitHub 仓库到 Railway
-# 2. 设置环境变量
-PROXY_ACCESS_KEY=your-super-strong-secret-key
-ENABLE_WEB_UI=true
-ENV=production
-PORT=3000
-
-# 3. 自动部署完成
-# 访问：https://your-app.railway.app
+# 2. 设置环境变量 PROXY_ACCESS_KEY
+# 3. 自动部署完成，访问分配的域名
 ```
 
 #### Render 部署
@@ -246,34 +240,26 @@ PORT=3000
 ```bash
 # 1. 选择 Docker 服务类型
 # 2. 连接 GitHub 仓库
-# 3. 设置环境变量：
-#    PROXY_ACCESS_KEY=your-super-strong-secret-key
-#    ENABLE_WEB_UI=true
-#    ENV=production
+# 3. 设置环境变量 PROXY_ACCESS_KEY
 # 4. 自动构建和部署
 ```
 
 #### Fly.io 部署
 
 ```bash
-# 快速部署
 fly launch --dockerfile Dockerfile
 fly secrets set PROXY_ACCESS_KEY=your-super-strong-secret-key
-fly secrets set ENABLE_WEB_UI=true
 fly deploy
-
-# 查看状态
-fly status
-fly logs
 ```
 
 #### Zeabur 部署
 
 ```bash
-# 1. 连接 GitHub 仓库
-# 2. 自动检测 Docker 项目
-# 3. 设置环境变量
-# 4. 一键部署
+# 1. Fork 本项目到你的 GitHub 账号
+# 2. 在 Zeabur 中连接你的 GitHub 仓库
+# 3. 自动检测 Docker 项目
+# 4. 设置环境变量 PROXY_ACCESS_KEY
+# 5. 一键部署
 ```
 
 ## 🔧 配置管理
