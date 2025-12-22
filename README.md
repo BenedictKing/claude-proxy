@@ -227,12 +227,15 @@ services:
 
 ### 云平台一键部署
 
+> ⚠️ **重要提示**: 请挂载持久化存储（云硬盘）到 `/app/.config` 目录，否则重启后渠道配置将丢失。
+
 #### Railway 部署
 
 ```bash
 # 1. 连接 GitHub 仓库到 Railway
 # 2. 设置环境变量 PROXY_ACCESS_KEY
-# 3. 自动部署完成，访问分配的域名
+# 3. 挂载 Volume 到 /app/.config
+# 4. 自动部署完成，访问分配的域名
 ```
 
 #### Render 部署
@@ -241,7 +244,8 @@ services:
 # 1. 选择 Docker 服务类型
 # 2. 连接 GitHub 仓库
 # 3. 设置环境变量 PROXY_ACCESS_KEY
-# 4. 自动构建和部署
+# 4. 添加 Disk 挂载到 /app/.config
+# 5. 自动构建和部署
 ```
 
 #### Fly.io 部署
@@ -249,6 +253,8 @@ services:
 ```bash
 fly launch --dockerfile Dockerfile
 fly secrets set PROXY_ACCESS_KEY=your-super-strong-secret-key
+fly volumes create config_data --size 1
+# 编辑 fly.toml 添加 [mounts] 配置
 fly deploy
 ```
 
@@ -259,7 +265,8 @@ fly deploy
 # 2. 在 Zeabur 中连接你的 GitHub 仓库
 # 3. 自动检测 Docker 项目
 # 4. 设置环境变量 PROXY_ACCESS_KEY
-# 5. 一键部署
+# 5. 添加持久化存储挂载到 /app/.config
+# 6. 一键部署
 ```
 
 ## 🔧 配置管理
