@@ -4,6 +4,17 @@
 
 ---
 
+## [Unreleased]
+
+### ✨ 新功能
+
+- **快速添加渠道支持引号内容提取**
+  - 支持从双引号/单引号中提取 URL 和 API Key（中英文引号均支持）
+  - 可直接粘贴 Claude Code 环境变量 JSON 配置格式
+  - 涉及文件：`frontend/src/utils/quickInputParser.ts`
+
+---
+
 ## [v2.2.0] - 2025-12-21
 
 ### 🔨 重构

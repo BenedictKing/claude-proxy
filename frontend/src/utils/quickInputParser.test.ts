@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { isValidApiKey, isValidUrl, parseQuickInput } from '../../utils/quickInputParser'
+import { isValidApiKey, isValidUrl, parseQuickInput } from './quickInputParser'
 
 describe('API Key 识别', () => {
   describe('前缀格式 (xx-xxx / xx_xxx)', () => {
@@ -251,5 +251,91 @@ describe('综合解析场景', () => {
     const result = parseQuickInput(input)
     expect(result.detectedBaseUrl).toBe('https://api.example.com')
     expect(result.detectedApiKeys).toEqual([jwt])
+  })
+})
+
+describe('引号内容提取', () => {
+  it('应从英文双引号中提取 URL 和 API Key', () => {
+    const input = `"ANTHROPIC_AUTH_TOKEN": "sk-lACTyHP69FC46DeD8F67T3BLBkFJ4cE3879908bc4c38a336",
+"ANTHROPIC_BASE_URL": "https://apic1.ohmycdn.com/api/v1/ai/openai/cc-omg"`
+    const result = parseQuickInput(input)
+    expect(result.detectedBaseUrl).toBe('https://apic1.ohmycdn.com/api/v1/ai/openai/cc-omg')
+    expect(result.detectedApiKeys).toContain('sk-lACTyHP69FC46DeD8F67T3BLBkFJ4cE3879908bc4c38a336')
+  })
+
+  it('应从英文单引号中提取内容', () => {
+    const input = `'sk-test123456789' 'https://api.example.com/v1'`
+    const result = parseQuickInput(input)
+    expect(result.detectedBaseUrl).toBe('https://api.example.com/v1')
+    expect(result.detectedApiKeys).toEqual(['sk-test123456789'])
+  })
+
+  it('应从中文双引号中提取内容', () => {
+    const input = `"sk-chinese123456""https://api.example.com"`
+    const result = parseQuickInput(input)
+    expect(result.detectedBaseUrl).toBe('https://api.example.com')
+    expect(result.detectedApiKeys).toEqual(['sk-chinese123456'])
+  })
+
+  it('应从中文单引号中提取内容', () => {
+    const input = `'sk-chinese789''https://api.test.com'`
+    const result = parseQuickInput(input)
+    expect(result.detectedBaseUrl).toBe('https://api.test.com')
+    expect(result.detectedApiKeys).toEqual(['sk-chinese789'])
+  })
+
+  it('应正确解析完整的 Claude Code 配置格式', () => {
+    const input = `发一个20$的key，用起来还不错，你们试试，好像是官逆
+snow里获取不到模型不知道为啥
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "sk-lACTyHP69FC46DeD8F67T3BLBkFJ4cE3879908bc4c38a336",
+    "ANTHROPIC_BASE_URL": "https://apic1.ohmycdn.com/api/v1/ai/openai/cc-omg",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": 1
+  }
+}`
+    const result = parseQuickInput(input)
+    expect(result.detectedBaseUrl).toBe('https://apic1.ohmycdn.com/api/v1/ai/openai/cc-omg')
+    expect(result.detectedApiKeys).toContain('sk-lACTyHP69FC46DeD8F67T3BLBkFJ4cE3879908bc4c38a336')
+  })
+
+  it('应忽略引号内的非 URL/Key 内容', () => {
+    const input = `"env": { "ANTHROPIC_AUTH_TOKEN": "sk-valid123" }`
+    const result = parseQuickInput(input)
+    expect(result.detectedBaseUrl).toBe('')
+    expect(result.detectedApiKeys).toContain('sk-valid123')
+  })
+
+  it('应同时支持引号内容和普通分隔', () => {
+    const input = `"sk-quoted123" sk-plain456 https://api.example.com`
+    const result = parseQuickInput(input)
+    expect(result.detectedBaseUrl).toBe('https://api.example.com')
+    expect(result.detectedApiKeys).toContain('sk-quoted123')
+    expect(result.detectedApiKeys).toContain('sk-plain456')
+  })
+
+  it('应支持单边引号（只有开头引号）', () => {
+    const input = `"http://localhost:5689`
+    const result = parseQuickInput(input)
+    expect(result.detectedBaseUrl).toBe('http://localhost:5689')
+  })
+
+  it('应支持单边引号提取 API Key', () => {
+    const input = `"sk-test123456`
+    const result = parseQuickInput(input)
+    expect(result.detectedApiKeys).toContain('sk-test123456')
+  })
+
+  it('应支持单边单引号', () => {
+    const input = `'https://api.example.com/v1`
+    const result = parseQuickInput(input)
+    expect(result.detectedBaseUrl).toBe('https://api.example.com/v1')
+  })
+
+  it('应支持混合完整引号和单边引号', () => {
+    const input = `"https://api.example.com" "sk-key123`
+    const result = parseQuickInput(input)
+    expect(result.detectedBaseUrl).toBe('https://api.example.com')
+    expect(result.detectedApiKeys).toContain('sk-key123')
   })
 })

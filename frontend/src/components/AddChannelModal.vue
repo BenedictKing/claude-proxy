@@ -484,7 +484,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useTheme } from 'vuetify'
 import type { Channel } from '../services/api'
-import { isValidApiKey, isValidUrl as isValidQuickInputUrl } from '../utils/quickInputParser'
+import { isValidApiKey, isValidUrl as isValidQuickInputUrl, parseQuickInput as parseQuickInputUtil } from '../utils/quickInputParser'
 
 interface Props {
   show: boolean
@@ -540,35 +540,9 @@ const toggleMode = () => {
 
 // 解析快速输入内容
 const parseQuickInput = () => {
-  // 统一按换行、空格、逗号、分号分割，然后 trim
-  const tokens = quickInput.value
-    .split(/[\n\s,;]+/)
-    .map(t => t.trim())
-    .filter(t => t.length > 0)
-
-  // 重置检测结果
-  detectedBaseUrl.value = ''
-  detectedApiKeys.value = []
-
-  for (const token of tokens) {
-    // 检测 URL (使用工具函数)
-    if (isValidQuickInputUrl(token)) {
-      // 只取第一个检测到的 URL
-      if (!detectedBaseUrl.value) {
-        // 保留 # 结尾（用于跳过自动添加 /v1），但移除末尾斜杠
-        const endsWithHash = token.endsWith('#')
-        let url = endsWithHash ? token.slice(0, -1) : token
-        url = url.replace(/\/$/, '')
-        detectedBaseUrl.value = endsWithHash ? url + '#' : url
-      }
-      continue
-    }
-
-    // 检测 API Key (使用工具函数)
-    if (isValidApiKey(token) && !detectedApiKeys.value.includes(token)) {
-      detectedApiKeys.value.push(token)
-    }
-  }
+  const result = parseQuickInputUtil(quickInput.value)
+  detectedBaseUrl.value = result.detectedBaseUrl
+  detectedApiKeys.value = result.detectedApiKeys
 }
 
 // 获取默认服务类型

@@ -49,7 +49,21 @@ export const isValidUrl = (token: string): boolean => {
 }
 
 /**
+ * 从输入中提取所有 token
+ * 按空白/逗号/分号/换行/引号（中英文）分割
+ */
+const extractTokens = (input: string): string[] => {
+  return input
+    .split(/[\n\s,;"\u201c\u201d'\u2018\u2019]+/)
+    .filter(t => t.length > 0)
+}
+
+/**
  * 解析快速输入内容，提取 URL 和 API Keys
+ *
+ * 支持的格式：
+ * 1. 纯文本：URL 和 API Key 以空白/逗号/分号分隔
+ * 2. 引号包裹：从 "xxx" 或 'xxx' 中提取内容（支持 JSON 配置格式）
  */
 export const parseQuickInput = (
   input: string
@@ -57,13 +71,10 @@ export const parseQuickInput = (
   detectedBaseUrl: string
   detectedApiKeys: string[]
 } => {
-  const tokens = input
-    .split(/[\n\s,;]+/)
-    .map(t => t.trim())
-    .filter(t => t.length > 0)
-
   let detectedBaseUrl = ''
   const detectedApiKeys: string[] = []
+
+  const tokens = extractTokens(input)
 
   for (const token of tokens) {
     if (isValidUrl(token)) {
