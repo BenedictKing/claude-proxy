@@ -30,6 +30,26 @@
 - **🛠️ 支持工具调用**
 - **💬 会话管理**: Responses API 支持多轮对话的会话跟踪和上下文保持
 
+## 📸 界面预览
+
+### 渠道编排
+
+可视化渠道管理，支持拖拽调整优先级，实时查看渠道健康状态和调度统计。
+
+![渠道编排](docs/screenshots/channel-orchestration.png)
+
+### 添加渠道
+
+支持多种上游服务类型（Claude/OpenAI/Gemini），灵活配置 API 密钥、模型映射和请求参数。
+
+![添加渠道](docs/screenshots/add-channel-modal.png)
+
+### 流量统计
+
+实时监控各渠道的请求流量、成功率和响应延迟，帮助优化调度策略。
+
+![流量统计](docs/screenshots/traffic-stats.png)
+
 ## 🏗️ 架构设计
 
 项目采用一体化架构，单容器部署，完全替代 Nginx：
