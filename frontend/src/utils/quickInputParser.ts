@@ -50,12 +50,54 @@ export const isValidUrl = (token: string): boolean => {
 
 /**
  * 从输入中提取所有 token
- * 按空白/逗号/分号/换行/引号（中英文）分割
+ * 按空白/逗号/分号/换行/引号（中英文）/%20 分割
  */
 const extractTokens = (input: string): string[] => {
   return input
+    .replace(/%20/g, ' ')
     .split(/[\n\s,;"\u201c\u201d'\u2018\u2019]+/)
     .filter(t => t.length > 0)
+}
+
+/**
+ * 根据 URL 路径检测服务类型，并返回清理后的 baseUrl
+ * /messages → claude, /chat/completions → openai, /responses → responses
+ */
+const detectServiceTypeAndCleanUrl = (
+  url: string
+): { serviceType: 'openai' | 'gemini' | 'claude' | 'responses' | null; cleanedUrl: string } => {
+  try {
+    const cleanUrl = url.replace(/#$/, '')
+    const parsed = new URL(cleanUrl)
+    const path = parsed.pathname.toLowerCase()
+
+    // 检测端点并移除
+    const endpoints = ['/messages', '/chat/completions', '/responses', '/generatecontent']
+    for (const ep of endpoints) {
+      if (path.includes(ep)) {
+        // 移除端点路径，保留 /v1 等版本前缀
+        const idx = path.indexOf(ep)
+        parsed.pathname = path.slice(0, idx) || '/'
+        const serviceType =
+          ep === '/messages'
+            ? 'claude'
+            : ep === '/chat/completions'
+              ? 'openai'
+              : ep === '/responses'
+                ? 'responses'
+                : 'gemini'
+        let result = parsed.toString().replace(/\/$/, '')
+        if (url.endsWith('#')) result += '#'
+        return { serviceType, cleanedUrl: result }
+      }
+    }
+  } catch {}
+  return { serviceType: null, cleanedUrl: url }
+}
+
+// 保留导出以兼容可能的外部使用
+export const detectServiceType = (url: string): 'openai' | 'gemini' | 'claude' | 'responses' | null => {
+  return detectServiceTypeAndCleanUrl(url).serviceType
 }
 
 /**
@@ -70,8 +112,10 @@ export const parseQuickInput = (
 ): {
   detectedBaseUrl: string
   detectedApiKeys: string[]
+  detectedServiceType: 'openai' | 'gemini' | 'claude' | 'responses' | null
 } => {
   let detectedBaseUrl = ''
+  let detectedServiceType: 'openai' | 'gemini' | 'claude' | 'responses' | null = null
   const detectedApiKeys: string[] = []
 
   const tokens = extractTokens(input)
@@ -82,7 +126,12 @@ export const parseQuickInput = (
         const endsWithHash = token.endsWith('#')
         let url = endsWithHash ? token.slice(0, -1) : token
         url = url.replace(/\/$/, '')
-        detectedBaseUrl = endsWithHash ? url + '#' : url
+        const fullUrl = endsWithHash ? url + '#' : url
+
+        // 检测协议并清理 URL（移除端点路径）
+        const { serviceType, cleanedUrl } = detectServiceTypeAndCleanUrl(fullUrl)
+        detectedBaseUrl = cleanedUrl
+        detectedServiceType = serviceType
       }
       continue
     }
@@ -92,5 +141,5 @@ export const parseQuickInput = (
     }
   }
 
-  return { detectedBaseUrl, detectedApiKeys }
+  return { detectedBaseUrl, detectedApiKeys, detectedServiceType }
 }

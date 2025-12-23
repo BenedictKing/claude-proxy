@@ -4,7 +4,16 @@
 
 ---
 
-## [Unreleased]
+## [v2.3.2] - 2025-12-23
+
+### ✨ 新功能
+
+- **快速添加渠道自动检测协议类型** - 根据 URL 路径自动选择正确的服务类型
+  - `/messages` → Claude 协议
+  - `/chat/completions` → OpenAI 协议
+  - `/responses` → Responses 协议
+  - `/generateContent` → Gemini 协议
+- **快速添加支持 `%20` 分隔符** - 解析输入时自动将 URL 编码的空格转换为实际空格
 
 ---
 

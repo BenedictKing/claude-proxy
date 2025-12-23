@@ -514,6 +514,7 @@ const isQuickMode = ref(true)
 const quickInput = ref('')
 const detectedBaseUrl = ref('')
 const detectedApiKeys = ref<string[]>([])
+const detectedServiceType = ref<'openai' | 'gemini' | 'claude' | 'responses' | null>(null)
 
 // 详细表单预期请求 URL 预览（防止输入时抖动）
 const formBaseUrlPreview = ref('')
@@ -532,7 +533,7 @@ const toggleMode = () => {
     if (generatedChannelName.value) {
       form.name = generatedChannelName.value
     }
-    form.serviceType = getDefaultServiceTypeValue()
+    form.serviceType = detectedServiceType.value || getDefaultServiceTypeValue()
   }
   // 切换回快速模式时不做任何清理，保留 quickInput 原有内容
   isQuickMode.value = !isQuickMode.value
@@ -543,6 +544,7 @@ const parseQuickInput = () => {
   const result = parseQuickInputUtil(quickInput.value)
   detectedBaseUrl.value = result.detectedBaseUrl
   detectedApiKeys.value = result.detectedApiKeys
+  detectedServiceType.value = result.detectedServiceType
 }
 
 // 获取默认服务类型
@@ -633,7 +635,7 @@ const expectedRequestUrl = computed(() => {
   const hasVersion = /\/v\d+[a-z]*$/.test(baseUrl)
 
   // 根据渠道类型和服务类型确定端点（与后端逻辑一致）
-  const serviceType = getDefaultServiceTypeValue()
+  const serviceType = detectedServiceType.value || getDefaultServiceTypeValue()
   let endpoint = ''
   if (props.channelType === 'responses') {
     // responses 渠道根据 serviceType 决定端点
@@ -645,8 +647,14 @@ const expectedRequestUrl = computed(() => {
       endpoint = '/chat/completions'
     }
   } else {
-    // messages 渠道：claude 用 /messages，其他用 /chat/completions
-    endpoint = '/messages' // 快速添加默认是 claude
+    // messages 渠道：根据检测到的服务类型决定端点
+    if (serviceType === 'claude') {
+      endpoint = '/messages'
+    } else if (serviceType === 'gemini') {
+      endpoint = '/generateContent'
+    } else {
+      endpoint = '/chat/completions'
+    }
   }
 
   if (hasVersion || skipVersion) {
@@ -713,7 +721,7 @@ const handleQuickSubmit = () => {
 
   const channelData = {
     name: generatedChannelName.value,
-    serviceType: getDefaultServiceTypeValue(),
+    serviceType: detectedServiceType.value || getDefaultServiceTypeValue(),
     baseUrl: detectedBaseUrl.value,
     apiKeys: detectedApiKeys.value,
     modelMapping: {}
@@ -928,6 +936,7 @@ const resetForm = () => {
   quickInput.value = ''
   detectedBaseUrl.value = ''
   detectedApiKeys.value = []
+  detectedServiceType.value = null
   randomSuffix.value = generateRandomString(6)
 }
 
