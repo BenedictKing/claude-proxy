@@ -185,9 +185,8 @@ func main() {
 	r.POST("/v1/messages/count_tokens", messages.CountTokensHandler(envCfg, cfgManager, channelScheduler))
 
 	// 代理端点 - Models API（转发到上游）
-	r.GET("/v1/models", messages.ModelsHandler(envCfg, cfgManager))
-	r.GET("/v1/models/:model", messages.ModelsDetailHandler(envCfg, cfgManager))
-	r.DELETE("/v1/models/:model", messages.ModelsDeleteHandler(envCfg, cfgManager))
+	r.GET("/v1/models", messages.ModelsHandler(envCfg, cfgManager, channelScheduler))
+	r.GET("/v1/models/:model", messages.ModelsDetailHandler(envCfg, cfgManager, channelScheduler))
 
 	// 代理端点 - Responses API
 	r.POST("/v1/responses", responses.Handler(envCfg, cfgManager, sessionManager, channelScheduler))

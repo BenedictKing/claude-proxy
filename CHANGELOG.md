@@ -4,6 +4,19 @@
 
 ---
 
+## [v2.3.4] - 2025-12-23
+
+### ✨ 新功能
+
+- **Models API 增强** - `/v1/models` 端点重大改进
+  - 使用调度器按故障转移顺序选择渠道（与 Messages/Responses API 一致）
+  - 同时从 Messages 和 Responses 两种渠道获取模型列表并合并去重
+  - 添加详细日志：渠道名称、脱敏 Key、选择原因
+  - 移除对 Claude 原生渠道的跳过限制（第三方 Claude 代理通常支持 /models）
+  - 移除不常用的 `DELETE /v1/models/:model` 端点
+
+---
+
 ## [v2.3.3] - 2025-12-23
 
 ### ✨ 新功能
