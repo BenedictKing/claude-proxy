@@ -204,6 +204,7 @@ vite.config.ts.timestamp-*
 .claude/skills/*
 !.claude/skills/version-bump/
 !.claude/skills/codex-review/
+!.claude/skills/github-release/
 
 .aider*
 *.log
