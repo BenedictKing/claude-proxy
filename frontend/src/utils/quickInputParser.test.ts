@@ -8,31 +8,106 @@ import { describe, it, expect } from 'vitest'
 import { isValidApiKey, isValidUrl, parseQuickInput } from './quickInputParser'
 
 describe('API Key 识别', () => {
-  describe('前缀格式 (xx-xxx / xx_xxx)', () => {
-    it('应识别 sk- 前缀', () => {
-      expect(isValidApiKey('sk-x')).toBe(true)
-      expect(isValidApiKey('sk-111')).toBe(true)
-      expect(isValidApiKey('sk-222')).toBe(true)
-      expect(isValidApiKey('sk-proj-abc123')).toBe(true)
-      expect(isValidApiKey('sk-ant-api03-xxxxxxxxxxxx')).toBe(true)
+  describe('OpenAI 格式', () => {
+    it('应识别 OpenAI Legacy 格式 (sk-xxx)', () => {
+      expect(isValidApiKey('sk-7nKxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1234')).toBe(true)
+      expect(isValidApiKey('sk-abcdef1234567890abcdef1234567890abcdef123456')).toBe(true)
     })
 
-    it('应识别 ut_ 前缀', () => {
-      expect(isValidApiKey('ut_1')).toBe(true)
-      expect(isValidApiKey('ut_abc123')).toBe(true)
-      expect(isValidApiKey('ut_xxxxxxxxxxxxxxxx')).toBe(true)
+    it('应识别 OpenAI Project 格式 (sk-proj-xxx)', () => {
+      expect(isValidApiKey('sk-proj-Aw9' + 'x'.repeat(100))).toBe(true)
+      expect(isValidApiKey('sk-proj-' + 'abcdef1234567890'.repeat(8))).toBe(true)
+    })
+  })
+
+  describe('Anthropic Claude 格式', () => {
+    it('应识别 Anthropic 格式 (sk-ant-api03-xxx)', () => {
+      expect(isValidApiKey('sk-ant-api03-bK9' + 'x'.repeat(80))).toBe(true)
+      expect(isValidApiKey('sk-ant-api03-' + 'abcdef1234567890'.repeat(6))).toBe(true)
+    })
+  })
+
+  describe('Google Gemini 格式', () => {
+    it('应识别 AIza 开头的 key', () => {
+      // Google API Key 总长度 39 字符: AIza (4) + 35 字符
+      expect(isValidApiKey('AIzaSyDxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')).toBe(true)
+      expect(isValidApiKey('AIzaXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX')).toBe(true)
     })
 
-    it('应识别其他常见前缀', () => {
-      expect(isValidApiKey('api-key123')).toBe(true)
-      expect(isValidApiKey('key-abc123')).toBe(true)
-      expect(isValidApiKey('cr_xxxxxxxxx')).toBe(true)
-      expect(isValidApiKey('ms-xxxxxxxxx')).toBe(true)
+    it('不应识别非 AIza 开头的类似格式', () => {
+      expect(isValidApiKey('AIzbSyDxxx')).toBe(false)
+      expect(isValidApiKey('Aiza1234567')).toBe(false)
+    })
+  })
+
+  describe('OpenRouter 格式', () => {
+    it('应识别 OpenRouter 格式 (sk-or-v1-xxx)', () => {
+      // OpenRouter 使用混合大小写字母数字
+      expect(isValidApiKey('sk-or-v1-0ndQl1opjKLMNOPqrs' + 'x'.repeat(40))).toBe(true)
+      expect(isValidApiKey('sk-or-v1-' + 'AbCdEf123456'.repeat(5))).toBe(true)
+    })
+  })
+
+  describe('Hugging Face 格式', () => {
+    it('应识别 hf_ 前缀', () => {
+      expect(isValidApiKey('hf_AVd' + 'x'.repeat(31))).toBe(true)
+      expect(isValidApiKey('hf_' + 'abcdef1234567890'.repeat(2) + 'ab')).toBe(true)
+    })
+  })
+
+  describe('Groq 格式', () => {
+    it('应识别 gsk_ 前缀', () => {
+      expect(isValidApiKey('gsk_8sX' + 'x'.repeat(49))).toBe(true)
+      expect(isValidApiKey('gsk_' + 'abcdef1234567890'.repeat(3) + 'abcd')).toBe(true)
+    })
+  })
+
+  describe('Perplexity 格式', () => {
+    it('应识别 pplx- 前缀', () => {
+      expect(isValidApiKey('pplx-f9a' + 'x'.repeat(40))).toBe(true)
+      expect(isValidApiKey('pplx-' + 'abcdef1234567890'.repeat(3))).toBe(true)
+    })
+  })
+
+  describe('Replicate 格式', () => {
+    it('应识别 r8_ 前缀', () => {
+      expect(isValidApiKey('r8_G7b' + 'x'.repeat(20))).toBe(true)
+      expect(isValidApiKey('r8_abcdef1234567890abcdef')).toBe(true)
+    })
+  })
+
+  describe('智谱 AI 格式 (id.secret)', () => {
+    it('应识别智谱 AI 的 id.secret 格式', () => {
+      expect(isValidApiKey('269abc123456789012345678.r8abcdef1234')).toBe(true)
+      expect(isValidApiKey('abcdefghij1234567890abcd.secretkey123456')).toBe(true)
+    })
+  })
+
+  describe('火山引擎格式', () => {
+    it('应识别火山引擎 Ark UUID 格式', () => {
+      expect(isValidApiKey('550e8400-e29b-41d4-a716-446655440000')).toBe(true)
+      expect(isValidApiKey('123e4567-e89b-12d3-a456-426614174000')).toBe(true)
+    })
+
+    it('应识别火山引擎 IAM AK 格式', () => {
+      expect(isValidApiKey('AKLTNmYyYz' + 'x'.repeat(20))).toBe(true)
+      expect(isValidApiKey('AKLTabcdefghij1234567890abcdefgh')).toBe(true)
+    })
+  })
+
+  describe('通用前缀格式 (xx-xxx / xx_xxx)', () => {
+    it('应识别包含数字或混合大小写的后缀', () => {
+      expect(isValidApiKey('sk-proj-abc123xyz')).toBe(true)
+      expect(isValidApiKey('sk-1234567890abcdef')).toBe(true)
+      expect(isValidApiKey('sk-abcDEFghiJKL')).toBe(true)
+      expect(isValidApiKey('ut_abc123456789')).toBe(true)
+      expect(isValidApiKey('api-key12345678901')).toBe(true)
+      expect(isValidApiKey('cr_xxxxxxxxx123')).toBe(true)
     })
 
     it('不应识别单字母前缀', () => {
-      expect(isValidApiKey('s-123')).toBe(false)
-      expect(isValidApiKey('u_123')).toBe(false)
+      expect(isValidApiKey('s-1234567890123')).toBe(false)
+      expect(isValidApiKey('u_1234567890123')).toBe(false)
     })
 
     it('不应识别无分隔符的字符串', () => {
@@ -46,15 +121,46 @@ describe('API Key 识别', () => {
     })
   })
 
-  describe('Google API Key 格式', () => {
-    it('应识别 AIza 开头的 key', () => {
-      expect(isValidApiKey('AIzaSyDxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')).toBe(true)
-      expect(isValidApiKey('AIzaXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX')).toBe(true)
+  describe('宽松兜底格式（常见前缀 + 任意后缀）', () => {
+    it('应识别 sk- 前缀的短密钥', () => {
+      expect(isValidApiKey('sk-111')).toBe(true)
+      expect(isValidApiKey('sk-x')).toBe(true)
+      expect(isValidApiKey('sk-abc')).toBe(true)
+      expect(isValidApiKey('sk-test')).toBe(true)
     })
 
-    it('不应识别非 AIza 开头的类似格式', () => {
-      expect(isValidApiKey('AIzbSyDxxx')).toBe(false)
-      expect(isValidApiKey('Aiza1234567')).toBe(false)
+    it('应识别其他常见前缀的短密钥', () => {
+      expect(isValidApiKey('api-123')).toBe(true)
+      expect(isValidApiKey('key-abc')).toBe(true)
+      expect(isValidApiKey('ut_test')).toBe(true)
+      expect(isValidApiKey('hf_short')).toBe(true)
+      expect(isValidApiKey('gsk_x')).toBe(true)
+      expect(isValidApiKey('cr_1')).toBe(true)
+      expect(isValidApiKey('ms-test')).toBe(true)
+      expect(isValidApiKey('r8_abc')).toBe(true)
+      expect(isValidApiKey('pplx-x')).toBe(true)
+    })
+
+    it('不应识别未知前缀的短字符串', () => {
+      expect(isValidApiKey('xx-111')).toBe(false)
+      expect(isValidApiKey('foo-bar')).toBe(false)
+      expect(isValidApiKey('test_key')).toBe(false)
+    })
+  })
+
+  describe('配置键名格式（应被排除）', () => {
+    it('不应识别全大写下划线分隔的配置键名', () => {
+      expect(isValidApiKey('API_TIMEOUT_MS')).toBe(false)
+      expect(isValidApiKey('ANTHROPIC_BASE_URL')).toBe(false)
+      expect(isValidApiKey('ANTHROPIC_AUTH_TOKEN')).toBe(false)
+      expect(isValidApiKey('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC')).toBe(false)
+      expect(isValidApiKey('DATABASE_URL')).toBe(false)
+      expect(isValidApiKey('SECRET_KEY')).toBe(false)
+    })
+
+    it('不应识别带数字的配置键名', () => {
+      expect(isValidApiKey('API_V2_KEY')).toBe(false)
+      expect(isValidApiKey('REDIS_DB_0')).toBe(false)
     })
   })
 
@@ -78,11 +184,11 @@ describe('API Key 识别', () => {
     })
   })
 
-  describe('长字符串格式 (≥32 字符)', () => {
-    it('应识别 32+ 字符的纯字母数字字符串', () => {
-      expect(isValidApiKey('a'.repeat(32))).toBe(true)
+  describe('长字符串格式 (≥32 字符，需同时包含字母和数字)', () => {
+    it('应识别 32+ 字符的字母数字混合字符串', () => {
       expect(isValidApiKey('abcdefghijklmnopqrstuvwxyz123456')).toBe(true)
       expect(isValidApiKey('ABCDEFGHIJKLMNOPQRSTUVWXYZ123456')).toBe(true)
+      expect(isValidApiKey('72f988bf7ab9e0f0a1234567890abcde')).toBe(true) // Azure OpenAI 风格
     })
 
     it('应识别包含下划线和横线的长字符串', () => {
@@ -92,6 +198,11 @@ describe('API Key 识别', () => {
     it('不应识别少于 32 字符的无前缀字符串', () => {
       expect(isValidApiKey('a'.repeat(31))).toBe(false)
       expect(isValidApiKey('shortkey')).toBe(false)
+    })
+
+    it('不应识别纯字母的长字符串', () => {
+      expect(isValidApiKey('a'.repeat(32))).toBe(false)
+      expect(isValidApiKey('abcdefghijklmnopqrstuvwxyzabcdef')).toBe(false)
     })
 
     it('不应识别包含特殊字符的字符串', () => {
@@ -184,63 +295,63 @@ describe('综合解析场景', () => {
   it('应正确解析 URL + 多个 API Key', () => {
     const input = `
       https://api.openai.com/v1
-      sk-key1
-      sk-key2
-      sk-key3
+      sk-key1abc123456
+      sk-key2def789012
+      sk-key3ghi345678
     `
     const result = parseQuickInput(input)
     expect(result.detectedBaseUrl).toBe('https://api.openai.com/v1')
-    expect(result.detectedApiKeys).toEqual(['sk-key1', 'sk-key2', 'sk-key3'])
+    expect(result.detectedApiKeys).toEqual(['sk-key1abc123456', 'sk-key2def789012', 'sk-key3ghi345678'])
   })
 
   it('应正确解析 localhost URL', () => {
-    const input = 'http://localhost:5688 sk-111 sk-222'
+    const input = 'http://localhost:5688 sk-1234567890ab sk-abcdef123456'
     const result = parseQuickInput(input)
     expect(result.detectedBaseUrl).toBe('http://localhost:5688')
-    expect(result.detectedApiKeys).toEqual(['sk-111', 'sk-222'])
+    expect(result.detectedApiKeys).toEqual(['sk-1234567890ab', 'sk-abcdef123456'])
   })
 
   it('应正确解析混合分隔符', () => {
-    const input = 'https://api.example.com, sk-key1; ut_key2, api-key3'
+    const input = 'https://api.example.com, sk-key1234567890; ut_key2abc123456, api-key3def789012'
     const result = parseQuickInput(input)
     expect(result.detectedBaseUrl).toBe('https://api.example.com')
-    expect(result.detectedApiKeys).toEqual(['sk-key1', 'ut_key2', 'api-key3'])
+    expect(result.detectedApiKeys).toEqual(['sk-key1234567890', 'ut_key2abc123456', 'api-key3def789012'])
   })
 
   it('应忽略不完整的 URL', () => {
-    const input = 'http:// sk-key1'
+    const input = 'http:// sk-key1234567890'
     const result = parseQuickInput(input)
     expect(result.detectedBaseUrl).toBe('')
-    expect(result.detectedApiKeys).toEqual(['sk-key1'])
+    expect(result.detectedApiKeys).toEqual(['sk-key1234567890'])
   })
 
   it('应只取第一个 URL', () => {
-    const input = 'https://first.com https://second.com sk-key'
+    const input = 'https://first.com https://second.com sk-key1234567890'
     const result = parseQuickInput(input)
     expect(result.detectedBaseUrl).toBe('https://first.com')
-    expect(result.detectedApiKeys).toEqual(['sk-key'])
+    expect(result.detectedApiKeys).toEqual(['sk-key1234567890'])
   })
 
   it('应去重 API Key', () => {
-    const input = 'sk-key1 sk-key1 sk-key2'
+    const input = 'sk-key1234567890 sk-key1234567890 sk-key2abcdef123'
     const result = parseQuickInput(input)
-    expect(result.detectedApiKeys).toEqual(['sk-key1', 'sk-key2'])
+    expect(result.detectedApiKeys).toEqual(['sk-key1234567890', 'sk-key2abcdef123'])
   })
 
   it('应保留 # 结尾（跳过版本号）', () => {
-    const input = 'https://api.example.com/anthropic# sk-key'
+    const input = 'https://api.example.com/anthropic# sk-key1234567890'
     const result = parseQuickInput(input)
     expect(result.detectedBaseUrl).toBe('https://api.example.com/anthropic#')
   })
 
   it('应保留无路径的 # 结尾', () => {
-    const input = 'https://api.example.com# sk-key'
+    const input = 'https://api.example.com# sk-key1234567890'
     const result = parseQuickInput(input)
     expect(result.detectedBaseUrl).toBe('https://api.example.com#')
   })
 
   it('应移除末尾斜杠', () => {
-    const input = 'https://api.example.com/ sk-key'
+    const input = 'https://api.example.com/ sk-key1234567890'
     const result = parseQuickInput(input)
     expect(result.detectedBaseUrl).toBe('https://api.example.com')
   })
@@ -261,27 +372,30 @@ describe('引号内容提取', () => {
     const result = parseQuickInput(input)
     expect(result.detectedBaseUrl).toBe('https://apic1.ohmycdn.com/api/v1/ai/openai/cc-omg')
     expect(result.detectedApiKeys).toContain('sk-lACTyHP69FC46DeD8F67T3BLBkFJ4cE3879908bc4c38a336')
+    // 不应识别配置键名
+    expect(result.detectedApiKeys).not.toContain('ANTHROPIC_AUTH_TOKEN')
+    expect(result.detectedApiKeys).not.toContain('ANTHROPIC_BASE_URL')
   })
 
   it('应从英文单引号中提取内容', () => {
-    const input = `'sk-test123456789' 'https://api.example.com/v1'`
+    const input = `'sk-test123456789012' 'https://api.example.com/v1'`
     const result = parseQuickInput(input)
     expect(result.detectedBaseUrl).toBe('https://api.example.com/v1')
-    expect(result.detectedApiKeys).toEqual(['sk-test123456789'])
+    expect(result.detectedApiKeys).toEqual(['sk-test123456789012'])
   })
 
   it('应从中文双引号中提取内容', () => {
-    const input = `"sk-chinese123456""https://api.example.com"`
+    const input = `"sk-chinese123456789""https://api.example.com"`
     const result = parseQuickInput(input)
     expect(result.detectedBaseUrl).toBe('https://api.example.com')
-    expect(result.detectedApiKeys).toEqual(['sk-chinese123456'])
+    expect(result.detectedApiKeys).toEqual(['sk-chinese123456789'])
   })
 
   it('应从中文单引号中提取内容', () => {
-    const input = `'sk-chinese789''https://api.test.com'`
+    const input = `'sk-chinese789012345''https://api.test.com'`
     const result = parseQuickInput(input)
     expect(result.detectedBaseUrl).toBe('https://api.test.com')
-    expect(result.detectedApiKeys).toEqual(['sk-chinese789'])
+    expect(result.detectedApiKeys).toEqual(['sk-chinese789012345'])
   })
 
   it('应正确解析完整的 Claude Code 配置格式', () => {
@@ -297,21 +411,46 @@ snow里获取不到模型不知道为啥
     const result = parseQuickInput(input)
     expect(result.detectedBaseUrl).toBe('https://apic1.ohmycdn.com/api/v1/ai/openai/cc-omg')
     expect(result.detectedApiKeys).toContain('sk-lACTyHP69FC46DeD8F67T3BLBkFJ4cE3879908bc4c38a336')
+    // 不应识别配置键名
+    expect(result.detectedApiKeys).not.toContain('ANTHROPIC_AUTH_TOKEN')
+    expect(result.detectedApiKeys).not.toContain('ANTHROPIC_BASE_URL')
+    expect(result.detectedApiKeys).not.toContain('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC')
+  })
+
+  it('应正确解析 Claude Code settings.json 格式', () => {
+    const input = `{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "API_TIMEOUT_MS": "200000",
+    "ANTHROPIC_BASE_URL": "http://localhost:3688/",
+    "ANTHROPIC_AUTH_TOKEN": "key",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  },
+  "includeCoAuthoredBy": false
+}`
+    const result = parseQuickInput(input)
+    expect(result.detectedBaseUrl).toBe('https://json.schemastore.org/claude-code-settings.json')
+    // 不应识别任何配置键名
+    expect(result.detectedApiKeys).not.toContain('API_TIMEOUT_MS')
+    expect(result.detectedApiKeys).not.toContain('ANTHROPIC_BASE_URL')
+    expect(result.detectedApiKeys).not.toContain('ANTHROPIC_AUTH_TOKEN')
+    expect(result.detectedApiKeys).not.toContain('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC')
   })
 
   it('应忽略引号内的非 URL/Key 内容', () => {
-    const input = `"env": { "ANTHROPIC_AUTH_TOKEN": "sk-valid123" }`
+    const input = `"env": { "ANTHROPIC_AUTH_TOKEN": "sk-valid1234567890" }`
     const result = parseQuickInput(input)
     expect(result.detectedBaseUrl).toBe('')
-    expect(result.detectedApiKeys).toContain('sk-valid123')
+    expect(result.detectedApiKeys).toContain('sk-valid1234567890')
+    expect(result.detectedApiKeys).not.toContain('ANTHROPIC_AUTH_TOKEN')
   })
 
   it('应同时支持引号内容和普通分隔', () => {
-    const input = `"sk-quoted123" sk-plain456 https://api.example.com`
+    const input = `"sk-quoted123456789" sk-plain4567890123 https://api.example.com`
     const result = parseQuickInput(input)
     expect(result.detectedBaseUrl).toBe('https://api.example.com')
-    expect(result.detectedApiKeys).toContain('sk-quoted123')
-    expect(result.detectedApiKeys).toContain('sk-plain456')
+    expect(result.detectedApiKeys).toContain('sk-quoted123456789')
+    expect(result.detectedApiKeys).toContain('sk-plain4567890123')
   })
 
   it('应支持单边引号（只有开头引号）', () => {
@@ -321,9 +460,9 @@ snow里获取不到模型不知道为啥
   })
 
   it('应支持单边引号提取 API Key', () => {
-    const input = `"sk-test123456`
+    const input = `"sk-test1234567890`
     const result = parseQuickInput(input)
-    expect(result.detectedApiKeys).toContain('sk-test123456')
+    expect(result.detectedApiKeys).toContain('sk-test1234567890')
   })
 
   it('应支持单边单引号', () => {
@@ -333,9 +472,9 @@ snow里获取不到模型不知道为啥
   })
 
   it('应支持混合完整引号和单边引号', () => {
-    const input = `"https://api.example.com" "sk-key123`
+    const input = `"https://api.example.com" "sk-key12345678901`
     const result = parseQuickInput(input)
     expect(result.detectedBaseUrl).toBe('https://api.example.com')
-    expect(result.detectedApiKeys).toContain('sk-key123')
+    expect(result.detectedApiKeys).toContain('sk-key12345678901')
   })
 })

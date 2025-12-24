@@ -5,31 +5,122 @@
  */
 
 /**
+ * 检测字符串是否看起来像配置键名（全大写 + 下划线分隔的单词）
+ * 例如：API_TIMEOUT_MS, ANTHROPIC_BASE_URL, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC
+ */
+const looksLikeConfigKey = (token: string): boolean => {
+  // 全大写字母 + 下划线，且由多个单词组成（至少包含一个下划线分隔的段）
+  // 且每个段都是 2+ 字符的大写字母单词
+  if (/^[A-Z][A-Z0-9]*(_[A-Z][A-Z0-9]*)+$/.test(token)) {
+    return true
+  }
+  return false
+}
+
+/**
+ * 各平台 API Key 格式的专用正则匹配
+ *
+ * 国际主流:
+ * - OpenAI Legacy: sk-[a-zA-Z0-9]{48}
+ * - OpenAI Project: sk-proj-[a-zA-Z0-9-]{100,}
+ * - Anthropic: sk-ant-api03-[a-zA-Z0-9-]{80,}
+ * - Google Gemini: AIza[0-9A-Za-z-_]{35}
+ * - Azure OpenAI: 32位十六进制
+ *
+ * 新兴生态:
+ * - Hugging Face: hf_[a-zA-Z0-9]{34}
+ * - Groq: gsk_[a-zA-Z0-9]{52}
+ * - Perplexity: pplx-[a-zA-Z0-9]{40,}
+ * - Replicate: r8_[a-zA-Z0-9]+
+ * - OpenRouter: sk-or-v1-[a-zA-Z0-9]{50,}
+ *
+ * 国内平台:
+ * - DeepSeek/Moonshot/01.AI/SiliconFlow: sk-[a-zA-Z0-9]{48} (兼容 OpenAI)
+ * - 智谱 AI: [a-z0-9]{32}\.[a-z0-9]+ (id.secret 格式)
+ * - 火山引擎 Ark: UUID 格式
+ * - 火山引擎 IAM: AK 开头
+ */
+const PLATFORM_KEY_PATTERNS: RegExp[] = [
+  // OpenAI Project Key (新格式，最长，优先匹配)
+  /^sk-proj-[a-zA-Z0-9_-]{50,}$/,
+  // Anthropic Claude
+  /^sk-ant-api03-[a-zA-Z0-9_-]{50,}$/,
+  // OpenRouter (混合大小写字母数字)
+  /^sk-or-v1-[a-zA-Z0-9]{50,}$/,
+  // OpenAI Legacy / DeepSeek / Moonshot / 01.AI / SiliconFlow
+  /^sk-[a-zA-Z0-9]{20,}$/,
+  // Google Gemini/PaLM (通常 39 字符，允许一定范围)
+  /^AIza[0-9A-Za-z_-]{30,}$/,
+  // Hugging Face
+  /^hf_[a-zA-Z0-9]{30,}$/,
+  // Groq
+  /^gsk_[a-zA-Z0-9]{40,}$/,
+  // Perplexity
+  /^pplx-[a-zA-Z0-9]{40,}$/,
+  // Replicate
+  /^r8_[a-zA-Z0-9]{20,}$/,
+  // 智谱 AI (id.secret 格式)
+  /^[a-zA-Z0-9]{20,}\.[a-zA-Z0-9]{10,}$/,
+  // 火山引擎 Ark (UUID 格式)
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  // 火山引擎 IAM AK
+  /^AK[A-Z]{2,4}[a-zA-Z0-9]{20,}$/
+]
+
+/**
  * 检测字符串是否为有效的 API Key
  *
  * 支持的格式：
- * - 前缀格式：xx-xxx 或 xx_xxx（如 sk-xxx, ut_xxx, api-xxx）
- * - Google API Key：AIza 开头
- * - JWT 格式：eyJ 开头，包含两个点分隔的 base64 段
- * - 长字符串：≥32 字符的字母数字串（必须包含字母）
+ * 1. 平台特定格式（优先匹配，准确度最高）
+ * 2. 通用前缀格式：xx-xxx 或 xx_xxx（如 sk-xxx, ut_xxx, api-xxx）
+ * 3. JWT 格式：eyJ 开头，包含两个点分隔的 base64 段
+ * 4. 长随机字符串：≥32 字符的字母数字串（必须包含字母和数字）
+ * 5. 宽松兜底：常见前缀 + 任意后缀（当以上都不匹配时）
+ *
+ * 排除的格式：
+ * - 配置键名：全大写 + 下划线分隔（如 API_TIMEOUT_MS）
  */
 export const isValidApiKey = (token: string): boolean => {
-  // 常见 API Key 前缀格式（xx-xxx 或 xx_xxx 模式，前缀后至少有1个字符）
-  if (/^[a-zA-Z]{2,}[-_][a-zA-Z0-9_-]+$/.test(token)) {
-    return true
+  // 首先排除配置键名格式
+  if (looksLikeConfigKey(token)) {
+    return false
   }
-  // Google API Key 格式
-  if (/^AIza[a-zA-Z0-9_-]+$/.test(token)) {
-    return true
+
+  // 1. 平台特定格式匹配（最准确）
+  for (const pattern of PLATFORM_KEY_PATTERNS) {
+    if (pattern.test(token)) {
+      return true
+    }
   }
-  // JWT 格式 (eyJ 开头，包含两个点分隔的 base64 段，总长度 >= 20)
+
+  // 2. 通用前缀格式（前缀 2-6 字母 + 连字符/下划线 + 至少 10 字符后缀）
+  // 后缀必须包含数字或混合大小写（随机特征）
+  if (/^[a-zA-Z]{2,6}[-_][a-zA-Z0-9_-]{10,}$/.test(token)) {
+    const suffix = token.replace(/^[a-zA-Z]{2,6}[-_]/, '')
+    const hasDigit = /\d/.test(suffix)
+    const hasMixedCase = /[a-z]/.test(suffix) && /[A-Z]/.test(suffix)
+    if (hasDigit || hasMixedCase) {
+      return true
+    }
+  }
+
+  // 3. JWT 格式 (eyJ 开头，包含两个点分隔的 base64 段，总长度 >= 20)
   if (/^eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\./.test(token) && token.length >= 20) {
     return true
   }
-  // 长度足够且包含字母的字符串（排除纯数字）
-  if (token.length >= 32 && /^[a-zA-Z0-9_-]+$/.test(token) && /[a-zA-Z]/.test(token)) {
+
+  // 4. 长随机字符串（≥32 字符，必须同时包含字母和数字）
+  if (token.length >= 32 && /^[a-zA-Z0-9_-]+$/.test(token) && /[a-zA-Z]/.test(token) && /\d/.test(token)) {
     return true
   }
+
+  // 5. 宽松兜底：常见 API Key 前缀 + 任意后缀（至少 1 个字符）
+  // 当以上严格规则都不匹配时，放松标准识别常见格式
+  // 支持：sk-xxx, api-xxx, key-xxx, ut_xxx, hf_xxx, gsk_xxx 等
+  if (/^(sk|api|key|ut|hf|gsk|cr|ms|r8|pplx)[-_].+$/i.test(token)) {
+    return true
+  }
+
   return false
 }
 
