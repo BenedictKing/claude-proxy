@@ -194,16 +194,26 @@ func (m *MetricsManager) loadFromStore() error {
 		}
 	}
 
-	// 重建滑动窗口（取最近 windowSize 条记录）
+	// 重建滑动窗口（只从最近 15 分钟的记录中取最近 windowSize 条）
+	// 避免历史失败记录导致渠道长期处于不健康状态
+	windowCutoff := time.Now().Add(-15 * time.Minute)
 	for _, metrics := range m.keyMetrics {
-		n := len(metrics.requestHistory)
+		metrics.recentResults = make([]bool, 0, m.windowSize)
+		// 从历史记录中筛选最近 15 分钟内的记录
+		var recentRecords []bool
+		for _, record := range metrics.requestHistory {
+			if record.Timestamp.After(windowCutoff) {
+				recentRecords = append(recentRecords, record.Success)
+			}
+		}
+		// 取最近 windowSize 条
+		n := len(recentRecords)
 		start := 0
 		if n > m.windowSize {
 			start = n - m.windowSize
 		}
-		metrics.recentResults = make([]bool, 0, m.windowSize)
 		for i := start; i < n; i++ {
-			metrics.recentResults = append(metrics.recentResults, metrics.requestHistory[i].Success)
+			metrics.recentResults = append(metrics.recentResults, recentRecords[i])
 		}
 	}
 
