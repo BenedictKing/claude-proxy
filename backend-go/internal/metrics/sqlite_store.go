@@ -101,7 +101,7 @@ func NewSQLiteStore(cfg *SQLiteStoreConfig) (*SQLiteStore, error) {
 	go store.flushLoop()
 	go store.cleanupLoop()
 
-	log.Printf("✅ SQLite 指标存储已初始化: %s (保留 %d 天)", cfg.DBPath, cfg.RetentionDays)
+	log.Printf("[SQLite-Init] 指标存储已初始化: %s (保留 %d 天)", cfg.DBPath, cfg.RetentionDays)
 	return store, nil
 }
 
@@ -171,13 +171,13 @@ func (s *SQLiteStore) flush() {
 
 	// 批量写入
 	if err := s.batchInsertRecords(records); err != nil {
-		log.Printf("⚠️ 批量写入指标记录失败: %v", err)
+		log.Printf("[SQLite-Flush] 警告: 批量写入指标记录失败: %v", err)
 		// 失败时将记录放回缓冲区（限制重试，避免无限增长）
 		s.bufferMu.Lock()
 		if len(s.writeBuffer) < s.batchSize*10 { // 最多保留 10 倍缓冲
 			s.writeBuffer = append(records, s.writeBuffer...)
 		} else {
-			log.Printf("⚠️ 写入缓冲区已满，丢弃 %d 条记录", len(records))
+			log.Printf("[SQLite-Flush] 警告: 写入缓冲区已满，丢弃 %d 条记录", len(records))
 		}
 		s.bufferMu.Unlock()
 	}
@@ -314,9 +314,9 @@ func (s *SQLiteStore) doCleanup() {
 	cutoff := time.Now().AddDate(0, 0, -s.retentionDays)
 	deleted, err := s.CleanupOldRecords(cutoff)
 	if err != nil {
-		log.Printf("⚠️ 清理过期指标记录失败: %v", err)
+		log.Printf("[SQLite-Cleanup] 警告: 清理过期指标记录失败: %v", err)
 	} else if deleted > 0 {
-		log.Printf("🧹 已清理 %d 条过期指标记录（超过 %d 天）", deleted, s.retentionDays)
+		log.Printf("[SQLite-Cleanup] 已清理 %d 条过期指标记录（超过 %d 天）", deleted, s.retentionDays)
 	}
 }
 

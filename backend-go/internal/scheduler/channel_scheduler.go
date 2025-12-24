@@ -79,17 +79,17 @@ func (s *ChannelScheduler) SelectChannel(
 		upstream := s.getUpstreamByIndex(promotedChannel.Index, isResponses)
 		if upstream != nil && len(upstream.APIKeys) > 0 {
 			failureRate := metricsManager.CalculateChannelFailureRate(upstream.BaseURL, upstream.APIKeys)
-			log.Printf("🎉 促销期优先选择渠道: [%d] %s (失败率: %.1f%%, 绕过健康检查)", promotedChannel.Index, upstream.Name, failureRate*100)
+			log.Printf("[Scheduler-Promotion] 促销期优先选择渠道: [%d] %s (失败率: %.1f%%, 绕过健康检查)", promotedChannel.Index, upstream.Name, failureRate*100)
 			return &SelectionResult{
 				Upstream:     upstream,
 				ChannelIndex: promotedChannel.Index,
 				Reason:       "promotion_priority",
 			}, nil
 		} else if upstream != nil {
-			log.Printf("⚠️ 促销渠道 [%d] %s 无可用密钥，跳过", promotedChannel.Index, upstream.Name)
+			log.Printf("[Scheduler-Promotion] 警告: 促销渠道 [%d] %s 无可用密钥，跳过", promotedChannel.Index, upstream.Name)
 		}
 	} else if promotedChannel != nil {
-		log.Printf("⚠️ 促销渠道 [%d] %s 已在本次请求中失败，跳过", promotedChannel.Index, promotedChannel.Name)
+		log.Printf("[Scheduler-Promotion] 警告: 促销渠道 [%d] %s 已在本次请求中失败，跳过", promotedChannel.Index, promotedChannel.Name)
 	}
 
 	// 1. 检查 Trace 亲和性（促销渠道失败时或无促销渠道时）
@@ -99,13 +99,13 @@ func (s *ChannelScheduler) SelectChannel(
 				if ch.Index == preferredIdx && !failedChannels[preferredIdx] {
 					// 检查渠道状态：只有 active 状态才使用亲和性
 					if ch.Status != "active" {
-						log.Printf("⏸️ 跳过亲和渠道 [%d] %s: 状态为 %s (user: %s)", preferredIdx, ch.Name, ch.Status, maskUserID(userID))
+						log.Printf("[Scheduler-Affinity] 跳过亲和渠道 [%d] %s: 状态为 %s (user: %s)", preferredIdx, ch.Name, ch.Status, maskUserID(userID))
 						continue
 					}
 					// 检查渠道是否健康
 					upstream := s.getUpstreamByIndex(preferredIdx, isResponses)
 					if upstream != nil && metricsManager.IsChannelHealthyWithKeys(upstream.BaseURL, upstream.APIKeys) {
-						log.Printf("🎯 Trace亲和选择渠道: [%d] %s (user: %s)", preferredIdx, upstream.Name, maskUserID(userID))
+						log.Printf("[Scheduler-Affinity] Trace亲和选择渠道: [%d] %s (user: %s)", preferredIdx, upstream.Name, maskUserID(userID))
 						return &SelectionResult{
 							Upstream:     upstream,
 							ChannelIndex: preferredIdx,
@@ -126,7 +126,7 @@ func (s *ChannelScheduler) SelectChannel(
 
 		// 跳过非 active 状态的渠道（suspended 等）
 		if ch.Status != "active" {
-			log.Printf("⏸️ 跳过非活跃渠道: [%d] %s (状态: %s)", ch.Index, ch.Name, ch.Status)
+			log.Printf("[Scheduler-Channel] 跳过非活跃渠道: [%d] %s (状态: %s)", ch.Index, ch.Name, ch.Status)
 			continue
 		}
 
@@ -138,11 +138,11 @@ func (s *ChannelScheduler) SelectChannel(
 		// 跳过失败率过高的渠道（已熔断或即将熔断）
 		if !metricsManager.IsChannelHealthyWithKeys(upstream.BaseURL, upstream.APIKeys) {
 			failureRate := metricsManager.CalculateChannelFailureRate(upstream.BaseURL, upstream.APIKeys)
-			log.Printf("⚠️ 跳过不健康渠道: [%d] %s (失败率: %.1f%%)", ch.Index, ch.Name, failureRate*100)
+			log.Printf("[Scheduler-Channel] 警告: 跳过不健康渠道: [%d] %s (失败率: %.1f%%)", ch.Index, ch.Name, failureRate*100)
 			continue
 		}
 
-		log.Printf("✅ 选择渠道: [%d] %s (优先级: %d)", ch.Index, upstream.Name, ch.Priority)
+		log.Printf("[Scheduler-Channel] 选择渠道: [%d] %s (优先级: %d)", ch.Index, upstream.Name, ch.Priority)
 		return &SelectionResult{
 			Upstream:     upstream,
 			ChannelIndex: ch.Index,
@@ -164,7 +164,7 @@ func (s *ChannelScheduler) findPromotedChannel(activeChannels []ChannelInfo, isR
 		upstream := s.getUpstreamByIndex(ch.Index, isResponses)
 		if upstream != nil {
 			if config.IsChannelInPromotion(upstream) {
-				log.Printf("🎉 找到促销渠道: [%d] %s (promotionUntil: %v)", ch.Index, upstream.Name, upstream.PromotionUntil)
+				log.Printf("[Scheduler-Promotion] 找到促销渠道: [%d] %s (promotionUntil: %v)", ch.Index, upstream.Name, upstream.PromotionUntil)
 				return ch
 			}
 		}
@@ -207,7 +207,7 @@ func (s *ChannelScheduler) selectFallbackChannel(
 	}
 
 	if bestChannel != nil && bestUpstream != nil {
-		log.Printf("⚠️ 降级选择渠道: [%d] %s (失败率: %.1f%%)",
+		log.Printf("[Scheduler-Fallback] 警告: 降级选择渠道: [%d] %s (失败率: %.1f%%)",
 			bestChannel.Index, bestUpstream.Name, bestFailureRate*100)
 		return &SelectionResult{
 			Upstream:     bestUpstream,
@@ -344,7 +344,7 @@ func (s *ChannelScheduler) ResetChannelMetrics(channelIndex int, isResponses boo
 	for _, apiKey := range upstream.APIKeys {
 		metricsManager.ResetKey(upstream.BaseURL, apiKey)
 	}
-	log.Printf("🔄 渠道 [%d] %s 的所有 Key 指标已重置", channelIndex, upstream.Name)
+	log.Printf("[Scheduler-Reset] 渠道 [%d] %s 的所有 Key 指标已重置", channelIndex, upstream.Name)
 }
 
 // ResetKeyMetrics 重置单个 Key 的指标

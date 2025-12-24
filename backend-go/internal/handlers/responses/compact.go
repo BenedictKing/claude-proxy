@@ -205,7 +205,7 @@ func tryCompactChannelWithAllKeys(
 	// 强制探测模式
 	forceProbeMode := common.AreAllKeysSuspended(metricsManager, upstream.BaseURL, upstream.APIKeys)
 	if forceProbeMode {
-		log.Printf("🔍 [强制探测/Compact] 渠道 %s 所有 Key 都被熔断，启用强制探测模式", upstream.Name)
+		log.Printf("[Compact-Probe] 渠道 %s 所有 Key 都被熔断，启用强制探测模式", upstream.Name)
 	}
 
 	for attempt := 0; attempt < len(upstream.APIKeys); attempt++ {
@@ -217,7 +217,7 @@ func tryCompactChannelWithAllKeys(
 		// 检查熔断状态
 		if !forceProbeMode && metricsManager.ShouldSuspendKey(upstream.BaseURL, apiKey) {
 			failedKeys[apiKey] = true
-			log.Printf("⚡ [Compact] 跳过熔断中的 Key: %s", utils.MaskAPIKey(apiKey))
+			log.Printf("[Compact-Key] 跳过熔断中的 Key: %s", utils.MaskAPIKey(apiKey))
 			continue
 		}
 

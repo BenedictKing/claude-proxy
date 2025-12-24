@@ -155,7 +155,7 @@ func getErrorPage() string {
 </head>
 <body>
   <div class="error">
-    <h1>❌ 前端资源未找到</h1>
+    <h1>前端资源未找到</h1>
     <p>无法找到前端构建文件。请执行以下步骤之一：</p>
     <h3>方案1: 重新构建(推荐)</h3>
     <pre>./build.sh</pre>

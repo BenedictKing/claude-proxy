@@ -77,9 +77,9 @@ func Setup(cfg *Config) error {
 	log.SetOutput(writer)
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 
-	log.Printf("📝 日志系统已初始化")
-	log.Printf("📂 日志文件: %s", logPath)
-	log.Printf("📊 轮转配置: 最大 %dMB, 保留 %d 个备份, %d 天", cfg.MaxSize, cfg.MaxBackups, cfg.MaxAge)
+	log.Printf("[Logger-Init] 日志系统已初始化")
+	log.Printf("[Logger-Init] 日志文件: %s", logPath)
+	log.Printf("[Logger-Init] 轮转配置: 最大 %dMB, 保留 %d 个备份, %d 天", cfg.MaxSize, cfg.MaxBackups, cfg.MaxAge)
 
 	return nil
 }

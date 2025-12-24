@@ -109,7 +109,7 @@ func NewConfigManager(configFile string) (*ConfigManager, error) {
 
 	// 启动文件监听
 	if err := cm.startWatcher(); err != nil {
-		log.Printf("启动配置文件监听失败: %v", err)
+		log.Printf("[Config-Watcher] 警告: 启动配置文件监听失败: %v", err)
 	}
 
 	// 启动定期清理
@@ -148,18 +148,18 @@ func (cm *ConfigManager) loadConfig() error {
 	// 如果有默认值迁移或格式迁移，保存配置
 	if needSaveDefaults || needMigration {
 		if err := cm.saveConfigLocked(cm.config); err != nil {
-			log.Printf("保存迁移后的配置失败: %v", err)
+			log.Printf("[Config-Migration] 警告: 保存迁移后的配置失败: %v", err)
 			return err
 		}
 		if needMigration {
-			log.Printf("配置迁移完成")
+			log.Printf("[Config-Migration] 配置迁移完成")
 		}
 	}
 
 	// 自检：没有配置 key 的渠道自动暂停
 	if cm.validateChannelKeys() {
 		if err := cm.saveConfigLocked(cm.config); err != nil {
-			log.Printf("保存自检后的配置失败: %v", err)
+			log.Printf("[Config-Validate] 警告: 保存自检后的配置失败: %v", err)
 			return err
 		}
 	}
@@ -208,7 +208,7 @@ func (cm *ConfigManager) applyConfigDefaults(rawJSON []byte) bool {
 			// 字段不存在，设为默认值 true
 			cm.config.FuzzyModeEnabled = true
 			needSave = true
-			log.Printf("配置迁移: FuzzyModeEnabled 字段不存在，设为默认值 true")
+			log.Printf("[Config-Migration] FuzzyModeEnabled 字段不存在，设为默认值 true")
 		}
 	}
 
@@ -230,7 +230,7 @@ func (cm *ConfigManager) migrateOldFormat() bool {
 	}
 
 	if needMigration {
-		log.Printf("检测到旧格式配置，正在迁移到新格式...")
+		log.Printf("[Config-Migration] 检测到旧格式配置，正在迁移到新格式...")
 	}
 
 	return needMigration
@@ -262,7 +262,7 @@ func (cm *ConfigManager) migrateUpstreams(upstreams []UpstreamConfig, currentIdx
 		}
 	}
 
-	log.Printf("%s 渠道 [%d] %s 已设置为 active，其他 %d 个渠道已设为 disabled",
+	log.Printf("[Config-Migration] %s 渠道 [%d] %s 已设置为 active，其他 %d 个渠道已设为 disabled",
 		name, currentIdx, upstreams[currentIdx].Name, len(upstreams)-1)
 
 	return true
@@ -286,7 +286,7 @@ func (cm *ConfigManager) validateChannelKeys() bool {
 		if status == "active" && len(upstream.APIKeys) == 0 {
 			upstream.Status = "suspended"
 			modified = true
-			log.Printf("⚠️ [自检] Messages 渠道 [%d] %s 没有配置 API key，已自动暂停", i, upstream.Name)
+			log.Printf("[Config-Validate] 警告: Messages 渠道 [%d] %s 没有配置 API key，已自动暂停", i, upstream.Name)
 		}
 	}
 
@@ -302,7 +302,7 @@ func (cm *ConfigManager) validateChannelKeys() bool {
 		if status == "active" && len(upstream.APIKeys) == 0 {
 			upstream.Status = "suspended"
 			modified = true
-			log.Printf("⚠️ [自检] Responses 渠道 [%d] %s 没有配置 API key，已自动暂停", i, upstream.Name)
+			log.Printf("[Config-Validate] 警告: Responses 渠道 [%d] %s 没有配置 API key，已自动暂停", i, upstream.Name)
 		}
 	}
 
@@ -342,14 +342,14 @@ func (cm *ConfigManager) backupConfig() {
 
 	backupDir := filepath.Join(filepath.Dir(cm.configFile), "backups")
 	if err := os.MkdirAll(backupDir, 0755); err != nil {
-		log.Printf("创建备份目录失败: %v", err)
+		log.Printf("[Config-Backup] 警告: 创建备份目录失败: %v", err)
 		return
 	}
 
 	// 读取当前配置
 	data, err := os.ReadFile(cm.configFile)
 	if err != nil {
-		log.Printf("读取配置文件失败: %v", err)
+		log.Printf("[Config-Backup] 警告: 读取配置文件失败: %v", err)
 		return
 	}
 
@@ -357,7 +357,7 @@ func (cm *ConfigManager) backupConfig() {
 	timestamp := time.Now().Format("2006-01-02T15-04-05")
 	backupFile := filepath.Join(backupDir, fmt.Sprintf("config-%s.json", timestamp))
 	if err := os.WriteFile(backupFile, data, 0644); err != nil {
-		log.Printf("写入备份文件失败: %v", err)
+		log.Printf("[Config-Backup] 警告: 写入备份文件失败: %v", err)
 		return
 	}
 
@@ -401,18 +401,18 @@ func (cm *ConfigManager) startWatcher() error {
 					return
 				}
 				if event.Op&fsnotify.Write == fsnotify.Write {
-					log.Printf("检测到配置文件变化，重载配置...")
+					log.Printf("[Config-Watcher] 检测到配置文件变化，重载配置...")
 					if err := cm.loadConfig(); err != nil {
-						log.Printf("配置重载失败: %v", err)
+						log.Printf("[Config-Watcher] 警告: 配置重载失败: %v", err)
 					} else {
-						log.Printf("配置已重载")
+						log.Printf("[Config-Watcher] 配置已重载")
 					}
 				}
 			case err, ok := <-watcher.Errors:
 				if !ok {
 					return
 				}
-				log.Printf("文件监听错误: %v", err)
+				log.Printf("[Config-Watcher] 警告: 文件监听错误: %v", err)
 			}
 		}
 	}()
@@ -502,7 +502,7 @@ func (cm *ConfigManager) getNextAPIKeyWithStrategy(upstream *UpstreamConfig, fai
 			cm.mu.RUnlock()
 
 			if oldestFailedKey != "" {
-				log.Printf("⚠️ 所有密钥都失效,尝试最早失败的密钥: %s", utils.MaskAPIKey(oldestFailedKey))
+				log.Printf("[Config-Key] 警告: 所有密钥都失效，尝试最早失败的密钥: %s", utils.MaskAPIKey(oldestFailedKey))
 				return oldestFailedKey, nil
 			}
 		}
@@ -516,13 +516,13 @@ func (cm *ConfigManager) getNextAPIKeyWithStrategy(upstream *UpstreamConfig, fai
 		count := atomic.AddInt64(requestCounter, 1)
 		index := int((count - 1) % int64(len(availableKeys)))
 		selectedKey := availableKeys[index]
-		log.Printf("轮询选择密钥 %s (%d/%d)", utils.MaskAPIKey(selectedKey), index+1, len(availableKeys))
+		log.Printf("[Config-Key] 轮询选择密钥 %s (%d/%d)", utils.MaskAPIKey(selectedKey), index+1, len(availableKeys))
 		return selectedKey, nil
 
 	case "random":
 		index := rand.Intn(len(availableKeys))
 		selectedKey := availableKeys[index]
-		log.Printf("随机选择密钥 %s (%d/%d)", utils.MaskAPIKey(selectedKey), index+1, len(availableKeys))
+		log.Printf("[Config-Key] 随机选择密钥 %s (%d/%d)", utils.MaskAPIKey(selectedKey), index+1, len(availableKeys))
 		return selectedKey, nil
 
 	case "failover":
@@ -537,7 +537,7 @@ func (cm *ConfigManager) getNextAPIKeyWithStrategy(upstream *UpstreamConfig, fai
 				break
 			}
 		}
-		log.Printf("故障转移选择密钥 %s (%d/%d)", utils.MaskAPIKey(selectedKey), keyIndex, len(upstream.APIKeys))
+		log.Printf("[Config-Key] 故障转移选择密钥 %s (%d/%d)", utils.MaskAPIKey(selectedKey), keyIndex, len(upstream.APIKeys))
 		return selectedKey, nil
 	}
 }
@@ -563,7 +563,7 @@ func (cm *ConfigManager) MarkKeyAsFailed(apiKey string) {
 		recoveryTime = cm.keyRecoveryTime * 2
 	}
 
-	log.Printf("标记API密钥失败: %s (失败次数: %d, 恢复时间: %v)",
+	log.Printf("[Config-Key] 标记API密钥失败: %s (失败次数: %d, 恢复时间: %v)",
 		utils.MaskAPIKey(apiKey), failure.FailureCount, recoveryTime)
 }
 
@@ -605,7 +605,7 @@ func (cm *ConfigManager) cleanupExpiredFailures() {
 
 				if now.Sub(failure.Timestamp) > recoveryTime {
 					delete(cm.failedKeysCache, key)
-					log.Printf("API密钥 %s 已从失败列表中恢复", utils.MaskAPIKey(key))
+					log.Printf("[Config-Key] API密钥 %s 已从失败列表中恢复", utils.MaskAPIKey(key))
 				}
 			}
 			cm.mu.Unlock()
@@ -636,7 +636,7 @@ func (cm *ConfigManager) clearFailedKeysForUpstream(upstream *UpstreamConfig) {
 	for _, key := range upstream.APIKeys {
 		if _, exists := cm.failedKeysCache[key]; exists {
 			delete(cm.failedKeysCache, key)
-			log.Printf("已清理被删除渠道 %s 的失败密钥记录: %s", upstream.Name, utils.MaskAPIKey(key))
+			log.Printf("[Config-Key] 已清理被删除渠道 %s 的失败密钥记录: %s", upstream.Name, utils.MaskAPIKey(key))
 		}
 	}
 }
@@ -657,7 +657,7 @@ func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig) error {
 		return err
 	}
 
-	log.Printf("已添加上游: %s", upstream.Name)
+	log.Printf("[Config-Upstream] 已添加上游: %s", upstream.Name)
 	return nil
 }
 
@@ -695,7 +695,7 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 			shouldResetMetrics = true
 			if upstream.Status == "suspended" {
 				upstream.Status = "active"
-				log.Printf("渠道 [%d] %s 已从暂停状态自动激活（单 key 更换）", index, upstream.Name)
+				log.Printf("[Config-Upstream] 渠道 [%d] %s 已从暂停状态自动激活（单 key 更换）", index, upstream.Name)
 			}
 		}
 		upstream.APIKeys = updates.APIKeys
@@ -720,7 +720,7 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 		return false, err
 	}
 
-	log.Printf("已更新上游: [%d] %s", index, cm.config.Upstream[index].Name)
+	log.Printf("[Config-Upstream] 已更新上游: [%d] %s", index, cm.config.Upstream[index].Name)
 	return shouldResetMetrics, nil
 }
 
@@ -743,7 +743,7 @@ func (cm *ConfigManager) RemoveUpstream(index int) (*UpstreamConfig, error) {
 		return nil, err
 	}
 
-	log.Printf("已删除上游: %s", removed.Name)
+	log.Printf("[Config-Upstream] 已删除上游: %s", removed.Name)
 	return &removed, nil
 }
 
@@ -769,7 +769,7 @@ func (cm *ConfigManager) AddAPIKey(index int, apiKey string) error {
 		return err
 	}
 
-	log.Printf("已添加API密钥到上游 [%d] %s", index, cm.config.Upstream[index].Name)
+	log.Printf("[Config-Key] 已添加API密钥到上游 [%d] %s", index, cm.config.Upstream[index].Name)
 	return nil
 }
 
@@ -801,7 +801,7 @@ func (cm *ConfigManager) RemoveAPIKey(index int, apiKey string) error {
 		return err
 	}
 
-	log.Printf("已从上游 [%d] %s 删除API密钥", index, cm.config.Upstream[index].Name)
+	log.Printf("[Config-Key] 已从上游 [%d] %s 删除API密钥", index, cm.config.Upstream[index].Name)
 	return nil
 }
 
@@ -820,7 +820,7 @@ func (cm *ConfigManager) SetLoadBalance(strategy string) error {
 		return err
 	}
 
-	log.Printf("已设置负载均衡策略: %s", strategy)
+	log.Printf("[Config-LoadBalance] 已设置负载均衡策略: %s", strategy)
 	return nil
 }
 
@@ -839,7 +839,7 @@ func (cm *ConfigManager) SetResponsesLoadBalance(strategy string) error {
 		return err
 	}
 
-	log.Printf("已设置 Responses 负载均衡策略: %s", strategy)
+	log.Printf("[Config-LoadBalance] 已设置 Responses 负载均衡策略: %s", strategy)
 	return nil
 }
 
@@ -870,7 +870,7 @@ func (cm *ConfigManager) DeprioritizeAPIKey(apiKey string) error {
 			// 移动到末尾
 			upstream.APIKeys = append(upstream.APIKeys[:index], upstream.APIKeys[index+1:]...)
 			upstream.APIKeys = append(upstream.APIKeys, apiKey)
-			log.Printf("已将API密钥移动到末尾以降低优先级: %s (渠道: %s)", utils.MaskAPIKey(apiKey), upstream.Name)
+			log.Printf("[Config-Key] 已将API密钥移动到末尾以降低优先级: %s (渠道: %s)", utils.MaskAPIKey(apiKey), upstream.Name)
 			return cm.saveConfigLocked(cm.config)
 		}
 	}
@@ -890,7 +890,7 @@ func (cm *ConfigManager) DeprioritizeAPIKey(apiKey string) error {
 			// 移动到末尾
 			upstream.APIKeys = append(upstream.APIKeys[:index], upstream.APIKeys[index+1:]...)
 			upstream.APIKeys = append(upstream.APIKeys, apiKey)
-			log.Printf("已将API密钥移动到末尾以降低优先级: %s (Responses渠道: %s)", utils.MaskAPIKey(apiKey), upstream.Name)
+			log.Printf("[Config-Key] 已将API密钥移动到末尾以降低优先级: %s (Responses渠道: %s)", utils.MaskAPIKey(apiKey), upstream.Name)
 			return cm.saveConfigLocked(cm.config)
 		}
 	}
@@ -1084,7 +1084,7 @@ func (cm *ConfigManager) AddResponsesUpstream(upstream UpstreamConfig) error {
 		return err
 	}
 
-	log.Printf("已添加 Responses 上游: %s", upstream.Name)
+	log.Printf("[Config-Upstream] 已添加 Responses 上游: %s", upstream.Name)
 	return nil
 }
 
@@ -1122,7 +1122,7 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 			shouldResetMetrics = true
 			if upstream.Status == "suspended" {
 				upstream.Status = "active"
-				log.Printf("Responses 渠道 [%d] %s 已从暂停状态自动激活（单 key 更换）", index, upstream.Name)
+				log.Printf("[Config-Upstream] Responses 渠道 [%d] %s 已从暂停状态自动激活（单 key 更换）", index, upstream.Name)
 			}
 		}
 		upstream.APIKeys = updates.APIKeys
@@ -1147,7 +1147,7 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 		return false, err
 	}
 
-	log.Printf("已更新 Responses 上游: [%d] %s", index, cm.config.ResponsesUpstream[index].Name)
+	log.Printf("[Config-Upstream] 已更新 Responses 上游: [%d] %s", index, cm.config.ResponsesUpstream[index].Name)
 	return shouldResetMetrics, nil
 }
 
@@ -1170,7 +1170,7 @@ func (cm *ConfigManager) RemoveResponsesUpstream(index int) (*UpstreamConfig, er
 		return nil, err
 	}
 
-	log.Printf("已删除 Responses 上游: %s", removed.Name)
+	log.Printf("[Config-Upstream] 已删除 Responses 上游: %s", removed.Name)
 	return &removed, nil
 }
 
@@ -1196,7 +1196,7 @@ func (cm *ConfigManager) AddResponsesAPIKey(index int, apiKey string) error {
 		return err
 	}
 
-	log.Printf("已添加API密钥到 Responses 上游 [%d] %s", index, cm.config.ResponsesUpstream[index].Name)
+	log.Printf("[Config-Key] 已添加API密钥到 Responses 上游 [%d] %s", index, cm.config.ResponsesUpstream[index].Name)
 	return nil
 }
 
@@ -1228,7 +1228,7 @@ func (cm *ConfigManager) RemoveResponsesAPIKey(index int, apiKey string) error {
 		return err
 	}
 
-	log.Printf("已从 Responses 上游 [%d] %s 删除API密钥", index, cm.config.ResponsesUpstream[index].Name)
+	log.Printf("[Config-Key] 已从 Responses 上游 [%d] %s 删除API密钥", index, cm.config.ResponsesUpstream[index].Name)
 	return nil
 }
 
@@ -1266,7 +1266,7 @@ func (cm *ConfigManager) ReorderUpstreams(order []int) error {
 		return err
 	}
 
-	log.Printf("已更新 Messages 渠道优先级顺序 (%d 个渠道)", len(order))
+	log.Printf("[Config-Reorder] 已更新 Messages 渠道优先级顺序 (%d 个渠道)", len(order))
 	return nil
 }
 
@@ -1301,7 +1301,7 @@ func (cm *ConfigManager) ReorderResponsesUpstreams(order []int) error {
 		return err
 	}
 
-	log.Printf("已更新 Responses 渠道优先级顺序 (%d 个渠道)", len(order))
+	log.Printf("[Config-Reorder] 已更新 Responses 渠道优先级顺序 (%d 个渠道)", len(order))
 	return nil
 }
 
@@ -1326,7 +1326,7 @@ func (cm *ConfigManager) SetChannelStatus(index int, status string) error {
 		return err
 	}
 
-	log.Printf("已设置渠道 [%d] %s 状态为: %s", index, cm.config.Upstream[index].Name, status)
+	log.Printf("[Config-Status] 已设置渠道 [%d] %s 状态为: %s", index, cm.config.Upstream[index].Name, status)
 	return nil
 }
 
@@ -1351,7 +1351,7 @@ func (cm *ConfigManager) SetResponsesChannelStatus(index int, status string) err
 		return err
 	}
 
-	log.Printf("已设置 Responses 渠道 [%d] %s 状态为: %s", index, cm.config.ResponsesUpstream[index].Name, status)
+	log.Printf("[Config-Status] 已设置 Responses 渠道 [%d] %s 状态为: %s", index, cm.config.ResponsesUpstream[index].Name, status)
 	return nil
 }
 
@@ -1383,7 +1383,7 @@ func (cm *ConfigManager) SetChannelPromotion(index int, duration time.Duration) 
 
 	if duration <= 0 {
 		cm.config.Upstream[index].PromotionUntil = nil
-		log.Printf("已清除渠道 [%d] %s 的促销期", index, cm.config.Upstream[index].Name)
+		log.Printf("[Config-Promotion] 已清除渠道 [%d] %s 的促销期", index, cm.config.Upstream[index].Name)
 	} else {
 		// 清除其他渠道的促销期（同一时间只允许一个促销渠道）
 		for i := range cm.config.Upstream {
@@ -1393,7 +1393,7 @@ func (cm *ConfigManager) SetChannelPromotion(index int, duration time.Duration) 
 		}
 		promotionEnd := time.Now().Add(duration)
 		cm.config.Upstream[index].PromotionUntil = &promotionEnd
-		log.Printf("🎉 已设置渠道 [%d] %s 进入促销期，截止: %s", index, cm.config.Upstream[index].Name, promotionEnd.Format(time.RFC3339))
+		log.Printf("[Config-Promotion] 已设置渠道 [%d] %s 进入促销期，截止: %s", index, cm.config.Upstream[index].Name, promotionEnd.Format(time.RFC3339))
 	}
 
 	return cm.saveConfigLocked(cm.config)
@@ -1410,7 +1410,7 @@ func (cm *ConfigManager) SetResponsesChannelPromotion(index int, duration time.D
 
 	if duration <= 0 {
 		cm.config.ResponsesUpstream[index].PromotionUntil = nil
-		log.Printf("已清除 Responses 渠道 [%d] %s 的促销期", index, cm.config.ResponsesUpstream[index].Name)
+		log.Printf("[Config-Promotion] 已清除 Responses 渠道 [%d] %s 的促销期", index, cm.config.ResponsesUpstream[index].Name)
 	} else {
 		// 清除其他渠道的促销期（同一时间只允许一个促销渠道）
 		for i := range cm.config.ResponsesUpstream {
@@ -1420,7 +1420,7 @@ func (cm *ConfigManager) SetResponsesChannelPromotion(index int, duration time.D
 		}
 		promotionEnd := time.Now().Add(duration)
 		cm.config.ResponsesUpstream[index].PromotionUntil = &promotionEnd
-		log.Printf("🎉 已设置 Responses 渠道 [%d] %s 进入促销期，截止: %s", index, cm.config.ResponsesUpstream[index].Name, promotionEnd.Format(time.RFC3339))
+		log.Printf("[Config-Promotion] 已设置 Responses 渠道 [%d] %s 进入促销期，截止: %s", index, cm.config.ResponsesUpstream[index].Name, promotionEnd.Format(time.RFC3339))
 	}
 
 	return cm.saveConfigLocked(cm.config)
@@ -1484,6 +1484,6 @@ func (cm *ConfigManager) SetFuzzyModeEnabled(enabled bool) error {
 	if enabled {
 		status = "启用"
 	}
-	log.Printf("Fuzzy 模式已%s", status)
+	log.Printf("[Config-FuzzyMode] Fuzzy 模式已%s", status)
 	return nil
 }

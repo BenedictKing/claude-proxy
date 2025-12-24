@@ -65,7 +65,7 @@ func main() {
 		100,          // 最多100条消息
 		100000,       // 最多100k tokens
 	)
-	log.Printf("✅ 会话管理器已初始化")
+	log.Printf("[Session-Init] 会话管理器已初始化")
 
 	// 初始化指标持久化存储（可选）
 	var metricsStore *metrics.SQLiteStore
@@ -76,11 +76,11 @@ func main() {
 			RetentionDays: envCfg.MetricsRetentionDays,
 		})
 		if err != nil {
-			log.Printf("⚠️ 初始化指标持久化存储失败: %v，将使用纯内存模式", err)
+			log.Printf("[Metrics-Init] 警告: 初始化指标持久化存储失败: %v，将使用纯内存模式", err)
 			metricsStore = nil
 		}
 	} else {
-		log.Printf("📊 指标持久化已禁用，使用纯内存模式")
+		log.Printf("[Metrics-Init] 指标持久化已禁用，使用纯内存模式")
 	}
 
 	// 初始化多渠道调度器（Messages 和 Responses 使用独立的指标管理器）
@@ -96,7 +96,7 @@ func main() {
 	}
 	traceAffinityManager := session.NewTraceAffinityManager()
 	channelScheduler := scheduler.NewChannelScheduler(cfgManager, messagesMetricsManager, responsesMetricsManager, traceAffinityManager)
-	log.Printf("✅ 多渠道调度器已初始化 (失败率阈值: %.0f%%, 滑动窗口: %d)",
+	log.Printf("[Scheduler-Init] 多渠道调度器已初始化 (失败率阈值: %.0f%%, 滑动窗口: %d)",
 		messagesMetricsManager.GetFailureThreshold()*100, messagesMetricsManager.GetWindowSize())
 
 	// 设置 Gin 模式
@@ -214,23 +214,23 @@ func main() {
 
 	// 启动服务器
 	addr := fmt.Sprintf(":%d", envCfg.Port)
-	fmt.Printf("\n🚀 Claude API代理服务器已启动\n")
-	fmt.Printf("📌 版本: %s\n", Version)
+	fmt.Printf("\n[Server-Startup] Claude API代理服务器已启动\n")
+	fmt.Printf("[Server-Info] 版本: %s\n", Version)
 	if BuildTime != "unknown" {
-		fmt.Printf("🕐 构建时间: %s\n", BuildTime)
+		fmt.Printf("[Server-Info] 构建时间: %s\n", BuildTime)
 	}
 	if GitCommit != "unknown" {
-		fmt.Printf("🔖 Git提交: %s\n", GitCommit)
+		fmt.Printf("[Server-Info] Git提交: %s\n", GitCommit)
 	}
-	fmt.Printf("🌐 管理界面: http://localhost:%d\n", envCfg.Port)
-	fmt.Printf("📍 API 地址: http://localhost:%d/v1\n", envCfg.Port)
-	fmt.Printf("📋 Claude Messages: POST /v1/messages\n")
-	fmt.Printf("📋 Codex Responses: POST /v1/responses\n")
-	fmt.Printf("💚 健康检查: GET /health\n")
-	fmt.Printf("📊 环境: %s\n", envCfg.Env)
+	fmt.Printf("[Server-Info] 管理界面: http://localhost:%d\n", envCfg.Port)
+	fmt.Printf("[Server-Info] API 地址: http://localhost:%d/v1\n", envCfg.Port)
+	fmt.Printf("[Server-Info] Claude Messages: POST /v1/messages\n")
+	fmt.Printf("[Server-Info] Codex Responses: POST /v1/responses\n")
+	fmt.Printf("[Server-Info] 健康检查: GET /health\n")
+	fmt.Printf("[Server-Info] 环境: %s\n", envCfg.Env)
 	// 检查是否使用默认密码，给予提示
 	if envCfg.ProxyAccessKey == "your-proxy-access-key" {
-		fmt.Printf("🔑 访问密钥: your-proxy-access-key (默认值，建议通过 .env 文件修改)\n")
+		fmt.Printf("[Server-Warn] 访问密钥: your-proxy-access-key (默认值，建议通过 .env 文件修改)\n")
 	}
 	fmt.Printf("\n")
 
@@ -250,24 +250,24 @@ func main() {
 		<-sigChan
 		signal.Stop(sigChan) // 停止信号监听，避免资源泄漏
 
-		log.Println("🛑 收到关闭信号，正在优雅关闭服务器...")
+		log.Println("[Server-Shutdown] 收到关闭信号，正在优雅关闭服务器...")
 
 		// 创建超时上下文
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
 		if err := srv.Shutdown(ctx); err != nil {
-			log.Printf("⚠️ 服务器关闭时发生错误: %v", err)
+			log.Printf("[Server-Shutdown] 警告: 服务器关闭时发生错误: %v", err)
 		} else {
-			log.Println("✅ 服务器已安全关闭")
+			log.Println("[Server-Shutdown] 服务器已安全关闭")
 		}
 
 		// 关闭指标持久化存储
 		if metricsStore != nil {
 			if err := metricsStore.Close(); err != nil {
-				log.Printf("⚠️ 关闭指标存储时发生错误: %v", err)
+				log.Printf("[Metrics-Shutdown] 警告: 关闭指标存储时发生错误: %v", err)
 			} else {
-				log.Println("✅ 指标存储已安全关闭")
+				log.Println("[Metrics-Shutdown] 指标存储已安全关闭")
 			}
 		}
 
@@ -284,6 +284,6 @@ func main() {
 	case <-shutdownDone:
 		// 正常关闭完成
 	case <-time.After(15 * time.Second):
-		log.Println("⚠️ 等待关闭超时")
+		log.Println("[Server-Shutdown] 警告: 等待关闭超时")
 	}
 }

@@ -133,7 +133,7 @@ func NewMetricsManagerWithPersistence(windowSize int, failureThreshold float64, 
 	// 从持久化存储加载历史数据
 	if store != nil {
 		if err := m.loadFromStore(); err != nil {
-			log.Printf("⚠️ [%s] 加载历史指标数据失败: %v", apiType, err)
+			log.Printf("[Metrics-Load] 警告: [%s] 加载历史指标数据失败: %v", apiType, err)
 		}
 	}
 
@@ -156,7 +156,7 @@ func (m *MetricsManager) loadFromStore() error {
 	}
 
 	if len(records) == 0 {
-		log.Printf("📊 [%s] 无历史指标数据需要加载", m.apiType)
+		log.Printf("[Metrics-Load] [%s] 无历史指标数据需要加载", m.apiType)
 		return nil
 	}
 
@@ -217,7 +217,7 @@ func (m *MetricsManager) loadFromStore() error {
 		}
 	}
 
-	log.Printf("✅ [%s] 已从持久化存储加载 %d 条历史记录，重建 %d 个 Key 指标",
+	log.Printf("[Metrics-Load] [%s] 已从持久化存储加载 %d 条历史记录，重建 %d 个 Key 指标",
 		m.apiType, len(records), len(m.keyMetrics))
 	return nil
 }
@@ -281,7 +281,7 @@ func (m *MetricsManager) RecordSuccessWithUsage(baseURL, apiKey string, usage *t
 	// 成功后清除熔断标记
 	if metrics.CircuitBrokenAt != nil {
 		metrics.CircuitBrokenAt = nil
-		log.Printf("✅ Key [%s] (%s) 因请求成功退出熔断状态", metrics.KeyMask, metrics.BaseURL)
+		log.Printf("[Metrics-Circuit] Key [%s] (%s) 因请求成功退出熔断状态", metrics.KeyMask, metrics.BaseURL)
 	}
 
 	// 更新滑动窗口
@@ -335,7 +335,7 @@ func (m *MetricsManager) RecordFailure(baseURL, apiKey string) {
 	// 检查是否刚进入熔断状态
 	if metrics.CircuitBrokenAt == nil && m.isKeyCircuitBroken(metrics) {
 		metrics.CircuitBrokenAt = &now
-		log.Printf("⚡ Key [%s] (%s) 进入熔断状态（失败率: %.1f%%）", metrics.KeyMask, metrics.BaseURL, m.calculateKeyFailureRateInternal(metrics)*100)
+		log.Printf("[Metrics-Circuit] Key [%s] (%s) 进入熔断状态（失败率: %.1f%%）", metrics.KeyMask, metrics.BaseURL, m.calculateKeyFailureRateInternal(metrics)*100)
 	}
 
 	// 记录带时间戳的请求
@@ -783,7 +783,7 @@ func (m *MetricsManager) ResetKey(baseURL, apiKey string) {
 		metrics.CircuitBrokenAt = nil
 		metrics.recentResults = make([]bool, 0, m.windowSize)
 		metrics.requestHistory = nil
-		log.Printf("🔄 Key [%s] (%s) 指标已完全重置", metrics.KeyMask, metrics.BaseURL)
+		log.Printf("[Metrics-Reset] Key [%s] (%s) 指标已完全重置", metrics.KeyMask, metrics.BaseURL)
 	}
 }
 
@@ -835,7 +835,7 @@ func (m *MetricsManager) recoverExpiredCircuitBreakers() {
 				metrics.ConsecutiveFailures = 0
 				metrics.recentResults = make([]bool, 0, m.windowSize)
 				metrics.CircuitBrokenAt = nil
-				log.Printf("✅ Key [%s] (%s) 熔断自动恢复（已超过 %v）", metrics.KeyMask, metrics.BaseURL, m.circuitRecoveryTime)
+				log.Printf("[Metrics-Circuit] Key [%s] (%s) 熔断自动恢复（已超过 %v）", metrics.KeyMask, metrics.BaseURL, m.circuitRecoveryTime)
 			}
 		}
 	}
@@ -868,7 +868,7 @@ func (m *MetricsManager) cleanupStaleKeys() {
 	}
 
 	if len(removed) > 0 {
-		log.Printf("🧹 清理了 %d 个过期 Key 指标: %v", len(removed), removed)
+		log.Printf("[Metrics-Cleanup] 清理了 %d 个过期 Key 指标: %v", len(removed), removed)
 	}
 }
 
@@ -1070,7 +1070,7 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsInternal(baseURL string, 
 // IsChannelHealthy 判断渠道是否健康（旧方法，不再使用 channelIndex）
 // 此方法保留是为了兼容，但始终返回 true，调用方应迁移到新方法
 func (m *MetricsManager) IsChannelHealthy(channelIndex int) bool {
-	log.Printf("⚠️ 警告: 调用了废弃的 IsChannelHealthy(channelIndex=%d)，请迁移到 IsChannelHealthyWithKeys", channelIndex)
+	log.Printf("[Metrics-Deprecated] 警告: 调用了废弃的 IsChannelHealthy(channelIndex=%d)，请迁移到 IsChannelHealthyWithKeys", channelIndex)
 	return true // 默认健康，避免影响现有逻辑
 }
 
@@ -1086,7 +1086,7 @@ func (m *MetricsManager) CalculateSuccessRate(channelIndex int) float64 {
 
 // Deprecated: 使用 ResetKey 代替
 func (m *MetricsManager) Reset(channelIndex int) {
-	log.Printf("⚠️ 警告: 调用了废弃的 Reset(channelIndex=%d)，请迁移到 ResetKey", channelIndex)
+	log.Printf("[Metrics-Deprecated] 警告: 调用了废弃的 Reset(channelIndex=%d)，请迁移到 ResetKey", channelIndex)
 }
 
 // Deprecated: 使用 GetChannelAggregatedMetrics 代替

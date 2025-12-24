@@ -65,7 +65,7 @@ func TestCompactContentArray(t *testing.T) {
 		strings.Contains(result, `"tools": [
   "Tool1", "Tool2", "Tool3"
 ]`) {
-		t.Log("✓ tools数组被紧凑显示")
+		t.Log("[Test-OK] tools数组被紧凑显示")
 	}
 
 	// 验证输出没有被截断（不应该出现"需要�"这种乱码）
@@ -201,7 +201,7 @@ func TestNoTruncationInMiddleOfJSON(t *testing.T) {
 			}
 		}
 
-		t.Logf("✓ 超长输出被正确截断，截断位置: %d", truncateIndex)
+		t.Logf("[Test-OK] 超长输出被正确截断，截断位置: %d", truncateIndex)
 	}
 }
 

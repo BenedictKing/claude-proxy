@@ -65,7 +65,7 @@ func WebAuthMiddleware(envCfg *config.EnvConfig, cfgManager *config.ConfigManage
 				if providedKey == "" {
 					reason = "密钥缺失"
 				}
-				log.Printf("🔒 [认证失败] IP: %s | Path: %s | Time: %s | Reason: %s",
+				log.Printf("[Auth-Failed] IP: %s | Path: %s | Time: %s | Reason: %s",
 					clientIP, path, timestamp, reason)
 
 				c.JSON(401, gin.H{
@@ -79,7 +79,7 @@ func WebAuthMiddleware(envCfg *config.EnvConfig, cfgManager *config.ConfigManage
 			// 认证成功 - 记录日志(可选，根据日志级别)
 			// 如果启用了 QuietPollingLogs，则静默轮询端点日志
 			if envCfg.ShouldLog("info") && !(envCfg.QuietPollingLogs && isPollingEndpoint(path)) {
-				log.Printf("✅ [认证成功] IP: %s | Path: %s | Time: %s", clientIP, path, timestamp)
+				log.Printf("[Auth-Success] IP: %s | Path: %s | Time: %s", clientIP, path, timestamp)
 			}
 		}
 
@@ -153,7 +153,7 @@ func ProxyAuthMiddleware(envCfg *config.EnvConfig) gin.HandlerFunc {
 
 		if providedKey == "" || providedKey != expectedKey {
 			if envCfg.ShouldLog("warn") {
-				log.Printf("🔒 代理访问密钥验证失败 - IP: %s", c.ClientIP())
+				log.Printf("[Auth-Failed] 代理访问密钥验证失败 - IP: %s", c.ClientIP())
 			}
 
 			c.JSON(401, gin.H{

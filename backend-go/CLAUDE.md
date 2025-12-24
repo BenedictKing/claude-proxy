@@ -67,6 +67,35 @@ type Provider interface {
 | `session/` | 会话管理（Trace 亲和性） |
 | `config/` | 配置管理（热重载） |
 
+## 日志规范
+
+所有日志输出使用 `[Component-Action]` 标签格式，禁止使用 emoji 符号（确保跨平台兼容性）。
+
+**格式规范**:
+```go
+// 标准格式
+log.Printf("[Component-Action] 消息内容: %v", value)
+
+// 警告信息
+log.Printf("[Component] 警告: 消息内容")
+```
+
+**标签命名示例**:
+
+| 组件 | 标签 | 用途 |
+|------|------|------|
+| 调度器 | `[Scheduler-Channel]` | 渠道选择 |
+| 调度器 | `[Scheduler-Promotion]` | 促销渠道 |
+| 调度器 | `[Scheduler-Affinity]` | Trace 亲和性 |
+| 调度器 | `[Scheduler-Fallback]` | 降级选择 |
+| 认证 | `[Auth-Failed]` | 认证失败 |
+| 认证 | `[Auth-Success]` | 认证成功 |
+| 指标 | `[Metrics-Store]` | 指标存储 |
+| 会话 | `[Session-Manager]` | 会话管理 |
+| 配置 | `[Config-Watcher]` | 配置热重载 |
+| 压缩 | `[Gzip]` | Gzip 解压缩 |
+| 流式 | `[Stream-Token]` | Token 注入 |
+
 ## 扩展指南
 
 **添加新上游服务**:

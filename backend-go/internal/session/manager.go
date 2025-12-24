@@ -77,7 +77,7 @@ func (sm *SessionManager) GetOrCreateSession(previousResponseID string) (*Sessio
 	}
 
 	sm.sessions[sessionID] = session
-	log.Printf("📝 创建新会话: %s", sessionID)
+	log.Printf("[Session-Create] 创建新会话: %s", sessionID)
 
 	return session, nil
 }
@@ -88,7 +88,7 @@ func (sm *SessionManager) RecordResponseMapping(responseID, sessionID string) {
 	defer sm.mu.Unlock()
 
 	sm.responseMapping[responseID] = sessionID
-	log.Printf("🔗 记录映射: %s → %s", responseID, sessionID)
+	log.Printf("[Session-Mapping] 记录映射: %s -> %s", responseID, sessionID)
 }
 
 // AppendMessage 追加消息到会话
@@ -161,19 +161,19 @@ func (sm *SessionManager) cleanup() {
 		// 时间过期
 		if now.Sub(session.LastAccessAt) > sm.maxAge {
 			shouldRemove = true
-			log.Printf("🧹 清理过期会话 (时间): %s (最后访问: %v 前)", sessionID, now.Sub(session.LastAccessAt))
+			log.Printf("[Session-Cleanup] 清理过期会话 (时间): %s (最后访问: %v 前)", sessionID, now.Sub(session.LastAccessAt))
 		}
 
 		// 消息数超限
 		if len(session.Messages) > sm.maxMessages {
 			shouldRemove = true
-			log.Printf("🧹 清理过期会话 (消息数): %s (%d 条)", sessionID, len(session.Messages))
+			log.Printf("[Session-Cleanup] 清理过期会话 (消息数): %s (%d 条)", sessionID, len(session.Messages))
 		}
 
 		// Token 超限
 		if session.TotalTokens > sm.maxTokens {
 			shouldRemove = true
-			log.Printf("🧹 清理过期会话 (Token): %s (%d tokens)", sessionID, session.TotalTokens)
+			log.Printf("[Session-Cleanup] 清理过期会话 (Token): %s (%d tokens)", sessionID, session.TotalTokens)
 		}
 
 		if shouldRemove {
@@ -191,8 +191,8 @@ func (sm *SessionManager) cleanup() {
 	}
 
 	if removedSessions > 0 || removedMappings > 0 {
-		log.Printf("🧹 清理完成: 删除 %d 个会话, %d 个映射", removedSessions, removedMappings)
-		log.Printf("📊 当前活跃会话: %d 个, 映射: %d 个", len(sm.sessions), len(sm.responseMapping))
+		log.Printf("[Session-Cleanup] 清理完成: 删除 %d 个会话, %d 个映射", removedSessions, removedMappings)
+		log.Printf("[Session-Stats] 当前活跃会话: %d 个, 映射: %d 个", len(sm.sessions), len(sm.responseMapping))
 	}
 }
 

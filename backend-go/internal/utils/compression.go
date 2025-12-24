@@ -20,14 +20,14 @@ func DecompressGzipIfNeeded(resp *http.Response, bodyBytes []byte) []byte {
 	// 尝试解压缩
 	reader, err := gzip.NewReader(bytes.NewReader(bodyBytes))
 	if err != nil {
-		log.Printf("⚠️ 创建 gzip reader 失败: %v", err)
+		log.Printf("[Gzip] 警告: 创建 gzip reader 失败: %v", err)
 		return bodyBytes
 	}
 	defer reader.Close()
 
 	decompressed, err := io.ReadAll(reader)
 	if err != nil {
-		log.Printf("⚠️ 解压缩 gzip 响应体失败: %v", err)
+		log.Printf("[Gzip] 警告: 解压缩 gzip 响应体失败: %v", err)
 		return bodyBytes
 	}
 

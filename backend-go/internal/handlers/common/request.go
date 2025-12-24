@@ -59,12 +59,12 @@ func SendRequest(req *http.Request, upstream *config.UpstreamConfig, envCfg *con
 	}
 
 	if upstream.InsecureSkipVerify && envCfg.EnableRequestLogs {
-		log.Printf("⚠️ 正在跳过对 %s 的TLS证书验证", req.URL.String())
+		log.Printf("[Request-TLS] 警告: 正在跳过对 %s 的TLS证书验证", req.URL.String())
 	}
 
 	if envCfg.EnableRequestLogs {
-		log.Printf("🌐 实际请求URL: %s", req.URL.String())
-		log.Printf("📤 请求方法: %s", req.Method)
+		log.Printf("[Request-URL] 实际请求URL: %s", req.URL.String())
+		log.Printf("[Request-Method] 请求方法: %s", req.Method)
 		if envCfg.IsDevelopment() {
 			logRequestDetails(req, envCfg)
 		}
@@ -89,7 +89,7 @@ func logRequestDetails(req *http.Request, envCfg *config.EnvConfig) {
 	} else {
 		reqHeadersJSON, _ = json.MarshalIndent(maskedReqHeaders, "", "  ")
 	}
-	log.Printf("📋 实际请求头:\n%s", string(reqHeadersJSON))
+	log.Printf("[Request-Headers] 实际请求头:\n%s", string(reqHeadersJSON))
 
 	if req.Body != nil {
 		bodyBytes, err := io.ReadAll(req.Body)
@@ -101,7 +101,7 @@ func logRequestDetails(req *http.Request, envCfg *config.EnvConfig) {
 			} else {
 				formattedBody = utils.FormatJSONBytesForLog(bodyBytes, 500)
 			}
-			log.Printf("📦 实际请求体:\n%s", formattedBody)
+			log.Printf("[Request-Body] 实际请求体:\n%s", formattedBody)
 		}
 	}
 }
@@ -112,7 +112,7 @@ func LogOriginalRequest(c *gin.Context, bodyBytes []byte, envCfg *config.EnvConf
 		return
 	}
 
-	log.Printf("📥 收到%s请求: %s %s", apiType, c.Request.Method, c.Request.URL.Path)
+	log.Printf("[Request-Receive] 收到%s请求: %s %s", apiType, c.Request.Method, c.Request.URL.Path)
 
 	if envCfg.IsDevelopment() {
 		var formattedBody string
@@ -121,7 +121,7 @@ func LogOriginalRequest(c *gin.Context, bodyBytes []byte, envCfg *config.EnvConf
 		} else {
 			formattedBody = utils.FormatJSONBytesForLog(bodyBytes, 500)
 		}
-		log.Printf("📄 原始请求体:\n%s", formattedBody)
+		log.Printf("[Request-OriginalBody] 原始请求体:\n%s", formattedBody)
 
 		sanitizedHeaders := make(map[string]string)
 		for key, values := range c.Request.Header {
@@ -136,7 +136,7 @@ func LogOriginalRequest(c *gin.Context, bodyBytes []byte, envCfg *config.EnvConf
 		} else {
 			headersJSON, _ = json.MarshalIndent(maskedHeaders, "", "  ")
 		}
-		log.Printf("📥 原始请求头:\n%s", string(headersJSON))
+		log.Printf("[Request-OriginalHeaders] 原始请求头:\n%s", string(headersJSON))
 	}
 }
 

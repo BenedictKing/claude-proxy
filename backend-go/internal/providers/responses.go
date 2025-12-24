@@ -42,7 +42,7 @@ func (p *ResponsesProvider) ConvertToProviderRequest(
 
 	// 3. 判断是否为透传模式
 	if _, ok := converter.(*converters.ResponsesPassthroughConverter); ok {
-		// ✅ 透传模式：使用 map 保留所有字段
+		// [Mode-Passthrough] 透传模式：使用 map 保留所有字段
 		var reqMap map[string]interface{}
 		if err := json.Unmarshal(bodyBytes, &reqMap); err != nil {
 			return nil, bodyBytes, fmt.Errorf("透传模式下解析请求失败: %w", err)
@@ -55,7 +55,7 @@ func (p *ResponsesProvider) ConvertToProviderRequest(
 
 		providerReq = reqMap
 	} else {
-		// ✅ 非透传模式：保持原有逻辑
+		// [Mode-Convert] 非透传模式：保持原有逻辑
 		var responsesReq types.ResponsesRequest
 		if err := json.Unmarshal(bodyBytes, &responsesReq); err != nil {
 			return nil, bodyBytes, fmt.Errorf("解析 Responses 请求失败: %w", err)

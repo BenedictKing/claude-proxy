@@ -85,7 +85,7 @@ func handleMultiChannel(
 		channelIndex := selection.ChannelIndex
 
 		if envCfg.ShouldLog("info") {
-			log.Printf("🎯 [多渠道] 选择渠道: [%d] %s (原因: %s, 尝试 %d/%d)",
+			log.Printf("[Messages-Select] 选择渠道: [%d] %s (原因: %s, 尝试 %d/%d)",
 				channelIndex, upstream.Name, selection.Reason, channelAttempt+1, maxChannelAttempts)
 		}
 
@@ -106,10 +106,10 @@ func handleMultiChannel(
 			lastError = fmt.Errorf("渠道 [%d] %s 失败", channelIndex, upstream.Name)
 		}
 
-		log.Printf("⚠️ [多渠道] 渠道 [%d] %s 所有密钥都失败，尝试下一个渠道", channelIndex, upstream.Name)
+		log.Printf("[Messages-Failover] 警告: 渠道 [%d] %s 所有密钥都失败，尝试下一个渠道", channelIndex, upstream.Name)
 	}
 
-	log.Printf("💥 [多渠道] 所有渠道都失败了")
+	log.Printf("[Messages-Error] 所有渠道都失败了")
 	common.HandleAllChannelsFailed(c, cfgManager.GetFuzzyModeEnabled(), lastFailoverError, lastError, "Messages")
 }
 
@@ -143,7 +143,7 @@ func tryChannelWithAllKeys(
 	// 强制探测模式
 	forceProbeMode := common.AreAllKeysSuspended(metricsManager, upstream.BaseURL, upstream.APIKeys)
 	if forceProbeMode {
-		log.Printf("🔍 [强制探测] 渠道 %s 所有 Key 都被熔断，启用强制探测模式", upstream.Name)
+		log.Printf("[Messages-ForceProbe] 渠道 %s 所有 Key 都被熔断，启用强制探测模式", upstream.Name)
 	}
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
@@ -157,12 +157,12 @@ func tryChannelWithAllKeys(
 		// 检查熔断状态
 		if !forceProbeMode && metricsManager.ShouldSuspendKey(upstream.BaseURL, apiKey) {
 			failedKeys[apiKey] = true
-			log.Printf("⚡ 跳过熔断中的 Key: %s", utils.MaskAPIKey(apiKey))
+			log.Printf("[Messages-Circuit] 跳过熔断中的 Key: %s", utils.MaskAPIKey(apiKey))
 			continue
 		}
 
 		if envCfg.ShouldLog("info") {
-			log.Printf("🔑 使用API密钥: %s (尝试 %d/%d)", utils.MaskAPIKey(apiKey), attempt+1, maxRetries)
+			log.Printf("[Messages-Key] 使用API密钥: %s (尝试 %d/%d)", utils.MaskAPIKey(apiKey), attempt+1, maxRetries)
 		}
 
 		providerReq, _, err := provider.ConvertToProviderRequest(c, upstream, apiKey)
@@ -177,7 +177,7 @@ func tryChannelWithAllKeys(
 			failedKeys[apiKey] = true
 			cfgManager.MarkKeyAsFailed(apiKey)
 			channelScheduler.RecordFailure(upstream.BaseURL, apiKey, false)
-			log.Printf("⚠️ API密钥失败: %v", err)
+			log.Printf("[Messages-Key] 警告: API密钥失败: %v", err)
 			continue
 		}
 
@@ -191,7 +191,7 @@ func tryChannelWithAllKeys(
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey)
 				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, false)
-				log.Printf("⚠️ API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
+				log.Printf("[Messages-Key] 警告: API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
 
 				if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
 					var formattedBody string
@@ -200,7 +200,7 @@ func tryChannelWithAllKeys(
 					} else {
 						formattedBody = utils.FormatJSONBytesForLog(respBodyBytes, 500)
 					}
-					log.Printf("📦 失败原因:\n%s", formattedBody)
+					log.Printf("[Messages-Error] 失败原因:\n%s", formattedBody)
 				} else if envCfg.EnableResponseLogs {
 					log.Printf("失败原因: %s", string(respBodyBytes))
 				}
@@ -226,7 +226,7 @@ func tryChannelWithAllKeys(
 		if len(deprioritizeCandidates) > 0 {
 			for key := range deprioritizeCandidates {
 				if err := cfgManager.DeprioritizeAPIKey(key); err != nil {
-					log.Printf("⚠️ 密钥降级失败: %v", err)
+					log.Printf("[Messages-Key] 警告: 密钥降级失败: %v", err)
 				}
 			}
 		}
@@ -287,7 +287,7 @@ func handleSingleChannel(
 	// 强制探测模式
 	forceProbeMode := common.AreAllKeysSuspended(metricsManager, upstream.BaseURL, upstream.APIKeys)
 	if forceProbeMode {
-		log.Printf("🔍 [强制探测] 渠道 %s 所有 Key 都被熔断，启用强制探测模式", upstream.Name)
+		log.Printf("[Messages-ForceProbe] 渠道 %s 所有 Key 都被熔断，启用强制探测模式", upstream.Name)
 	}
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
@@ -302,13 +302,13 @@ func handleSingleChannel(
 		// 检查熔断状态
 		if !forceProbeMode && metricsManager.ShouldSuspendKey(upstream.BaseURL, apiKey) {
 			failedKeys[apiKey] = true
-			log.Printf("⚡ 跳过熔断中的 Key: %s", utils.MaskAPIKey(apiKey))
+			log.Printf("[Messages-Circuit] 跳过熔断中的 Key: %s", utils.MaskAPIKey(apiKey))
 			continue
 		}
 
 		if envCfg.ShouldLog("info") {
-			log.Printf("🎯 使用上游: %s - %s (尝试 %d/%d)", upstream.Name, upstream.BaseURL, attempt+1, maxRetries)
-			log.Printf("🔑 使用API密钥: %s", utils.MaskAPIKey(apiKey))
+			log.Printf("[Messages-Upstream] 使用上游: %s - %s (尝试 %d/%d)", upstream.Name, upstream.BaseURL, attempt+1, maxRetries)
+			log.Printf("[Messages-Key] 使用API密钥: %s", utils.MaskAPIKey(apiKey))
 		}
 
 		providerReq, originalBodyBytes, err := provider.ConvertToProviderRequest(c, upstream, apiKey)
@@ -332,7 +332,7 @@ func handleSingleChannel(
 			failedKeys[apiKey] = true
 			cfgManager.MarkKeyAsFailed(apiKey)
 			channelScheduler.RecordFailure(upstream.BaseURL, apiKey, false)
-			log.Printf("⚠️ API密钥失败: %v", err)
+			log.Printf("[Messages-Key] 警告: API密钥失败: %v", err)
 			continue
 		}
 
@@ -348,7 +348,7 @@ func handleSingleChannel(
 				cfgManager.MarkKeyAsFailed(apiKey)
 				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, false)
 
-				log.Printf("⚠️ API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
+				log.Printf("[Messages-Key] 警告: API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
 				if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
 					var formattedBody string
 					if envCfg.RawLogOutput {
@@ -356,7 +356,7 @@ func handleSingleChannel(
 					} else {
 						formattedBody = utils.FormatJSONBytesForLog(respBodyBytes, 500)
 					}
-					log.Printf("📦 失败原因:\n%s", formattedBody)
+					log.Printf("[Messages-Error] 失败原因:\n%s", formattedBody)
 				} else if envCfg.EnableResponseLogs {
 					log.Printf("失败原因: %s", string(respBodyBytes))
 				}
@@ -374,7 +374,7 @@ func handleSingleChannel(
 
 			// 非 failover 错误，记录失败指标后返回
 			if envCfg.EnableResponseLogs {
-				log.Printf("⚠️ 上游返回错误: %d", resp.StatusCode)
+				log.Printf("[Messages-Response] 警告: 上游返回错误: %d", resp.StatusCode)
 				if envCfg.IsDevelopment() {
 					var formattedBody string
 					if envCfg.RawLogOutput {
@@ -382,7 +382,7 @@ func handleSingleChannel(
 					} else {
 						formattedBody = utils.FormatJSONBytesForLog(respBodyBytes, 500)
 					}
-					log.Printf("📦 错误响应体:\n%s", formattedBody)
+					log.Printf("[Messages-Response] 错误响应体:\n%s", formattedBody)
 
 					respHeaders := make(map[string]string)
 					for key, values := range resp.Header {
@@ -396,7 +396,7 @@ func handleSingleChannel(
 					} else {
 						respHeadersJSON, _ = json.MarshalIndent(respHeaders, "", "  ")
 					}
-					log.Printf("📋 错误响应头:\n%s", string(respHeadersJSON))
+					log.Printf("[Messages-Response] 错误响应头:\n%s", string(respHeadersJSON))
 				}
 			}
 			channelScheduler.RecordFailure(upstream.BaseURL, apiKey, false)
@@ -408,7 +408,7 @@ func handleSingleChannel(
 		if len(deprioritizeCandidates) > 0 {
 			for key := range deprioritizeCandidates {
 				if err := cfgManager.DeprioritizeAPIKey(key); err != nil {
-					log.Printf("⚠️ 密钥降级失败: %v", err)
+					log.Printf("[Messages-Key] 警告: 密钥降级失败: %v", err)
 				}
 			}
 		}
@@ -421,7 +421,7 @@ func handleSingleChannel(
 		return
 	}
 
-	log.Printf("💥 所有API密钥都失败了")
+	log.Printf("[Messages-Error] 所有API密钥都失败了")
 	common.HandleAllKeysFailed(c, cfgManager.GetFuzzyModeEnabled(), lastFailoverError, lastError, "Messages")
 }
 
@@ -447,7 +447,7 @@ func handleNormalResponse(
 
 	if envCfg.EnableResponseLogs {
 		responseTime := time.Since(startTime).Milliseconds()
-		log.Printf("⏱️ 响应完成: %dms, 状态: %d", responseTime, resp.StatusCode)
+		log.Printf("[Messages-Timing] 响应完成: %dms, 状态: %d", responseTime, resp.StatusCode)
 		if envCfg.IsDevelopment() {
 			respHeaders := make(map[string]string)
 			for key, values := range resp.Header {
@@ -461,7 +461,7 @@ func handleNormalResponse(
 			} else {
 				respHeadersJSON, _ = json.MarshalIndent(respHeaders, "", "  ")
 			}
-			log.Printf("📋 响应头:\n%s", string(respHeadersJSON))
+			log.Printf("[Messages-Response] 响应头:\n%s", string(respHeadersJSON))
 
 			var formattedBody string
 			if envCfg.RawLogOutput {
@@ -469,7 +469,7 @@ func handleNormalResponse(
 			} else {
 				formattedBody = utils.FormatJSONBytesForLog(bodyBytes, 500)
 			}
-			log.Printf("📦 响应体:\n%s", formattedBody)
+			log.Printf("[Messages-Response] 响应体:\n%s", formattedBody)
 		}
 	}
 
@@ -495,7 +495,7 @@ func handleNormalResponse(
 			OutputTokens: estimatedOutput,
 		}
 		if envCfg.EnableResponseLogs {
-			log.Printf("🔢 [Token补全] 上游无Usage, 本地估算: input=%d, output=%d", estimatedInput, estimatedOutput)
+			log.Printf("[Messages-Token] 上游无Usage, 本地估算: input=%d, output=%d", estimatedInput, estimatedOutput)
 		}
 	} else {
 		originalInput := claudeResp.Usage.InputTokens
@@ -514,10 +514,10 @@ func handleNormalResponse(
 		}
 		if envCfg.EnableResponseLogs {
 			if patched {
-				log.Printf("🔢 [Token补全] 虚假值: InputTokens=%d→%d, OutputTokens=%d→%d",
+				log.Printf("[Messages-Token] 虚假值补全: InputTokens=%d->%d, OutputTokens=%d->%d",
 					originalInput, claudeResp.Usage.InputTokens, originalOutput, claudeResp.Usage.OutputTokens)
 			}
-			log.Printf("🔢 [Token统计] InputTokens=%d, OutputTokens=%d, CacheCreationInputTokens=%d, CacheReadInputTokens=%d, CacheCreation5m=%d, CacheCreation1h=%d, CacheTTL=%s",
+			log.Printf("[Messages-Token] InputTokens=%d, OutputTokens=%d, CacheCreationInputTokens=%d, CacheReadInputTokens=%d, CacheCreation5m=%d, CacheCreation1h=%d, CacheTTL=%s",
 				claudeResp.Usage.InputTokens, claudeResp.Usage.OutputTokens,
 				claudeResp.Usage.CacheCreationInputTokens, claudeResp.Usage.CacheReadInputTokens,
 				claudeResp.Usage.CacheCreation5mInputTokens, claudeResp.Usage.CacheCreation1hInputTokens,
@@ -532,7 +532,7 @@ func handleNormalResponse(
 		if !c.Writer.Written() {
 			if envCfg.EnableResponseLogs {
 				responseTime := time.Since(startTime).Milliseconds()
-				log.Printf("⏱️ 响应中断: %dms, 状态: %d", responseTime, resp.StatusCode)
+				log.Printf("[Messages-Timing] 响应中断: %dms, 状态: %d", responseTime, resp.StatusCode)
 			}
 		}
 	}()
@@ -547,7 +547,7 @@ func handleNormalResponse(
 
 	if envCfg.EnableResponseLogs {
 		responseTime := time.Since(startTime).Milliseconds()
-		log.Printf("⏱️ 响应发送完成: %dms, 状态: %d", responseTime, resp.StatusCode)
+		log.Printf("[Messages-Timing] 响应发送完成: %dms, 状态: %d", responseTime, resp.StatusCode)
 	}
 }
 
@@ -584,7 +584,7 @@ func CountTokensHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManag
 		})
 
 		if envCfg.EnableResponseLogs {
-			log.Printf("🔢 [CountTokens] 本地估算: model=%s, input_tokens=%d", req.Model, inputTokens)
+			log.Printf("[Messages-Token] CountTokens本地估算: model=%s, input_tokens=%d", req.Model, inputTokens)
 		}
 	}
 }
