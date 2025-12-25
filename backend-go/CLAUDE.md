@@ -24,15 +24,15 @@ make build        # 构建二进制
 | `/v1/messages/count_tokens` | POST | Token 计数 |
 | `/v1/responses` | POST | Codex Responses API |
 | `/v1/responses/compact` | POST | 精简版 Responses API |
-| `/api/channels` | CRUD | Messages 渠道管理 |
+| `/api/messages/channels` | CRUD | Messages 渠道管理 |
 | `/api/responses/channels` | CRUD | Responses 渠道管理 |
-| `/api/ping/:id` | GET | 渠道连通性测试 |
-| `/api/channels/metrics` | GET | 渠道指标 |
-| `/api/channels/scheduler/stats` | GET | 调度器统计 |
+| `/api/messages/ping/:id` | GET | 渠道连通性测试 |
+| `/api/messages/channels/metrics` | GET | 渠道指标 |
+| `/api/messages/channels/scheduler/stats` | GET | 调度器统计 |
 
 ## 指标历史数据聚合粒度
 
-`/api/channels/:id/keys/metrics/history` 端点根据查询时间范围自动选择聚合间隔：
+`/api/messages/channels/:id/keys/metrics/history` 端点根据查询时间范围自动选择聚合间隔：
 
 | 时间范围 | 聚合间隔 | 数据点数 |
 |----------|----------|----------|

@@ -76,11 +76,11 @@ claude-proxy/
 - `GET /health` - 健康检查（无需认证）
 
 **管理 API** (`/api/`):
-- `/api/channels` - Messages 渠道 CRUD
+- `/api/messages/channels` - Messages 渠道 CRUD
 - `/api/responses/channels` - Responses 渠道 CRUD
-- `/api/channels/metrics` - 渠道指标
-- `/api/channels/scheduler/stats` - 调度器统计
-- `/api/ping/:id` - 渠道连通性测试
+- `/api/messages/channels/metrics` - 渠道指标
+- `/api/messages/channels/scheduler/stats` - 调度器统计
+- `/api/messages/ping/:id` - 渠道连通性测试
 
 ## 关键配置
 

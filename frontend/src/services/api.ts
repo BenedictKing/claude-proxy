@@ -244,48 +244,48 @@ class ApiService {
   }
 
   async getChannels(): Promise<ChannelsResponse> {
-    return this.request('/channels')
+    return this.request('/messages/channels')
   }
 
   async addChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>): Promise<void> {
-    await this.request('/channels', {
+    await this.request('/messages/channels', {
       method: 'POST',
       body: JSON.stringify(channel)
     })
   }
 
   async updateChannel(id: number, channel: Partial<Channel>): Promise<void> {
-    await this.request(`/channels/${id}`, {
+    await this.request(`/messages/channels/${id}`, {
       method: 'PUT',
       body: JSON.stringify(channel)
     })
   }
 
   async deleteChannel(id: number): Promise<void> {
-    await this.request(`/channels/${id}`, {
+    await this.request(`/messages/channels/${id}`, {
       method: 'DELETE'
     })
   }
 
   async addApiKey(channelId: number, apiKey: string): Promise<void> {
-    await this.request(`/channels/${channelId}/keys`, {
+    await this.request(`/messages/channels/${channelId}/keys`, {
       method: 'POST',
       body: JSON.stringify({ apiKey })
     })
   }
 
   async removeApiKey(channelId: number, apiKey: string): Promise<void> {
-    await this.request(`/channels/${channelId}/keys/${encodeURIComponent(apiKey)}`, {
+    await this.request(`/messages/channels/${channelId}/keys/${encodeURIComponent(apiKey)}`, {
       method: 'DELETE'
     })
   }
 
   async pingChannel(id: number): Promise<PingResult> {
-    return this.request(`/ping/${id}`)
+    return this.request(`/messages/ping/${id}`)
   }
 
   async pingAllChannels(): Promise<Array<{ id: number; name: string; latency: number; status: string }>> {
-    return this.request('/ping')
+    return this.request('/messages/ping')
   }
 
   async updateLoadBalance(strategy: string): Promise<void> {
@@ -342,13 +342,13 @@ class ApiService {
   }
 
   async moveApiKeyToTop(channelId: number, apiKey: string): Promise<void> {
-    await this.request(`/channels/${channelId}/keys/${encodeURIComponent(apiKey)}/top`, {
+    await this.request(`/messages/channels/${channelId}/keys/${encodeURIComponent(apiKey)}/top`, {
       method: 'POST'
     })
   }
 
   async moveApiKeyToBottom(channelId: number, apiKey: string): Promise<void> {
-    await this.request(`/channels/${channelId}/keys/${encodeURIComponent(apiKey)}/bottom`, {
+    await this.request(`/messages/channels/${channelId}/keys/${encodeURIComponent(apiKey)}/bottom`, {
       method: 'POST'
     })
   }
@@ -369,7 +369,7 @@ class ApiService {
 
   // 重新排序渠道优先级
   async reorderChannels(order: number[]): Promise<void> {
-    await this.request('/channels/reorder', {
+    await this.request('/messages/channels/reorder', {
       method: 'POST',
       body: JSON.stringify({ order })
     })
@@ -377,7 +377,7 @@ class ApiService {
 
   // 设置渠道状态
   async setChannelStatus(channelId: number, status: ChannelStatus): Promise<void> {
-    await this.request(`/channels/${channelId}/status`, {
+    await this.request(`/messages/channels/${channelId}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status })
     })
@@ -385,14 +385,14 @@ class ApiService {
 
   // 恢复熔断渠道（重置错误计数）
   async resumeChannel(channelId: number): Promise<void> {
-    await this.request(`/channels/${channelId}/resume`, {
+    await this.request(`/messages/channels/${channelId}/resume`, {
       method: 'POST'
     })
   }
 
   // 获取渠道指标
   async getChannelMetrics(): Promise<ChannelMetrics[]> {
-    return this.request('/channels/metrics')
+    return this.request('/messages/channels/metrics')
   }
 
   // 获取调度器统计信息
@@ -405,13 +405,13 @@ class ApiService {
     windowSize: number
   }> {
     const query = type === 'responses' ? '?type=responses' : ''
-    return this.request(`/channels/scheduler/stats${query}`)
+    return this.request(`/messages/channels/scheduler/stats${query}`)
   }
 
   // 获取渠道仪表盘数据（合并 channels + metrics + stats）
   async getChannelDashboard(type: 'messages' | 'responses' = 'messages'): Promise<ChannelDashboardResponse> {
     const query = type === 'responses' ? '?type=responses' : ''
-    return this.request(`/channels/dashboard${query}`)
+    return this.request(`/messages/channels/dashboard${query}`)
   }
 
   // ============== Responses 多渠道调度 API ==============
@@ -448,7 +448,7 @@ class ApiService {
 
   // 设置 Messages 渠道促销期
   async setChannelPromotion(channelId: number, durationSeconds: number): Promise<void> {
-    await this.request(`/channels/${channelId}/promotion`, {
+    await this.request(`/messages/channels/${channelId}/promotion`, {
       method: 'POST',
       body: JSON.stringify({ duration: durationSeconds })
     })
@@ -481,7 +481,7 @@ class ApiService {
 
   // 获取 Messages 渠道历史指标（用于时间序列图表）
   async getChannelMetricsHistory(duration: '1h' | '6h' | '24h' = '24h'): Promise<MetricsHistoryResponse[]> {
-    return this.request(`/channels/metrics/history?duration=${duration}`)
+    return this.request(`/messages/channels/metrics/history?duration=${duration}`)
   }
 
   // 获取 Responses 渠道历史指标
@@ -493,7 +493,7 @@ class ApiService {
 
   // 获取 Messages 渠道 Key 级别历史指标（用于 Key 趋势图表）
   async getChannelKeyMetricsHistory(channelId: number, duration: '1h' | '6h' | '24h' = '6h'): Promise<ChannelKeyMetricsHistoryResponse> {
-    return this.request(`/channels/${channelId}/keys/metrics/history?duration=${duration}`)
+    return this.request(`/messages/channels/${channelId}/keys/metrics/history?duration=${duration}`)
   }
 
   // 获取 Responses 渠道 Key 级别历史指标

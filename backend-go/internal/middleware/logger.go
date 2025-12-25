@@ -10,7 +10,7 @@ import (
 
 // 默认跳过日志的路径前缀（仅 GET 请求）
 var defaultSkipPrefixes = []string{
-	"/api/channels",
+	"/api/messages/channels",
 	"/api/responses/channels",
 }
 
