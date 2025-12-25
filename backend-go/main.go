@@ -162,7 +162,6 @@ func main() {
 		apiGroup.DELETE("/responses/channels/:id/keys/:apiKey", responses.DeleteApiKey(cfgManager))
 		apiGroup.POST("/responses/channels/:id/keys/:apiKey/top", responses.MoveApiKeyToTop(cfgManager))
 		apiGroup.POST("/responses/channels/:id/keys/:apiKey/bottom", responses.MoveApiKeyToBottom(cfgManager))
-		apiGroup.PUT("/responses/loadbalance", responses.UpdateLoadBalance(cfgManager))
 
 		// Responses 多渠道调度 API
 		apiGroup.POST("/responses/channels/reorder", responses.ReorderChannels(cfgManager))
@@ -172,9 +171,6 @@ func main() {
 		apiGroup.GET("/responses/channels/metrics", handlers.GetChannelMetricsWithConfig(responsesMetricsManager, cfgManager, true))
 		apiGroup.GET("/responses/channels/metrics/history", handlers.GetChannelMetricsHistory(responsesMetricsManager, cfgManager, true))
 		apiGroup.GET("/responses/channels/:id/keys/metrics/history", handlers.GetChannelKeyMetricsHistory(responsesMetricsManager, cfgManager, true))
-
-		// 负载均衡
-		apiGroup.PUT("/loadbalance", messages.UpdateLoadBalance(cfgManager))
 
 		// Fuzzy 模式设置
 		apiGroup.GET("/settings/fuzzy-mode", handlers.GetFuzzyMode(cfgManager))

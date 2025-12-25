@@ -243,64 +243,6 @@
               </template>
               <span>{{ fuzzyModeLoadError ? '加载失败，请刷新页面' : (fuzzyModeEnabled ? 'Fuzzy 模式已启用：模糊处理错误，自动尝试所有渠道' : 'Fuzzy 模式已关闭：精确处理错误，透传上游响应') }}</span>
             </v-tooltip>
-
-            <!-- 负载均衡选择 -->
-            <v-menu>
-              <template v-slot:activator="{ props }">
-                <v-btn
-                  v-bind="props"
-                  variant="tonal"
-                  size="large"
-                  append-icon="mdi-chevron-down"
-                  class="action-btn load-balance-btn"
-                >
-                  <v-icon start size="20">mdi-tune</v-icon>
-                  {{ currentChannelsData.loadBalance }}
-                </v-btn>
-              </template>
-              <v-list class="load-balance-menu" rounded="lg" elevation="8">
-                <v-list-subheader>API密钥分配策略</v-list-subheader>
-                <v-list-item
-                  @click="updateLoadBalance('round-robin')"
-                  :active="currentChannelsData.loadBalance === 'round-robin'"
-                  rounded="lg"
-                >
-                  <template v-slot:prepend>
-                    <v-avatar color="info" size="36" variant="tonal">
-                      <v-icon size="20">mdi-rotate-right</v-icon>
-                    </v-avatar>
-                  </template>
-                  <v-list-item-title class="font-weight-medium">轮询 (Round Robin)</v-list-item-title>
-                  <v-list-item-subtitle>按顺序依次使用API密钥</v-list-item-subtitle>
-                </v-list-item>
-                <v-list-item
-                  @click="updateLoadBalance('random')"
-                  :active="currentChannelsData.loadBalance === 'random'"
-                  rounded="lg"
-                >
-                  <template v-slot:prepend>
-                    <v-avatar color="secondary" size="36" variant="tonal">
-                      <v-icon size="20">mdi-dice-6</v-icon>
-                    </v-avatar>
-                  </template>
-                  <v-list-item-title class="font-weight-medium">随机 (Random)</v-list-item-title>
-                  <v-list-item-subtitle>随机选择API密钥</v-list-item-subtitle>
-                </v-list-item>
-                <v-list-item
-                  @click="updateLoadBalance('failover')"
-                  :active="currentChannelsData.loadBalance === 'failover'"
-                  rounded="lg"
-                >
-                  <template v-slot:prepend>
-                    <v-avatar color="warning" size="36" variant="tonal">
-                      <v-icon size="20">mdi-backup-restore</v-icon>
-                    </v-avatar>
-                  </template>
-                  <v-list-item-title class="font-weight-medium">故障转移 (Failover)</v-list-item-title>
-                  <v-list-item-subtitle>优先第一个，失败时切换</v-list-item-subtitle>
-                </v-list-item>
-              </v-list>
-            </v-menu>
           </div>
         </div>
 
