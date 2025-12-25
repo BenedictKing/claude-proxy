@@ -59,12 +59,14 @@ func createTestScheduler(t *testing.T, cfg config.Config) (*ChannelScheduler, fu
 	messagesMetrics := metrics.NewMetricsManager()
 	responsesMetrics := metrics.NewMetricsManager()
 	traceAffinity := session.NewTraceAffinityManager()
+	resourceAffinity := session.NewResourceAffinityManager()
 
-	scheduler := NewChannelScheduler(cfgManager, messagesMetrics, responsesMetrics, traceAffinity)
+	scheduler := NewChannelScheduler(cfgManager, messagesMetrics, responsesMetrics, traceAffinity, resourceAffinity)
 
 	return scheduler, func() {
 		messagesMetrics.Stop()
 		responsesMetrics.Stop()
+		resourceAffinity.Stop()
 		cleanup()
 	}
 }

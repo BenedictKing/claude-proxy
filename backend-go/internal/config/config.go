@@ -603,6 +603,11 @@ func (cm *ConfigManager) isKeyFailed(apiKey string) bool {
 	return time.Since(failure.Timestamp) < recoveryTime
 }
 
+// IsKeyFailed 检查 Key 是否在冷却期（公开方法）
+func (cm *ConfigManager) IsKeyFailed(apiKey string) bool {
+	return cm.isKeyFailed(apiKey)
+}
+
 // cleanupExpiredFailures 清理过期的失败记录
 func (cm *ConfigManager) cleanupExpiredFailures() {
 	ticker := time.NewTicker(1 * time.Minute)
