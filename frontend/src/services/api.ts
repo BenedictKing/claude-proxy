@@ -67,7 +67,10 @@ export interface Channel {
   name: string
   serviceType: 'openai' | 'gemini' | 'claude' | 'responses'
   baseUrl: string
+  baseUrls?: string[]                // 多 BaseURL 支持
+  baseUrlStrategy?: 'failover' | 'round-robin' | 'random'
   apiKeys: string[]
+  apiKeyStrategy?: 'failover' | 'round-robin' | 'random'  // 渠道级 API Key 策略
   description?: string
   website?: string
   insecureSkipVerify?: boolean
@@ -80,6 +83,7 @@ export interface Channel {
   priority?: number          // 渠道优先级（数字越小优先级越高）
   metrics?: ChannelMetrics   // 实时指标
   suspendReason?: string     // 熔断原因
+  promotionUntil?: string    // 促销期截止时间（ISO 格式）
 }
 
 export interface ChannelsResponse {

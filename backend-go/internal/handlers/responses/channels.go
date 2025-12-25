@@ -25,7 +25,10 @@ func GetUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				"name":               up.Name,
 				"serviceType":        up.ServiceType,
 				"baseUrl":            up.BaseURL,
+				"baseUrls":           up.BaseURLs,
+				"baseUrlStrategy":    up.BaseURLStrategy,
 				"apiKeys":            up.APIKeys,
+				"apiKeyStrategy":     up.APIKeyStrategy,
 				"description":        up.Description,
 				"website":            up.Website,
 				"insecureSkipVerify": up.InsecureSkipVerify,
@@ -33,6 +36,7 @@ func GetUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				"latency":            nil,
 				"status":             status,
 				"priority":           priority,
+				"promotionUntil":     up.PromotionUntil,
 			}
 		}
 

@@ -29,7 +29,10 @@ func GetUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				"name":               up.Name,
 				"serviceType":        up.ServiceType,
 				"baseUrl":            up.BaseURL,
+				"baseUrls":           up.BaseURLs,
+				"baseUrlStrategy":    up.BaseURLStrategy,
 				"apiKeys":            up.APIKeys,
+				"apiKeyStrategy":     up.APIKeyStrategy,
 				"description":        up.Description,
 				"website":            up.Website,
 				"insecureSkipVerify": up.InsecureSkipVerify,
@@ -37,6 +40,7 @@ func GetUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				"latency":            nil,
 				"status":             status,
 				"priority":           priority,
+				"promotionUntil":     up.PromotionUntil,
 			}
 		}
 
@@ -384,37 +388,94 @@ func PingChannel(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		}
 
 		channel := cfg.Upstream[id]
-		startTime := time.Now()
-
-		testURL := strings.TrimSuffix(channel.BaseURL, "/")
-
-		client := httpclient.GetManager().GetStandardClient(5*time.Second, channel.InsecureSkipVerify)
-		req, err := http.NewRequest("HEAD", testURL, nil)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"success": false, "status": "error", "error": "Failed to create request"})
-			return
-		}
-
-		resp, err := client.Do(req)
-		latency := time.Since(startTime).Milliseconds()
-
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"latency": latency,
-				"status":  "error",
-				"error":   err.Error(),
-			})
-			return
-		}
-		defer resp.Body.Close()
-
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"latency": latency,
-			"status":  "healthy",
-		})
+		result := pingChannelURLs(&channel)
+		c.JSON(http.StatusOK, result)
 	}
+}
+
+// pingChannelURLs 测试渠道的所有 BaseURL，返回最快的延迟
+func pingChannelURLs(ch *config.UpstreamConfig) gin.H {
+	urls := ch.GetAllBaseURLs()
+	if len(urls) == 0 {
+		return gin.H{"success": false, "latency": 0, "status": "error", "error": "no_base_url"}
+	}
+
+	// 单个 URL 直接测试
+	if len(urls) == 1 {
+		return pingURL(urls[0], ch.InsecureSkipVerify)
+	}
+
+	// 多个 URL 并发测试，返回最快的
+	type pingResult struct {
+		url     string
+		latency int64
+		success bool
+		err     string
+	}
+
+	results := make(chan pingResult, len(urls))
+	for _, url := range urls {
+		go func(testURL string) {
+			startTime := time.Now()
+			testURL = strings.TrimSuffix(testURL, "/")
+			client := httpclient.GetManager().GetStandardClient(5*time.Second, ch.InsecureSkipVerify)
+			req, err := http.NewRequest("HEAD", testURL, nil)
+			if err != nil {
+				results <- pingResult{url: testURL, latency: 0, success: false, err: "req_creation_failed"}
+				return
+			}
+			resp, err := client.Do(req)
+			latency := time.Since(startTime).Milliseconds()
+			if err != nil {
+				results <- pingResult{url: testURL, latency: latency, success: false, err: err.Error()}
+				return
+			}
+			resp.Body.Close()
+			results <- pingResult{url: testURL, latency: latency, success: true}
+		}(url)
+	}
+
+	// 收集结果，找最快的成功响应（成功结果始终优先于失败结果）
+	var bestResult *pingResult
+	for i := 0; i < len(urls); i++ {
+		r := <-results
+		if r.success {
+			// 成功结果：优先选择，或选择延迟更低的
+			if bestResult == nil || !bestResult.success || r.latency < bestResult.latency {
+				bestResult = &r
+			}
+		} else if bestResult == nil || !bestResult.success {
+			// 失败结果：仅当没有成功结果时保存
+			bestResult = &r
+		}
+	}
+
+	if bestResult == nil {
+		return gin.H{"success": false, "latency": 0, "status": "error", "error": "all_urls_failed"}
+	}
+
+	if bestResult.success {
+		return gin.H{"success": true, "latency": bestResult.latency, "status": "healthy"}
+	}
+	return gin.H{"success": false, "latency": bestResult.latency, "status": "error", "error": bestResult.err}
+}
+
+// pingURL 测试单个 URL
+func pingURL(testURL string, insecureSkipVerify bool) gin.H {
+	startTime := time.Now()
+	testURL = strings.TrimSuffix(testURL, "/")
+	client := httpclient.GetManager().GetStandardClient(5*time.Second, insecureSkipVerify)
+	req, err := http.NewRequest("HEAD", testURL, nil)
+	if err != nil {
+		return gin.H{"success": false, "latency": 0, "status": "error", "error": "req_creation_failed"}
+	}
+	resp, err := client.Do(req)
+	latency := time.Since(startTime).Milliseconds()
+	if err != nil {
+		return gin.H{"success": false, "latency": latency, "status": "error", "error": err.Error()}
+	}
+	resp.Body.Close()
+	return gin.H{"success": true, "latency": latency, "status": "healthy"}
 }
 
 // PingAllChannels Ping所有渠道
@@ -428,27 +489,10 @@ func PingAllChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			wg.Add(1)
 			go func(id int, ch config.UpstreamConfig) {
 				defer wg.Done()
-
-				startTime := time.Now()
-				testURL := strings.TrimSuffix(ch.BaseURL, "/")
-
-				client := httpclient.GetManager().GetStandardClient(5*time.Second, ch.InsecureSkipVerify)
-				req, err := http.NewRequest("HEAD", testURL, nil)
-				if err != nil {
-					results <- gin.H{"id": id, "name": ch.Name, "latency": 0, "status": "error", "error": "req_creation_failed"}
-					return
-				}
-
-				resp, err := client.Do(req)
-				latency := time.Since(startTime).Milliseconds()
-
-				if err != nil {
-					results <- gin.H{"id": id, "name": ch.Name, "latency": latency, "status": "error", "error": err.Error()}
-					return
-				}
-				defer resp.Body.Close()
-
-				results <- gin.H{"id": id, "name": ch.Name, "latency": latency, "status": "healthy"}
+				result := pingChannelURLs(&ch)
+				result["id"] = id
+				result["name"] = ch.Name
+				results <- result
 			}(i, channel)
 		}
 

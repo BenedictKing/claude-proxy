@@ -56,7 +56,7 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	// 2. 如果 baseURL 已包含版本号后缀（如 /v1, /v2, /v3），直接拼接端点路径
 	// 3. 如果 baseURL 不包含版本号后缀，自动添加 /v1 再拼接端点路径
 	endpoint := strings.TrimPrefix(c.Request.URL.Path, "/v1")
-	baseURL := upstream.BaseURL
+	baseURL := upstream.GetEffectiveBaseURL()
 	skipVersionPrefix := strings.HasSuffix(baseURL, "#")
 	if skipVersionPrefix {
 		baseURL = strings.TrimSuffix(baseURL, "#")

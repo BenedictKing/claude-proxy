@@ -63,7 +63,7 @@ func (p *OpenAIProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 
 	// 构建URL - baseURL可能已包含版本号(如/v1, /v2, /v1beta, /v2alpha等),需要智能拼接
 	// 如果 baseURL 以 # 结尾，则跳过自动添加 /v1
-	baseURL := upstream.BaseURL
+	baseURL := upstream.GetEffectiveBaseURL()
 	skipVersionPrefix := strings.HasSuffix(baseURL, "#")
 	if skipVersionPrefix {
 		baseURL = strings.TrimSuffix(baseURL, "#")

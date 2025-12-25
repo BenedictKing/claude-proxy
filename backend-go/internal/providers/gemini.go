@@ -48,7 +48,7 @@ func (p *GeminiProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		action = "streamGenerateContent?alt=sse"
 	}
 
-	url := fmt.Sprintf("%s/models/%s:%s", strings.TrimSuffix(upstream.BaseURL, "/"), model, action)
+	url := fmt.Sprintf("%s/models/%s:%s", strings.TrimSuffix(upstream.GetEffectiveBaseURL(), "/"), model, action)
 
 	req, err := http.NewRequest("POST", url, bytes.NewReader(reqBodyBytes))
 	if err != nil {

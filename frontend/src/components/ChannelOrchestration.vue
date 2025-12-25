@@ -72,6 +72,17 @@
                 @keydown.enter.stop="$emit('edit', element)"
                 @keydown.space.stop="$emit('edit', element)"
               >{{ element.name }}</span>
+              <!-- 促销期标识 -->
+              <v-chip
+                v-if="isInPromotion(element)"
+                size="x-small"
+                color="info"
+                variant="flat"
+                class="ml-2"
+              >
+                <v-icon start size="12">mdi-rocket-launch</v-icon>
+                {{ formatPromotionRemaining(element.promotionUntil) }}
+              </v-chip>
               <!-- 官网链接按钮 -->
               <v-btn
                 :href="getWebsiteUrl(element)"
@@ -141,6 +152,18 @@
                 </v-tooltip>
               </template>
               <span v-else class="text-caption text-medium-emphasis">--</span>
+            </div>
+
+            <!-- 延迟显示 -->
+            <div class="channel-latency" @click.stop>
+              <v-chip
+                v-if="element.latency !== undefined && element.latency !== null"
+                size="x-small"
+                :color="getLatencyColor(element.latency)"
+                variant="tonal"
+              >
+                {{ element.latency }}ms
+              </v-chip>
             </div>
 
             <!-- API密钥数量 -->
@@ -488,6 +511,28 @@ const getSuccessRateColor = (rate?: number): string => {
   return 'error'
 }
 
+// 获取延迟颜色
+const getLatencyColor = (latency: number): string => {
+  if (latency < 500) return 'success'
+  if (latency < 1000) return 'warning'
+  return 'error'
+}
+
+// 判断渠道是否处于促销期
+const isInPromotion = (channel: Channel): boolean => {
+  if (!channel.promotionUntil) return false
+  return new Date(channel.promotionUntil) > new Date()
+}
+
+// 格式化促销期剩余时间
+const formatPromotionRemaining = (until?: string): string => {
+  if (!until) return ''
+  const remaining = Math.max(0, new Date(until).getTime() - Date.now())
+  const minutes = Math.ceil(remaining / 60000)
+  if (minutes <= 0) return '即将结束'
+  return `${minutes}分钟`
+}
+
 // 格式化统计数据：有请求显示"N 请求 (X%)"，无请求显示"--"
 const formatStats = (stats?: TimeWindowStats): string => {
   if (!stats || !stats.requestCount) return '--'
@@ -677,7 +722,7 @@ defineExpose({
 
 .channel-row {
   display: grid;
-  grid-template-columns: 36px 36px 110px 1fr 130px 90px 80px;
+  grid-template-columns: 36px 36px 110px 1fr 130px 70px 90px 80px;
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
@@ -832,6 +877,12 @@ defineExpose({
   gap: 6px;
 }
 
+.channel-latency {
+  display: flex;
+  align-items: center;
+  min-width: 60px;
+}
+
 .channel-keys {
   display: flex;
   align-items: center;
@@ -943,7 +994,7 @@ defineExpose({
 /* 响应式调整 */
 @media (max-width: 960px) {
   .channel-row {
-    grid-template-columns: 32px 32px 90px 1fr 120px 60px 60px;
+    grid-template-columns: 32px 32px 90px 1fr 120px 60px 60px 60px;
     padding: 10px 12px;
     gap: 6px;
   }
@@ -958,6 +1009,7 @@ defineExpose({
   }
 
   .channel-metrics,
+  .channel-latency,
   .channel-keys {
     display: none;
   }

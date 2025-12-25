@@ -138,15 +138,16 @@
 
             <!-- 基础URL -->
             <v-col cols="12">
-              <v-text-field
-                v-model="form.baseUrl"
+              <v-textarea
+                v-model="baseUrlsText"
                 label="基础URL *"
-                placeholder="例如：https://api.openai.com/v1"
+                placeholder="每行一个 URL，支持多个 BaseURL&#10;例如：&#10;https://api.openai.com/v1&#10;https://api2.openai.com/v1"
                 prepend-inner-icon="mdi-web"
                 variant="outlined"
                 density="comfortable"
-                type="url"
-                :rules="[rules.required, rules.url]"
+                rows="3"
+                no-resize
+                :rules="[rules.required, rules.baseUrls]"
                 required
                 :error-messages="errors.baseUrl"
                 hide-details="auto"
@@ -157,6 +158,18 @@
                   预期请求: {{ formExpectedRequestUrl }}
                 </span>
               </div>
+              <!-- BaseURL 策略选择（单 URL 时禁用显示 failover） -->
+              <v-select
+                v-model="form.baseUrlStrategy"
+                label="BaseURL 策略"
+                :items="baseUrlStrategyOptions"
+                :disabled="!hasMultipleBaseUrls"
+                :model-value="hasMultipleBaseUrls ? form.baseUrlStrategy : 'failover'"
+                variant="outlined"
+                density="compact"
+                class="mt-2"
+                hide-details
+              />
             </v-col>
 
             <!-- 官网/控制台（可选） -->
@@ -445,6 +458,19 @@
                       添加
                     </v-btn>
                   </div>
+
+                  <!-- API Key 策略选择（单 Key 时禁用显示 failover） -->
+                  <v-select
+                    v-model="form.apiKeyStrategy"
+                    label="API Key 策略"
+                    :items="apiKeyStrategyOptions"
+                    :disabled="!hasMultipleApiKeys"
+                    :model-value="hasMultipleApiKeys ? form.apiKeyStrategy : 'failover'"
+                    variant="outlined"
+                    density="compact"
+                    class="mt-4"
+                    hide-details
+                  />
                 </v-card-text>
               </v-card>
             </v-col>
@@ -800,12 +826,58 @@ const form = reactive({
   name: '',
   serviceType: '' as 'openai' | 'gemini' | 'claude' | 'responses' | '',
   baseUrl: '',
+  baseUrls: [] as string[],
+  baseUrlStrategy: 'round-robin' as 'failover' | 'round-robin' | 'random',
   website: '',
   insecureSkipVerify: false,
   description: '',
   apiKeys: [] as string[],
+  apiKeyStrategy: 'round-robin' as 'failover' | 'round-robin' | 'random',
   modelMapping: {} as Record<string, string>
 })
+
+// BaseURL 策略选项
+const baseUrlStrategyOptions = [
+  { title: '轮询 (推荐)', value: 'round-robin' },
+  { title: '随机', value: 'random' },
+  { title: '故障转移', value: 'failover' }
+]
+
+// 多 BaseURL 文本输入（双向绑定）
+const baseUrlsText = computed({
+  get: () => {
+    if (form.baseUrls && form.baseUrls.length > 0) {
+      return form.baseUrls.join('\n')
+    }
+    return form.baseUrl || ''
+  },
+  set: (val: string) => {
+    const urls = val.split('\n').map(s => s.trim()).filter(Boolean)
+    if (urls.length === 0) {
+      form.baseUrl = ''
+      form.baseUrls = []
+    } else if (urls.length === 1) {
+      form.baseUrl = urls[0]
+      form.baseUrls = []
+    } else {
+      form.baseUrl = urls[0]
+      form.baseUrls = urls
+    }
+  }
+})
+
+// 是否有多个 BaseURL
+const hasMultipleBaseUrls = computed(() => form.baseUrls && form.baseUrls.length > 1)
+
+// 是否有多个 API Key
+const hasMultipleApiKeys = computed(() => form.apiKeys && form.apiKeys.length > 1)
+
+// API Key 策略选项（复用 BaseURL 策略选项）
+const apiKeyStrategyOptions = [
+  { title: '轮询 (推荐)', value: 'round-robin' },
+  { title: '随机', value: 'random' },
+  { title: '故障转移', value: 'failover' }
+]
 
 // 原始密钥映射 (掩码密钥 -> 原始密钥)
 const originalKeyMap = ref<Map<string, string>>(new Map())
@@ -859,6 +931,19 @@ const rules = {
     } catch {
       return '请输入有效的URL'
     }
+  },
+  baseUrls: (value: string) => {
+    if (!value) return '此字段为必填项'
+    const urls = value.split('\n').map(s => s.trim()).filter(Boolean)
+    if (urls.length === 0) return '请至少输入一个 URL'
+    for (const url of urls) {
+      try {
+        new URL(url)
+      } catch {
+        return `无效的 URL: ${url}`
+      }
+    }
+    return true
   }
 }
 
@@ -911,10 +996,13 @@ const resetForm = () => {
   form.name = ''
   form.serviceType = ''
   form.baseUrl = ''
+  form.baseUrls = []
+  form.baseUrlStrategy = 'round-robin'
   form.website = ''
   form.insecureSkipVerify = false
   form.description = ''
   form.apiKeys = []
+  form.apiKeyStrategy = 'round-robin'
   form.modelMapping = {}
   newApiKey.value = ''
   newMapping.source = ''
@@ -944,12 +1032,15 @@ const loadChannelData = (channel: Channel) => {
   form.name = channel.name
   form.serviceType = channel.serviceType
   form.baseUrl = channel.baseUrl
+  form.baseUrls = channel.baseUrls || []
+  form.baseUrlStrategy = channel.baseUrlStrategy || 'round-robin'
   form.website = channel.website || ''
   form.insecureSkipVerify = !!channel.insecureSkipVerify
   form.description = channel.description || ''
 
   // 直接存储原始密钥，不需要映射关系
   form.apiKeys = [...channel.apiKeys]
+  form.apiKeyStrategy = channel.apiKeyStrategy || 'round-robin'
 
   // 清空原始密钥映射（现在不需要了）
   originalKeyMap.value.clear()
@@ -1079,8 +1170,8 @@ const handleSubmit = async () => {
   // 直接使用原始密钥，不需要转换
   const processedApiKeys = form.apiKeys.filter(key => key.trim())
 
-  // 类型断言，因为表单验证已经确保serviceType不为空
-  const channelData = {
+  // 构建渠道数据
+  const channelData: Omit<Channel, 'index' | 'latency' | 'status'> = {
     name: form.name.trim(),
     serviceType: form.serviceType as 'openai' | 'gemini' | 'claude' | 'responses',
     baseUrl: form.baseUrl.trim().replace(/\/$/, ''), // 移除末尾斜杠
@@ -1090,6 +1181,15 @@ const handleSubmit = async () => {
     apiKeys: processedApiKeys,
     modelMapping: form.modelMapping
   }
+
+  // 多 BaseURL 支持
+  if (form.baseUrls && form.baseUrls.length > 1) {
+    channelData.baseUrls = form.baseUrls.map(url => url.trim().replace(/\/$/, ''))
+    channelData.baseUrlStrategy = form.baseUrlStrategy
+  }
+
+  // API Key 策略（始终提交，后端会校正单 Key 为 failover）
+  channelData.apiKeyStrategy = form.apiKeyStrategy
 
   emit('save', channelData)
 }
