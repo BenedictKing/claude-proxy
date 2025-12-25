@@ -98,7 +98,7 @@ func isPollingEndpoint(path string) bool {
 
 	// 使用前缀匹配，与 FilteredLogger 保持一致
 	pollingPrefixes := []string{
-		"/api/channels",
+		"/api/messages/channels",
 		"/api/responses/channels",
 	}
 	for _, prefix := range pollingPrefixes {
