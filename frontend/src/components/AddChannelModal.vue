@@ -878,7 +878,7 @@ const form = reactive({
   insecureSkipVerify: false,
   description: '',
   apiKeys: [] as string[],
-  apiKeyStrategy: 'round-robin' as 'failover' | 'round-robin' | 'random',
+  apiKeyStrategy: 'failover' as 'failover' | 'round-robin' | 'random',
   modelMapping: {} as Record<string, string>
 })
 
@@ -898,7 +898,18 @@ const baseUrlsText = computed({
     return form.baseUrl || ''
   },
   set: (val: string) => {
-    const urls = val.split('\n').map(s => s.trim()).filter(Boolean)
+    // 去重：使用 Set 过滤重复 URL（忽略末尾 / 和 # 差异）
+    const seen = new Set<string>()
+    const urls = val
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean)
+      .filter(url => {
+        const normalized = url.replace(/[#/]+$/, '')
+        if (seen.has(normalized)) return false
+        seen.add(normalized)
+        return true
+      })
     if (urls.length === 0) {
       form.baseUrl = ''
       form.baseUrls = []
@@ -918,11 +929,11 @@ const hasMultipleBaseUrls = computed(() => form.baseUrls && form.baseUrls.length
 // 是否有多个 API Key
 const hasMultipleApiKeys = computed(() => form.apiKeys && form.apiKeys.length > 1)
 
-// API Key 策略选项（复用 BaseURL 策略选项）
+// API Key 策略选项
 const apiKeyStrategyOptions = [
-  { title: '轮询 (推荐)', value: 'round-robin' },
+  { title: '轮询', value: 'round-robin' },
   { title: '随机', value: 'random' },
-  { title: '故障转移', value: 'failover' }
+  { title: '故障转移 (推荐)', value: 'failover' }
 ]
 
 // 原始密钥映射 (掩码密钥 -> 原始密钥)
@@ -1048,7 +1059,7 @@ const resetForm = () => {
   form.insecureSkipVerify = false
   form.description = ''
   form.apiKeys = []
-  form.apiKeyStrategy = 'round-robin'
+  form.apiKeyStrategy = 'failover'
   form.modelMapping = {}
   newApiKey.value = ''
   newMapping.source = ''

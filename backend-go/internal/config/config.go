@@ -664,6 +664,39 @@ func (cm *ConfigManager) clearFailedKeysForUpstream(upstream *UpstreamConfig) {
 	}
 }
 
+// deduplicateStrings 去重字符串切片，保持原始顺序
+func deduplicateStrings(items []string) []string {
+	if len(items) <= 1 {
+		return items
+	}
+	seen := make(map[string]struct{}, len(items))
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		if _, exists := seen[item]; !exists {
+			seen[item] = struct{}{}
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+// deduplicateBaseURLs 去重 BaseURLs，忽略末尾 / 和 # 差异
+func deduplicateBaseURLs(urls []string) []string {
+	if len(urls) <= 1 {
+		return urls
+	}
+	seen := make(map[string]struct{}, len(urls))
+	result := make([]string, 0, len(urls))
+	for _, url := range urls {
+		normalized := strings.TrimRight(url, "/#")
+		if _, exists := seen[normalized]; !exists {
+			seen[normalized] = struct{}{}
+			result = append(result, url)
+		}
+	}
+	return result
+}
+
 // AddUpstream 添加上游
 func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig) error {
 	cm.mu.Lock()
@@ -673,6 +706,10 @@ func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig) error {
 	if upstream.Status == "" {
 		upstream.Status = "active"
 	}
+
+	// 去重 API Keys 和 Base URLs
+	upstream.APIKeys = deduplicateStrings(upstream.APIKeys)
+	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs)
 
 	// 验证并校正策略（单资源强制 failover）
 	if len(upstream.APIKeys) <= 1 {
@@ -711,7 +748,7 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 		upstream.BaseURL = *updates.BaseURL
 	}
 	if updates.BaseURLs != nil {
-		upstream.BaseURLs = updates.BaseURLs
+		upstream.BaseURLs = deduplicateBaseURLs(updates.BaseURLs)
 	}
 	if updates.BaseURLStrategy != nil {
 		upstream.BaseURLStrategy = *updates.BaseURLStrategy
@@ -735,7 +772,7 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 				log.Printf("[Config-Upstream] 渠道 [%d] %s 已从暂停状态自动激活（单 key 更换）", index, upstream.Name)
 			}
 		}
-		upstream.APIKeys = updates.APIKeys
+		upstream.APIKeys = deduplicateStrings(updates.APIKeys)
 	}
 	if updates.APIKeyStrategy != nil {
 		upstream.APIKeyStrategy = *updates.APIKeyStrategy
@@ -1125,6 +1162,10 @@ func (cm *ConfigManager) AddResponsesUpstream(upstream UpstreamConfig) error {
 		upstream.Status = "active"
 	}
 
+	// 去重 API Keys 和 Base URLs
+	upstream.APIKeys = deduplicateStrings(upstream.APIKeys)
+	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs)
+
 	// 验证并校正策略（单资源强制 failover）
 	if len(upstream.APIKeys) <= 1 {
 		upstream.APIKeyStrategy = "failover"
@@ -1162,7 +1203,7 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 		upstream.BaseURL = *updates.BaseURL
 	}
 	if updates.BaseURLs != nil {
-		upstream.BaseURLs = updates.BaseURLs
+		upstream.BaseURLs = deduplicateBaseURLs(updates.BaseURLs)
 	}
 	if updates.BaseURLStrategy != nil {
 		upstream.BaseURLStrategy = *updates.BaseURLStrategy
@@ -1186,7 +1227,7 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 				log.Printf("[Config-Upstream] Responses 渠道 [%d] %s 已从暂停状态自动激活（单 key 更换）", index, upstream.Name)
 			}
 		}
-		upstream.APIKeys = updates.APIKeys
+		upstream.APIKeys = deduplicateStrings(updates.APIKeys)
 	}
 	if updates.ModelMapping != nil {
 		upstream.ModelMapping = updates.ModelMapping
