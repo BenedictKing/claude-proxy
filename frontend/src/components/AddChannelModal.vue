@@ -40,20 +40,27 @@
             <v-card-text class="pa-4">
               <div class="d-flex flex-column ga-3">
                 <!-- Base URL 检测 -->
-                <div class="d-flex align-center ga-3">
-                  <v-icon :color="detectedBaseUrl ? 'success' : 'error'" size="20">
-                    {{ detectedBaseUrl ? 'mdi-check-circle' : 'mdi-alert-circle' }}
+                <div class="d-flex align-start ga-3">
+                  <v-icon :color="detectedBaseUrls.length > 0 ? 'success' : 'error'" size="20" class="mt-1">
+                    {{ detectedBaseUrls.length > 0 ? 'mdi-check-circle' : 'mdi-alert-circle' }}
                   </v-icon>
                   <div class="flex-grow-1">
                     <div class="text-body-2 font-weight-medium">Base URL</div>
-                    <div class="text-caption" :class="detectedBaseUrl ? 'text-success' : 'text-error'">
-                      {{ detectedBaseUrl || '请输入一个有效的 URL (https://...)' }}
+                    <div v-if="detectedBaseUrls.length === 0" class="text-caption text-error">
+                      请输入一个有效的 URL (https://...)
                     </div>
-                    <div v-if="detectedBaseUrl" class="text-caption text-medium-emphasis mt-1">
-                      预期请求: {{ expectedRequestUrl }}
+                    <div v-else class="d-flex flex-column ga-2 mt-1">
+                      <div v-for="(url, index) in detectedBaseUrls" :key="url" class="base-url-item">
+                        <div class="text-caption text-success">{{ url }}</div>
+                        <div class="text-caption text-medium-emphasis">
+                          预期请求: {{ getExpectedRequestUrl(url) }}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <v-chip v-if="detectedBaseUrl" size="x-small" color="success" variant="tonal"> 已检测 </v-chip>
+                  <v-chip v-if="detectedBaseUrls.length > 0" size="x-small" color="success" variant="tonal">
+                    {{ detectedBaseUrls.length }} 个
+                  </v-chip>
                 </div>
 
                 <!-- API Keys 检测 -->
@@ -164,7 +171,6 @@
                 label="BaseURL 策略"
                 :items="baseUrlStrategyOptions"
                 :disabled="!hasMultipleBaseUrls"
-                :model-value="hasMultipleBaseUrls ? form.baseUrlStrategy : 'failover'"
                 variant="outlined"
                 density="compact"
                 class="mt-2"
@@ -465,7 +471,6 @@
                     label="API Key 策略"
                     :items="apiKeyStrategyOptions"
                     :disabled="!hasMultipleApiKeys"
-                    :model-value="hasMultipleApiKeys ? form.apiKeyStrategy : 'failover'"
                     variant="outlined"
                     density="compact"
                     class="mt-4"
@@ -539,6 +544,7 @@ const isQuickMode = ref(true)
 // 快速添加模式的数据
 const quickInput = ref('')
 const detectedBaseUrl = ref('')
+const detectedBaseUrls = ref<string[]>([])
 const detectedApiKeys = ref<string[]>([])
 const detectedServiceType = ref<'openai' | 'gemini' | 'claude' | 'responses' | null>(null)
 
@@ -569,6 +575,7 @@ const toggleMode = () => {
 const parseQuickInput = () => {
   const result = parseQuickInputUtil(quickInput.value)
   detectedBaseUrl.value = result.detectedBaseUrl
+  detectedBaseUrls.value = result.detectedBaseUrls
   detectedApiKeys.value = result.detectedApiKeys
   detectedServiceType.value = result.detectedServiceType
 }
@@ -599,7 +606,7 @@ const getDefaultBaseUrl = (): string => {
 
 // 快速模式表单验证
 const isQuickFormValid = computed(() => {
-  return detectedBaseUrl.value.length > 0 && detectedApiKeys.value.length > 0
+  return detectedBaseUrls.value.length > 0 && detectedApiKeys.value.length > 0
 })
 
 // 生成随机字符串
@@ -689,6 +696,44 @@ const expectedRequestUrl = computed(() => {
   return baseUrl + '/v1' + endpoint
 })
 
+// 生成单个 URL 的预期请求地址
+const getExpectedRequestUrl = (inputBaseUrl: string): string => {
+  if (!inputBaseUrl) return ''
+
+  let baseUrl = inputBaseUrl
+  const skipVersion = baseUrl.endsWith('#')
+  if (skipVersion) {
+    baseUrl = baseUrl.slice(0, -1)
+  }
+
+  const hasVersion = /\/v\d+[a-z]*$/.test(baseUrl)
+
+  const serviceType = detectedServiceType.value || getDefaultServiceTypeValue()
+  let endpoint = ''
+  if (props.channelType === 'responses') {
+    if (serviceType === 'responses') {
+      endpoint = '/responses'
+    } else if (serviceType === 'claude') {
+      endpoint = '/messages'
+    } else {
+      endpoint = '/chat/completions'
+    }
+  } else {
+    if (serviceType === 'claude') {
+      endpoint = '/messages'
+    } else if (serviceType === 'gemini') {
+      endpoint = '/generateContent'
+    } else {
+      endpoint = '/chat/completions'
+    }
+  }
+
+  if (hasVersion || skipVersion) {
+    return baseUrl + endpoint
+  }
+  return baseUrl + '/v1' + endpoint
+}
+
 // 检测 baseUrl 是否有验证错误
 const baseUrlHasError = computed(() => {
   const value = form.baseUrl
@@ -749,6 +794,7 @@ const handleQuickSubmit = () => {
     name: generatedChannelName.value,
     serviceType: detectedServiceType.value || getDefaultServiceTypeValue(),
     baseUrl: detectedBaseUrl.value,
+    baseUrls: detectedBaseUrls.value,
     apiKeys: detectedApiKeys.value,
     modelMapping: {}
   }
@@ -1307,6 +1353,18 @@ onUnmounted(() => {
 
 .detection-status-card {
   background: rgba(var(--v-theme-surface-variant), 0.3);
+}
+
+/* 多 Base URL 项目样式 */
+.base-url-item {
+  padding: 6px 10px;
+  background: rgba(var(--v-theme-surface-variant), 0.4);
+  border-radius: 6px;
+  border-left: 2px solid rgb(var(--v-theme-success));
+}
+
+.base-url-item + .base-url-item {
+  margin-top: 4px;
 }
 
 .mode-toggle-btn {

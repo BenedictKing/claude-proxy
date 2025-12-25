@@ -141,12 +141,12 @@ export const isValidUrl = (token: string): boolean => {
 
 /**
  * 从输入中提取所有 token
- * 按空白/逗号/分号/换行/引号（中英文）/%20 分割
+ * 按空白/逗号/分号/换行/引号（中英文）/等号/%20 分割
  */
 const extractTokens = (input: string): string[] => {
   return input
     .replace(/%20/g, ' ')
-    .split(/[\n\s,;"\u201c\u201d'\u2018\u2019]+/)
+    .split(/[\n\s,;="\u201c\u201d'\u2018\u2019]+/)
     .filter(t => t.length > 0)
 }
 
@@ -191,21 +191,26 @@ export const detectServiceType = (url: string): 'openai' | 'gemini' | 'claude' |
   return detectServiceTypeAndCleanUrl(url).serviceType
 }
 
+/** Base URL 最大数量限制 */
+const MAX_BASE_URLS = 10
+
 /**
  * 解析快速输入内容，提取 URL 和 API Keys
  *
  * 支持的格式：
- * 1. 纯文本：URL 和 API Key 以空白/逗号/分号分隔
+ * 1. 纯文本：URL 和 API Key 以空白/逗号/分号/等号分隔
  * 2. 引号包裹：从 "xxx" 或 'xxx' 中提取内容（支持 JSON 配置格式）
+ * 3. 多 Base URL：所有符合 HTTP 链接格式的都作为 baseUrl（最多 10 个）
  */
 export const parseQuickInput = (
   input: string
 ): {
   detectedBaseUrl: string
+  detectedBaseUrls: string[]
   detectedApiKeys: string[]
   detectedServiceType: 'openai' | 'gemini' | 'claude' | 'responses' | null
 } => {
-  let detectedBaseUrl = ''
+  const detectedBaseUrls: string[] = []
   let detectedServiceType: 'openai' | 'gemini' | 'claude' | 'responses' | null = null
   const detectedApiKeys: string[] = []
 
@@ -213,16 +218,26 @@ export const parseQuickInput = (
 
   for (const token of tokens) {
     if (isValidUrl(token)) {
-      if (!detectedBaseUrl) {
-        const endsWithHash = token.endsWith('#')
-        let url = endsWithHash ? token.slice(0, -1) : token
-        url = url.replace(/\/$/, '')
-        const fullUrl = endsWithHash ? url + '#' : url
+      // 限制最大 URL 数量
+      if (detectedBaseUrls.length >= MAX_BASE_URLS) {
+        continue
+      }
 
-        // 检测协议并清理 URL（移除端点路径）
-        const { serviceType, cleanedUrl } = detectServiceTypeAndCleanUrl(fullUrl)
-        detectedBaseUrl = cleanedUrl
-        detectedServiceType = serviceType
+      const endsWithHash = token.endsWith('#')
+      let url = endsWithHash ? token.slice(0, -1) : token
+      url = url.replace(/\/$/, '')
+      const fullUrl = endsWithHash ? url + '#' : url
+
+      // 检测协议并清理 URL（移除端点路径）
+      const { serviceType, cleanedUrl } = detectServiceTypeAndCleanUrl(fullUrl)
+
+      // 避免重复
+      if (!detectedBaseUrls.includes(cleanedUrl)) {
+        detectedBaseUrls.push(cleanedUrl)
+        // 使用第一个 URL 的服务类型
+        if (!detectedServiceType) {
+          detectedServiceType = serviceType
+        }
       }
       continue
     }
@@ -232,5 +247,10 @@ export const parseQuickInput = (
     }
   }
 
-  return { detectedBaseUrl, detectedApiKeys, detectedServiceType }
+  return {
+    detectedBaseUrl: detectedBaseUrls[0] || '',
+    detectedBaseUrls,
+    detectedApiKeys,
+    detectedServiceType
+  }
 }
