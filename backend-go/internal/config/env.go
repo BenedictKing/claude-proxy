@@ -6,17 +6,16 @@ import (
 )
 
 type EnvConfig struct {
-	Port                int
-	Env                 string
-	EnableWebUI         bool
-	ProxyAccessKey      string
-	LoadBalanceStrategy string
-	LogLevel            string
-	EnableRequestLogs   bool
-	EnableResponseLogs  bool
-	QuietPollingLogs    bool   // 静默轮询端点日志
-	RawLogOutput        bool   // 原始日志输出（不缩进、不截断、不重排序）
-	SSEDebugLevel       string // SSE 调试级别: off, summary, full
+	Port               int
+	Env                string
+	EnableWebUI        bool
+	ProxyAccessKey     string
+	LogLevel           string
+	EnableRequestLogs  bool
+	EnableResponseLogs bool
+	QuietPollingLogs   bool   // 静默轮询端点日志
+	RawLogOutput       bool   // 原始日志输出（不缩进、不截断、不重排序）
+	SSEDebugLevel      string // SSE 调试级别: off, summary, full
 
 	RequestTimeout     int
 	MaxConcurrentReqs  int
@@ -50,17 +49,16 @@ func NewEnvConfig() *EnvConfig {
 	}
 
 	return &EnvConfig{
-		Port:                getEnvAsInt("PORT", 3000),
-		Env:                 env,
-		EnableWebUI:         getEnv("ENABLE_WEB_UI", "true") != "false",
-		ProxyAccessKey:      getEnv("PROXY_ACCESS_KEY", "your-proxy-access-key"),
-		LoadBalanceStrategy: getEnv("LOAD_BALANCE_STRATEGY", "failover"),
-		LogLevel:            getEnv("LOG_LEVEL", "info"),
-		EnableRequestLogs:   getEnv("ENABLE_REQUEST_LOGS", "true") != "false",
-		EnableResponseLogs:  getEnv("ENABLE_RESPONSE_LOGS", "true") != "false",
-		QuietPollingLogs:    getEnv("QUIET_POLLING_LOGS", "true") != "false",
-		RawLogOutput:        getEnv("RAW_LOG_OUTPUT", "false") == "true",
-		SSEDebugLevel:       getEnv("SSE_DEBUG_LEVEL", "off"),
+		Port:               getEnvAsInt("PORT", 3000),
+		Env:                env,
+		EnableWebUI:        getEnv("ENABLE_WEB_UI", "true") != "false",
+		ProxyAccessKey:     getEnv("PROXY_ACCESS_KEY", "your-proxy-access-key"),
+		LogLevel:           getEnv("LOG_LEVEL", "info"),
+		EnableRequestLogs:  getEnv("ENABLE_REQUEST_LOGS", "true") != "false",
+		EnableResponseLogs: getEnv("ENABLE_RESPONSE_LOGS", "true") != "false",
+		QuietPollingLogs:   getEnv("QUIET_POLLING_LOGS", "true") != "false",
+		RawLogOutput:       getEnv("RAW_LOG_OUTPUT", "false") == "true",
+		SSEDebugLevel:      getEnv("SSE_DEBUG_LEVEL", "off"),
 
 		RequestTimeout:     getEnvAsInt("REQUEST_TIMEOUT", 300000),
 		MaxConcurrentReqs:  getEnvAsInt("MAX_CONCURRENT_REQUESTS", 100),

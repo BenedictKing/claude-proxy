@@ -27,8 +27,6 @@ services:
       - PROXY_ACCESS_KEY=your-super-strong-secret-key
       # 日志级别 (error, warn, info, debug)
       - LOG_LEVEL=warn
-      # 负载均衡策略 (round-robin, random, failover)
-      - LOAD_BALANCE_STRATEGY=failover
       # 是否启用请求日志
       - ENABLE_REQUEST_LOGS=false
       # 是否启用响应日志

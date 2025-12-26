@@ -4,6 +4,24 @@
 
 ---
 
+## [v2.4.2] - 2025-12-26
+
+### 🐛 修复
+
+- **原始请求日志修复** - 修复多渠道模式下原始请求头/请求体日志不显示的问题：
+  - 将 `LogOriginalRequest` 调用移至 Handler 入口处，确保无论单/多渠道模式都只记录一次
+  - 移除单渠道处理函数中重复的日志调用和未使用变量
+  - 同时修复 Messages 和 Responses 两个处理器
+
+### 🧹 清理
+
+- **移除废弃环境变量 `LOAD_BALANCE_STRATEGY`** - 负载均衡策略已迁移至 config.json 热重载配置：
+  - 删除 `env.go` 中 `LoadBalanceStrategy` 字段
+  - 更新 `.env.example`、`docker-compose.yml`、`README.md` 移除相关配置
+  - 更新 `CLAUDE.md` 添加配置方式说明
+
+---
+
 ## [v2.4.0] - 2025-12-26
 
 ### ✨ 改进

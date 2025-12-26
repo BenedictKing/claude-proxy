@@ -46,6 +46,9 @@ func Handler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager, channel
 		// 提取 user_id 用于 Trace 亲和性
 		userID := common.ExtractUserID(bodyBytes)
 
+		// 记录原始请求信息（仅在入口处记录一次）
+		common.LogOriginalRequest(c, bodyBytes, envCfg, "Messages")
+
 		// 检查是否为多渠道模式
 		isMultiChannel := channelScheduler.IsMultiChannelMode(false)
 
@@ -297,7 +300,6 @@ func handleSingleChannel(
 	baseURLs := upstream.GetAllBaseURLs()
 
 	var lastError error
-	var lastOriginalBodyBytes []byte
 	var lastFailoverError *common.FailoverError
 	deprioritizeCandidates := make(map[string]bool)
 
@@ -337,22 +339,15 @@ func handleSingleChannel(
 			originalBaseURL := upstream.BaseURL
 			upstream.BaseURL = currentBaseURL
 
-			providerReq, originalBodyBytes, err := provider.ConvertToProviderRequest(c, upstream, apiKey)
+			providerReq, _, err := provider.ConvertToProviderRequest(c, upstream, apiKey)
 			upstream.BaseURL = originalBaseURL // 恢复
 
 			if err != nil {
 				lastError = err
 				failedKeys[apiKey] = true
 				channelScheduler.RecordFailure(currentBaseURL, apiKey, false)
-				if originalBodyBytes != nil {
-					lastOriginalBodyBytes = originalBodyBytes
-				}
 				continue
 			}
-			lastOriginalBodyBytes = originalBodyBytes
-
-			// 请求日志记录
-			common.LogOriginalRequest(c, lastOriginalBodyBytes, envCfg, "Messages ")
 
 			resp, err := common.SendRequest(providerReq, upstream, envCfg, claudeReq.Stream)
 			if err != nil {
