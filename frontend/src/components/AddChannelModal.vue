@@ -52,9 +52,7 @@
                     <div v-else class="d-flex flex-column ga-2 mt-1">
                       <div v-for="(url, index) in detectedBaseUrls" :key="url" class="base-url-item">
                         <div class="text-caption text-success">{{ url }}</div>
-                        <div class="text-caption text-medium-emphasis">
-                          预期请求: {{ getExpectedRequestUrl(url) }}
-                        </div>
+                        <div class="text-caption text-medium-emphasis">预期请求: {{ getExpectedRequestUrl(url) }}</div>
                       </div>
                     </div>
                   </div>
@@ -162,22 +160,9 @@
               <!-- 固定高度的提示区域，防止布局跳动；有错误时不显示 -->
               <div v-show="formExpectedRequestUrls.length > 0 && !baseUrlHasError" class="base-url-hint">
                 <div v-for="(item, index) in formExpectedRequestUrls" :key="index" class="expected-request-item">
-                  <span class="text-caption text-medium-emphasis">
-                    预期请求: {{ item.expectedUrl }}
-                  </span>
+                  <span class="text-caption text-medium-emphasis"> 预期请求: {{ item.expectedUrl }} </span>
                 </div>
               </div>
-              <!-- BaseURL 策略选择（单 URL 时禁用显示 failover） -->
-              <v-select
-                v-model="form.baseUrlStrategy"
-                label="BaseURL 策略"
-                :items="baseUrlStrategyOptions"
-                :disabled="!hasMultipleBaseUrls"
-                variant="outlined"
-                density="compact"
-                class="mt-2"
-                hide-details
-              />
             </v-col>
 
             <!-- 官网/控制台（可选） -->
@@ -435,20 +420,23 @@
                       添加
                     </v-btn>
                   </div>
-
-                  <!-- API Key 策略选择（单 Key 时禁用显示 failover） -->
-                  <v-select
-                    v-model="form.apiKeyStrategy"
-                    label="API Key 策略"
-                    :items="apiKeyStrategyOptions"
-                    :disabled="!hasMultipleApiKeys"
-                    variant="outlined"
-                    density="compact"
-                    class="mt-4"
-                    hide-details
-                  />
                 </v-card-text>
               </v-card>
+            </v-col>
+
+            <!-- 描述 -->
+            <v-col cols="12">
+              <v-textarea
+                v-model="form.description"
+                label="描述 (可选)"
+                hint="可选的渠道描述..."
+                persistent-hint
+                prepend-inner-icon="mdi-text"
+                variant="outlined"
+                density="comfortable"
+                rows="3"
+                no-resize
+              />
             </v-col>
 
             <!-- 跳过 TLS 证书验证 -->
@@ -465,21 +453,6 @@
                 </div>
                 <v-switch inset color="warning" hide-details v-model="form.insecureSkipVerify" />
               </div>
-            </v-col>
-
-            <!-- 描述 -->
-            <v-col cols="12">
-              <v-textarea
-                v-model="form.description"
-                label="描述 (可选)"
-                hint="可选的渠道描述..."
-                persistent-hint
-                prepend-inner-icon="mdi-text"
-                variant="outlined"
-                density="comfortable"
-                rows="3"
-                no-resize
-              />
             </v-col>
           </v-row>
         </v-form>
@@ -517,7 +490,11 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useTheme } from 'vuetify'
 import type { Channel } from '../services/api'
-import { isValidApiKey, isValidUrl as isValidQuickInputUrl, parseQuickInput as parseQuickInputUtil } from '../utils/quickInputParser'
+import {
+  isValidApiKey,
+  isValidUrl as isValidQuickInputUrl,
+  parseQuickInput as parseQuickInputUtil
+} from '../utils/quickInputParser'
 
 interface Props {
   show: boolean
@@ -804,9 +781,7 @@ const formExpectedRequestUrls = computed(() => {
 
       const hasVersion = /\/v\d+[a-z]*$/.test(baseUrl)
 
-      const expectedUrl = (hasVersion || skipVersion)
-        ? baseUrl + endpoint
-        : baseUrl + '/v1' + endpoint
+      const expectedUrl = hasVersion || skipVersion ? baseUrl + endpoint : baseUrl + '/v1' + endpoint
 
       return { baseUrl: rawUrl, expectedUrl }
     })
@@ -899,28 +874,22 @@ const form = reactive({
   serviceType: '' as 'openai' | 'gemini' | 'claude' | 'responses' | '',
   baseUrl: '',
   baseUrls: [] as string[],
-  baseUrlStrategy: 'round-robin' as 'failover' | 'round-robin' | 'random',
   website: '',
   insecureSkipVerify: false,
   description: '',
   apiKeys: [] as string[],
-  apiKeyStrategy: 'failover' as 'failover' | 'round-robin' | 'random',
   modelMapping: {} as Record<string, string>
 })
-
-// BaseURL 策略选项
-const baseUrlStrategyOptions = [
-  { title: '轮询 (推荐)', value: 'round-robin' },
-  { title: '随机', value: 'random' },
-  { title: '故障转移', value: 'failover' }
-]
 
 // 多 BaseURL 文本输入（独立变量，保留用户输入的换行）
 const baseUrlsText = ref('')
 
 // 监听 baseUrlsText 变化，同步到 form（仅做基本同步，不修改用户输入）
-watch(baseUrlsText, (val) => {
-  const urls = val.split('\n').map(s => s.trim()).filter(Boolean)
+watch(baseUrlsText, val => {
+  const urls = val
+    .split('\n')
+    .map(s => s.trim())
+    .filter(Boolean)
   if (urls.length === 0) {
     form.baseUrl = ''
     form.baseUrls = []
@@ -932,19 +901,6 @@ watch(baseUrlsText, (val) => {
     form.baseUrls = urls
   }
 })
-
-// 是否有多个 BaseURL
-const hasMultipleBaseUrls = computed(() => form.baseUrls && form.baseUrls.length > 1)
-
-// 是否有多个 API Key
-const hasMultipleApiKeys = computed(() => form.apiKeys && form.apiKeys.length > 1)
-
-// API Key 策略选项（故障转移在首位作为默认值）
-const apiKeyStrategyOptions = [
-  { title: '故障转移 (推荐)', value: 'failover' },
-  { title: '轮询', value: 'round-robin' },
-  { title: '随机', value: 'random' }
-]
 
 // 原始密钥映射 (掩码密钥 -> 原始密钥)
 const originalKeyMap = ref<Map<string, string>>(new Map())
@@ -1001,7 +957,10 @@ const rules = {
   },
   baseUrls: (value: string) => {
     if (!value) return '此字段为必填项'
-    const urls = value.split('\n').map(s => s.trim()).filter(Boolean)
+    const urls = value
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean)
     if (urls.length === 0) return '请至少输入一个 URL'
     for (const url of urls) {
       try {
@@ -1064,12 +1023,10 @@ const resetForm = () => {
   form.serviceType = ''
   form.baseUrl = ''
   form.baseUrls = []
-  form.baseUrlStrategy = 'round-robin'
   form.website = ''
   form.insecureSkipVerify = false
   form.description = ''
   form.apiKeys = []
-  form.apiKeyStrategy = 'failover'
   form.modelMapping = {}
   newApiKey.value = ''
   newMapping.source = ''
@@ -1103,7 +1060,6 @@ const loadChannelData = (channel: Channel) => {
   form.serviceType = channel.serviceType
   form.baseUrl = channel.baseUrl
   form.baseUrls = channel.baseUrls || []
-  form.baseUrlStrategy = channel.baseUrlStrategy || 'round-robin'
   form.website = channel.website || ''
   form.insecureSkipVerify = !!channel.insecureSkipVerify
   form.description = channel.description || ''
@@ -1117,7 +1073,6 @@ const loadChannelData = (channel: Channel) => {
 
   // 直接存储原始密钥，不需要映射关系
   form.apiKeys = [...channel.apiKeys]
-  form.apiKeyStrategy = channel.apiKeyStrategy || 'round-robin'
 
   // 清空原始密钥映射（现在不需要了）
   originalKeyMap.value.clear()
@@ -1249,17 +1204,18 @@ const handleSubmit = async () => {
 
   // 处理 BaseURL：去重（忽略末尾 / 和 # 差异），并移除 UI 专用的尾部 #
   const seenUrls = new Set<string>()
-  const deduplicatedUrls = form.baseUrls.length > 0
-    ? form.baseUrls
-        .map(url => url.trim().replace(/[#/]+$/, ''))
-        .filter(Boolean)
-        .filter(url => {
-          const normalized = url.replace(/[#/]+$/, '')
-          if (seenUrls.has(normalized)) return false
-          seenUrls.add(normalized)
-          return true
-        })
-    : [form.baseUrl.trim().replace(/[#/]+$/, '')].filter(Boolean)
+  const deduplicatedUrls =
+    form.baseUrls.length > 0
+      ? form.baseUrls
+          .map(url => url.trim().replace(/[#/]+$/, ''))
+          .filter(Boolean)
+          .filter(url => {
+            const normalized = url.replace(/[#/]+$/, '')
+            if (seenUrls.has(normalized)) return false
+            seenUrls.add(normalized)
+            return true
+          })
+      : [form.baseUrl.trim().replace(/[#/]+$/, '')].filter(Boolean)
 
   // 构建渠道数据
   const channelData: Omit<Channel, 'index' | 'latency' | 'status'> = {
@@ -1276,11 +1232,7 @@ const handleSubmit = async () => {
   // 多 BaseURL 支持
   if (deduplicatedUrls.length > 1) {
     channelData.baseUrls = deduplicatedUrls
-    channelData.baseUrlStrategy = form.baseUrlStrategy
   }
-
-  // API Key 策略（始终提交，后端会校正单 Key 为 failover）
-  channelData.apiKeyStrategy = form.apiKeyStrategy
 
   emit('save', channelData)
 }

@@ -16,7 +16,24 @@
   - BaseURL 输入框不再自动修改用户输入，仅在提交时进行去重处理
   - 调整预期请求区域下方间距，改善视觉效果
 
+- **API Key/BaseURL 策略简化** - 移除过度设计，采用纯 failover 模式：
+  - 删除 `ResourceAffinityManager` 及相关代码（资源亲和性）
+  - 移除 API Key 策略选择（round-robin/random/failover），始终使用优先级顺序
+  - 移除 BaseURL 策略选择，始终使用优先级顺序并在失败时切换
+  - 前端删除策略选择器，简化渠道配置界面
+  - 保留渠道级 Trace 亲和性（TraceAffinityManager）用于会话一致性
+  - 清理遗留无用代码：`requestCount`/`responsesRequestCount` 字段、`EnableStreamEventDedup` 环境变量
+
 ### 🐛 修复
+
+- **多 BaseURL failover 失效** - 修复当所有 API Key 在首个 BaseURL 失败后不会切换到下一个 BaseURL 的问题：
+  - 重构 `tryChannelWithAllKeys` 函数，采用嵌套循环遍历所有 BaseURL
+  - 重构 `handleSingleChannel` 函数，单渠道模式也支持多 BaseURL failover
+  - 每个 BaseURL 尝试所有 Key 后，若全部失败则自动切换下一个
+  - 每次切换 BaseURL 时重置失败 Key 列表
+  - 同时修复 Messages 和 Responses 两个处理器
+  - 修复 `GetEffectiveBaseURL()` 优先级：临时设置的 `BaseURL` 字段优先于 `BaseURLs` 数组
+  - 移除废弃代码：`MarkBaseURLFailed()`、`baseURLIndex` 字段
 
 - **SSE 流式事件完整性** - 修复 Claude Provider 流式响应可能在事件边界处截断的问题：
   - 改用事件缓冲机制，按空行分隔完整 SSE 事件后再转发

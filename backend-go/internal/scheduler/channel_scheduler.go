@@ -20,7 +20,6 @@ type ChannelScheduler struct {
 	messagesMetricsManager  *metrics.MetricsManager // Messages 渠道指标
 	responsesMetricsManager *metrics.MetricsManager // Responses 渠道指标
 	traceAffinity           *session.TraceAffinityManager
-	resourceAffinity        *session.ResourceAffinityManager // 资源亲和性（BaseURL + Key 索引）
 }
 
 // NewChannelScheduler 创建多渠道调度器
@@ -29,14 +28,12 @@ func NewChannelScheduler(
 	messagesMetrics *metrics.MetricsManager,
 	responsesMetrics *metrics.MetricsManager,
 	traceAffinity *session.TraceAffinityManager,
-	resourceAffinity *session.ResourceAffinityManager,
 ) *ChannelScheduler {
 	return &ChannelScheduler{
 		configManager:           cfgManager,
 		messagesMetricsManager:  messagesMetrics,
 		responsesMetricsManager: responsesMetrics,
 		traceAffinity:           traceAffinity,
-		resourceAffinity:        resourceAffinity,
 	}
 }
 
@@ -335,45 +332,6 @@ func (s *ChannelScheduler) GetResponsesMetricsManager() *metrics.MetricsManager 
 // GetTraceAffinityManager 获取 Trace 亲和性管理器
 func (s *ChannelScheduler) GetTraceAffinityManager() *session.TraceAffinityManager {
 	return s.traceAffinity
-}
-
-// GetResourceAffinityManager 获取资源亲和性管理器
-func (s *ChannelScheduler) GetResourceAffinityManager() *session.ResourceAffinityManager {
-	return s.resourceAffinity
-}
-
-// GetPreferredResourceIndex 获取偏好的资源索引（带越界和健康检查）
-func (s *ChannelScheduler) GetPreferredResourceIndex(channelIndex int, userID string, upstream *config.UpstreamConfig, isResponses bool) (baseURLIdx, apiKeyIdx int, ok bool) {
-	if s.resourceAffinity == nil || upstream == nil {
-		return -1, -1, false
-	}
-
-	baseURLs := upstream.GetAllBaseURLs()
-	baseURLIdx, apiKeyIdx, ok = s.resourceAffinity.GetPreferred(channelIndex, userID, len(baseURLs), len(upstream.APIKeys))
-	if !ok {
-		return -1, -1, false
-	}
-
-	// 检查偏好 Key 是否被熔断
-	preferredKey := upstream.APIKeys[apiKeyIdx]
-	preferredURL := baseURLs[baseURLIdx]
-	if s.getMetricsManager(isResponses).ShouldSuspendKey(preferredURL, preferredKey) {
-		return -1, -1, false
-	}
-
-	// 检查偏好 Key 是否在冷却期
-	if s.configManager.IsKeyFailed(preferredKey) {
-		return -1, -1, false
-	}
-
-	return baseURLIdx, apiKeyIdx, true
-}
-
-// SetResourceAffinity 记录成功使用的资源索引
-func (s *ChannelScheduler) SetResourceAffinity(channelIndex int, userID string, baseURLIdx, apiKeyIdx int) {
-	if s.resourceAffinity != nil && userID != "" {
-		s.resourceAffinity.Set(channelIndex, userID, baseURLIdx, apiKeyIdx)
-	}
 }
 
 // ResetChannelMetrics 重置渠道所有 Key 的指标（用于恢复熔断）

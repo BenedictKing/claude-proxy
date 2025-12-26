@@ -4,13 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/BenedictKing/claude-proxy/internal/utils"
@@ -21,11 +19,9 @@ import (
 // UpstreamConfig 上游配置
 type UpstreamConfig struct {
 	BaseURL            string            `json:"baseUrl"`
-	BaseURLs           []string          `json:"baseUrls,omitempty"`        // 多 BaseURL 支持
-	BaseURLStrategy    string            `json:"baseUrlStrategy,omitempty"` // failover, round-robin, random
+	BaseURLs           []string          `json:"baseUrls,omitempty"` // 多 BaseURL 支持（failover 模式）
 	APIKeys            []string          `json:"apiKeys"`
-	APIKeyStrategy     string            `json:"apiKeyStrategy,omitempty"` // 渠道级 API Key 策略：failover, round-robin, random
-	ServiceType        string            `json:"serviceType"`              // gemini, openai, claude
+	ServiceType        string            `json:"serviceType"` // gemini, openai, claude
 	Name               string            `json:"name,omitempty"`
 	Description        string            `json:"description,omitempty"`
 	Website            string            `json:"website,omitempty"`
@@ -35,8 +31,6 @@ type UpstreamConfig struct {
 	Priority       int        `json:"priority"`                 // 渠道优先级（数字越小优先级越高，默认按索引）
 	Status         string     `json:"status"`                   // 渠道状态：active（正常）, suspended（暂停）, disabled（备用池）
 	PromotionUntil *time.Time `json:"promotionUntil,omitempty"` // 促销期截止时间，在此期间内优先使用此渠道（忽略trace亲和）
-	// 内部状态（不序列化）
-	baseURLIndex uint64 // 当前 BaseURL 索引，用于 round-robin（使用 atomic 操作）
 }
 
 // UpstreamUpdate 用于部分更新 UpstreamConfig
@@ -45,9 +39,7 @@ type UpstreamUpdate struct {
 	ServiceType        *string           `json:"serviceType"`
 	BaseURL            *string           `json:"baseUrl"`
 	BaseURLs           []string          `json:"baseUrls"`
-	BaseURLStrategy    *string           `json:"baseUrlStrategy"`
 	APIKeys            []string          `json:"apiKeys"`
-	APIKeyStrategy     *string           `json:"apiKeyStrategy"`
 	Description        *string           `json:"description"`
 	Website            *string           `json:"website"`
 	InsecureSkipVerify *bool             `json:"insecureSkipVerify"`
@@ -81,17 +73,15 @@ type FailedKey struct {
 
 // ConfigManager 配置管理器
 type ConfigManager struct {
-	mu                    sync.RWMutex
-	config                Config
-	configFile            string
-	requestCount          int64 // 使用 int64 支持原子操作
-	responsesRequestCount int64 // 使用 int64 支持原子操作
-	watcher               *fsnotify.Watcher
-	failedKeysCache       map[string]*FailedKey
-	keyRecoveryTime       time.Duration
-	maxFailureCount       int
-	stopChan              chan struct{} // 用于通知 goroutine 停止
-	closeOnce             sync.Once     // 确保 Close 只执行一次
+	mu              sync.RWMutex
+	config          Config
+	configFile      string
+	watcher         *fsnotify.Watcher
+	failedKeysCache map[string]*FailedKey
+	keyRecoveryTime time.Duration
+	maxFailureCount int
+	stopChan        chan struct{} // 用于通知 goroutine 停止
+	closeOnce       sync.Once     // 确保 Close 只执行一次
 }
 
 const (
@@ -437,7 +427,6 @@ func (cm *ConfigManager) GetConfig() Config {
 
 // GetCurrentUpstream 获取当前上游配置
 // 优先选择第一个 active 状态的渠道，若无则回退到第一个渠道
-// 注意：返回的是原始指针，调用方对 baseURLIndex 的修改会被保留
 func (cm *ConfigManager) GetCurrentUpstream() (*UpstreamConfig, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
@@ -458,27 +447,18 @@ func (cm *ConfigManager) GetCurrentUpstream() (*UpstreamConfig, error) {
 	return &cm.config.Upstream[0], nil
 }
 
-// GetNextAPIKey 获取下一个 API 密钥（Messages 负载均衡）
+// GetNextAPIKey 获取下一个 API 密钥（纯 failover 模式）
 func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[string]bool) (string, error) {
-	return cm.getNextAPIKeyWithStrategy(upstream, failedKeys, cm.config.LoadBalance, &cm.requestCount)
-}
-
-// GetNextResponsesAPIKey 获取下一个 API 密钥（Responses 负载均衡）
-func (cm *ConfigManager) GetNextResponsesAPIKey(upstream *UpstreamConfig, failedKeys map[string]bool) (string, error) {
-	return cm.getNextAPIKeyWithStrategy(upstream, failedKeys, cm.config.ResponsesLoadBalance, &cm.responsesRequestCount)
-}
-
-func (cm *ConfigManager) getNextAPIKeyWithStrategy(upstream *UpstreamConfig, failedKeys map[string]bool, globalStrategy string, requestCounter *int64) (string, error) {
 	if len(upstream.APIKeys) == 0 {
 		return "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)
 	}
 
-	// 单 Key 强制 failover（直接返回）
+	// 单 Key 直接返回
 	if len(upstream.APIKeys) == 1 {
 		return upstream.APIKeys[0], nil
 	}
 
-	// 综合考虑临时失败密钥和内存中的失败密钥
+	// 筛选可用密钥：排除临时失败密钥和内存中的失败密钥
 	availableKeys := []string{}
 	for _, key := range upstream.APIKeys {
 		if !failedKeys[key] && !cm.isKeyFailed(key) {
@@ -487,77 +467,48 @@ func (cm *ConfigManager) getNextAPIKeyWithStrategy(upstream *UpstreamConfig, fai
 	}
 
 	if len(availableKeys) == 0 {
-		// 如果所有密钥都失效,检查是否有可以恢复的密钥
-		allFailedKeys := []string{}
+		// 如果所有密钥都失效，尝试选择失败时间最早的密钥（恢复尝试）
+		var oldestFailedKey string
+		oldestTime := time.Now()
+
+		cm.mu.RLock()
 		for _, key := range upstream.APIKeys {
-			if failedKeys[key] || cm.isKeyFailed(key) {
-				allFailedKeys = append(allFailedKeys, key)
-			}
-		}
-
-		if len(allFailedKeys) == len(upstream.APIKeys) {
-			// 如果所有密钥都在内存失败缓存中,尝试选择失败时间最早的密钥
-			var oldestFailedKey string
-			oldestTime := time.Now()
-
-			cm.mu.RLock()
-			for _, key := range upstream.APIKeys {
-				if !failedKeys[key] { // 排除本次请求已经尝试过的密钥
-					if failure, exists := cm.failedKeysCache[key]; exists {
-						if failure.Timestamp.Before(oldestTime) {
-							oldestTime = failure.Timestamp
-							oldestFailedKey = key
-						}
+			if !failedKeys[key] { // 排除本次请求已经尝试过的密钥
+				if failure, exists := cm.failedKeysCache[key]; exists {
+					if failure.Timestamp.Before(oldestTime) {
+						oldestTime = failure.Timestamp
+						oldestFailedKey = key
 					}
 				}
 			}
-			cm.mu.RUnlock()
+		}
+		cm.mu.RUnlock()
 
-			if oldestFailedKey != "" {
-				log.Printf("[Config-Key] 警告: 所有密钥都失效，尝试最早失败的密钥: %s", utils.MaskAPIKey(oldestFailedKey))
-				return oldestFailedKey, nil
-			}
+		if oldestFailedKey != "" {
+			log.Printf("[Config-Key] 警告: 所有密钥都失效，尝试最早失败的密钥: %s", utils.MaskAPIKey(oldestFailedKey))
+			return oldestFailedKey, nil
 		}
 
 		return "", fmt.Errorf("上游 %s 的所有API密钥都暂时不可用", upstream.Name)
 	}
 
-	// 优先使用渠道级策略，若未设置则回退到全局策略
-	effectiveStrategy := upstream.APIKeyStrategy
-	if effectiveStrategy == "" {
-		effectiveStrategy = globalStrategy
-	}
-
-	// 根据负载均衡策略选择密钥
-	switch effectiveStrategy {
-	case "round-robin":
-		count := atomic.AddInt64(requestCounter, 1)
-		index := int((count - 1) % int64(len(availableKeys)))
-		selectedKey := availableKeys[index]
-		log.Printf("[Config-Key] 轮询选择密钥 %s (%d/%d)", utils.MaskAPIKey(selectedKey), index+1, len(availableKeys))
-		return selectedKey, nil
-
-	case "random":
-		index := rand.Intn(len(availableKeys))
-		selectedKey := availableKeys[index]
-		log.Printf("[Config-Key] 随机选择密钥 %s (%d/%d)", utils.MaskAPIKey(selectedKey), index+1, len(availableKeys))
-		return selectedKey, nil
-
-	case "failover":
-		fallthrough
-	default:
-		selectedKey := availableKeys[0]
-		// 获取该密钥在原始列表中的索引
-		keyIndex := 0
-		for i, key := range upstream.APIKeys {
-			if key == selectedKey {
-				keyIndex = i + 1
-				break
-			}
+	// 纯 failover：按优先级顺序选择第一个可用密钥
+	selectedKey := availableKeys[0]
+	// 获取该密钥在原始列表中的索引
+	keyIndex := 0
+	for i, key := range upstream.APIKeys {
+		if key == selectedKey {
+			keyIndex = i + 1
+			break
 		}
-		log.Printf("[Config-Key] 故障转移选择密钥 %s (%d/%d)", utils.MaskAPIKey(selectedKey), keyIndex, len(upstream.APIKeys))
-		return selectedKey, nil
 	}
+	log.Printf("[Config-Key] 故障转移选择密钥 %s (%d/%d)", utils.MaskAPIKey(selectedKey), keyIndex, len(upstream.APIKeys))
+	return selectedKey, nil
+}
+
+// GetNextResponsesAPIKey 获取下一个 API 密钥（Responses 负载均衡 - 纯 failover 模式）
+func (cm *ConfigManager) GetNextResponsesAPIKey(upstream *UpstreamConfig, failedKeys map[string]bool) (string, error) {
+	return cm.GetNextAPIKey(upstream, failedKeys)
 }
 
 // MarkKeyAsFailed 标记密钥失败
@@ -711,14 +662,6 @@ func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig) error {
 	upstream.APIKeys = deduplicateStrings(upstream.APIKeys)
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs)
 
-	// 验证并校正策略（单资源强制 failover）
-	if len(upstream.APIKeys) <= 1 {
-		upstream.APIKeyStrategy = "failover"
-	}
-	if len(upstream.GetAllBaseURLs()) <= 1 {
-		upstream.BaseURLStrategy = "failover"
-	}
-
 	cm.config.Upstream = append(cm.config.Upstream, upstream)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -750,9 +693,6 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 	if updates.BaseURLs != nil {
 		upstream.BaseURLs = deduplicateBaseURLs(updates.BaseURLs)
 	}
-	if updates.BaseURLStrategy != nil {
-		upstream.BaseURLStrategy = *updates.BaseURLStrategy
-	}
 	if updates.ServiceType != nil {
 		upstream.ServiceType = *updates.ServiceType
 	}
@@ -774,9 +714,6 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 		}
 		upstream.APIKeys = deduplicateStrings(updates.APIKeys)
 	}
-	if updates.APIKeyStrategy != nil {
-		upstream.APIKeyStrategy = *updates.APIKeyStrategy
-	}
 	if updates.ModelMapping != nil {
 		upstream.ModelMapping = updates.ModelMapping
 	}
@@ -791,14 +728,6 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 	}
 	if updates.PromotionUntil != nil {
 		upstream.PromotionUntil = updates.PromotionUntil
-	}
-
-	// 验证并校正策略（单资源强制 failover）
-	if len(upstream.APIKeys) <= 1 {
-		upstream.APIKeyStrategy = "failover"
-	}
-	if len(upstream.GetAllBaseURLs()) <= 1 {
-		upstream.BaseURLStrategy = "failover"
 	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -929,7 +858,9 @@ func (cm *ConfigManager) SetResponsesLoadBalance(strategy string) error {
 }
 
 func validateLoadBalanceStrategy(strategy string) error {
-	if strategy != "round-robin" && strategy != "random" && strategy != "failover" {
+	// 只接受 failover 策略（round-robin 和 random 已移除）
+	// 为兼容旧配置，仍允许旧值但静默忽略
+	if strategy != "failover" && strategy != "round-robin" && strategy != "random" {
 		return fmt.Errorf("无效的负载均衡策略: %s", strategy)
 	}
 	return nil
@@ -1131,7 +1062,6 @@ func RedirectModel(model string, upstream *UpstreamConfig) string {
 
 // GetCurrentResponsesUpstream 获取当前 Responses 上游配置
 // 优先选择第一个 active 状态的渠道，若无则回退到第一个渠道
-// 注意：返回的是原始指针，调用方对 baseURLIndex 的修改会被保留
 func (cm *ConfigManager) GetCurrentResponsesUpstream() (*UpstreamConfig, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
@@ -1166,14 +1096,6 @@ func (cm *ConfigManager) AddResponsesUpstream(upstream UpstreamConfig) error {
 	upstream.APIKeys = deduplicateStrings(upstream.APIKeys)
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs)
 
-	// 验证并校正策略（单资源强制 failover）
-	if len(upstream.APIKeys) <= 1 {
-		upstream.APIKeyStrategy = "failover"
-	}
-	if len(upstream.GetAllBaseURLs()) <= 1 {
-		upstream.BaseURLStrategy = "failover"
-	}
-
 	cm.config.ResponsesUpstream = append(cm.config.ResponsesUpstream, upstream)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -1204,9 +1126,6 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 	}
 	if updates.BaseURLs != nil {
 		upstream.BaseURLs = deduplicateBaseURLs(updates.BaseURLs)
-	}
-	if updates.BaseURLStrategy != nil {
-		upstream.BaseURLStrategy = *updates.BaseURLStrategy
 	}
 	if updates.ServiceType != nil {
 		upstream.ServiceType = *updates.ServiceType
@@ -1243,17 +1162,6 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 	}
 	if updates.PromotionUntil != nil {
 		upstream.PromotionUntil = updates.PromotionUntil
-	}
-	if updates.APIKeyStrategy != nil {
-		upstream.APIKeyStrategy = *updates.APIKeyStrategy
-	}
-
-	// 验证并校正策略（单资源强制 failover）
-	if len(upstream.APIKeys) <= 1 {
-		upstream.APIKeyStrategy = "failover"
-	}
-	if len(upstream.GetAllBaseURLs()) <= 1 {
-		upstream.BaseURLStrategy = "failover"
 	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -1484,41 +1392,20 @@ func GetChannelPriority(upstream *UpstreamConfig, index int) int {
 	return upstream.Priority
 }
 
-// GetEffectiveBaseURL 获取当前应使用的 BaseURL
-// 支持多 BaseURL 配置，根据策略选择
-// 注意：failover 策略需要调用方在请求失败时调用 MarkBaseURLFailed()
+// GetEffectiveBaseURL 获取当前应使用的 BaseURL（纯 failover 模式）
+// 优先使用 BaseURL 字段（支持调用方临时覆盖），否则从 BaseURLs 数组获取
 func (u *UpstreamConfig) GetEffectiveBaseURL() string {
-	// 兼容旧配置：没有 BaseURLs 时使用 BaseURL
-	if len(u.BaseURLs) == 0 {
+	// 优先使用 BaseURL（可能被调用方临时设置用于指定本次请求的 URL）
+	if u.BaseURL != "" {
 		return u.BaseURL
 	}
 
-	// 单 BaseURL 强制 failover（与单 Key 行为一致）
-	if len(u.BaseURLs) == 1 {
+	// 回退到 BaseURLs 数组
+	if len(u.BaseURLs) > 0 {
 		return u.BaseURLs[0]
 	}
 
-	// 多 BaseURL 时使用策略
-	strategy := u.BaseURLStrategy
-	if strategy == "" {
-		strategy = "round-robin" // 多 URL 默认使用 round-robin，自动分散负载
-	}
-
-	n := uint64(len(u.BaseURLs))
-	switch strategy {
-	case "round-robin":
-		idx := atomic.AddUint64(&u.baseURLIndex, 1) - 1
-		return u.BaseURLs[idx%n]
-	case "random":
-		return u.BaseURLs[rand.Intn(len(u.BaseURLs))]
-	case "failover":
-		fallthrough
-	default:
-		// failover 策略：使用当前索引指向的 URL
-		// 需要外部调用 MarkBaseURLFailed() 来切换
-		idx := atomic.LoadUint64(&u.baseURLIndex)
-		return u.BaseURLs[idx%n]
-	}
+	return ""
 }
 
 // GetAllBaseURLs 获取所有 BaseURL（用于延迟测试）
@@ -1530,13 +1417,6 @@ func (u *UpstreamConfig) GetAllBaseURLs() []string {
 		return []string{u.BaseURL}
 	}
 	return nil
-}
-
-// MarkBaseURLFailed 标记当前 BaseURL 失败，切换到下一个（用于 failover 策略）
-func (u *UpstreamConfig) MarkBaseURLFailed() {
-	if len(u.BaseURLs) > 1 {
-		atomic.AddUint64(&u.baseURLIndex, 1)
-	}
 }
 
 // SetChannelPromotion 设置渠道促销期

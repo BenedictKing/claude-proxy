@@ -67,10 +67,8 @@ export interface Channel {
   name: string
   serviceType: 'openai' | 'gemini' | 'claude' | 'responses'
   baseUrl: string
-  baseUrls?: string[]                // 多 BaseURL 支持
-  baseUrlStrategy?: 'failover' | 'round-robin' | 'random'
+  baseUrls?: string[]                // 多 BaseURL 支持（failover 模式）
   apiKeys: string[]
-  apiKeyStrategy?: 'failover' | 'round-robin' | 'random'  // 渠道级 API Key 策略
   description?: string
   website?: string
   insecureSkipVerify?: boolean
