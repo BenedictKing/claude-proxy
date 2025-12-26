@@ -224,3 +224,7 @@ test-*.ts
 
 .snow/
 refs/
+
+# 临时调查文档
+backend-go/cmd/
+docs/claude-code-investigation-*.md
