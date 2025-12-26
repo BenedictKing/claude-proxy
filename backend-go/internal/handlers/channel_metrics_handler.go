@@ -539,7 +539,10 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 				"name":               up.Name,
 				"serviceType":        up.ServiceType,
 				"baseUrl":            up.BaseURL,
+				"baseUrls":           up.BaseURLs,
+				"baseUrlStrategy":    up.BaseURLStrategy,
 				"apiKeys":            up.APIKeys,
+				"apiKeyStrategy":     up.APIKeyStrategy,
 				"description":        up.Description,
 				"website":            up.Website,
 				"insecureSkipVerify": up.InsecureSkipVerify,
@@ -547,6 +550,7 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 				"latency":            nil,
 				"status":             status,
 				"priority":           priority,
+				"promotionUntil":     up.PromotionUntil,
 			}
 		}
 

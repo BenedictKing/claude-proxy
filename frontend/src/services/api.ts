@@ -84,6 +84,7 @@ export interface Channel {
   metrics?: ChannelMetrics   // 实时指标
   suspendReason?: string     // 熔断原因
   promotionUntil?: string    // 促销期截止时间（ISO 格式）
+  latencyTestTime?: number   // 延迟测试时间戳（用于 5 分钟后自动清除显示）
 }
 
 export interface ChannelsResponse {

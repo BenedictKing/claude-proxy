@@ -646,9 +646,10 @@ const pingChannel = async (channelId: number) => {
     const channel = data.channels?.find(c => c.index === channelId)
     if (channel) {
       channel.latency = result.latency
+      channel.latencyTestTime = Date.now()  // 记录测试时间，用于 5 分钟后清除
       channel.status = result.success ? 'healthy' : 'error'
     }
-    showToast(`延迟测试完成: ${result.latency}ms`, result.success ? 'success' : 'warning')
+    // 不再使用 Toast，延迟结果直接显示在渠道列表中
   } catch (error) {
     showToast(`延迟测试失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error')
   }
@@ -661,14 +662,16 @@ const pingAllChannels = async () => {
   try {
     const results = await api.pingAllChannels()
     const data = activeTab.value === 'messages' ? channelsData.value : responsesChannelsData.value
+    const now = Date.now()
     results.forEach(result => {
       const channel = data.channels?.find(c => c.index === result.id)
       if (channel) {
         channel.latency = result.latency
+        channel.latencyTestTime = now  // 记录测试时间，用于 5 分钟后清除
         channel.status = result.status as 'healthy' | 'error'
       }
     })
-    showToast('全部渠道延迟测试完成', 'success')
+    // 不再使用 Toast，延迟结果直接显示在渠道列表中
   } catch (error) {
     showToast(`批量延迟测试失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error')
   } finally {

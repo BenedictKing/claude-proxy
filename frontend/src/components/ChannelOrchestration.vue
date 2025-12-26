@@ -157,9 +157,9 @@
             <!-- 延迟显示 -->
             <div class="channel-latency" @click.stop>
               <v-chip
-                v-if="element.latency !== undefined && element.latency !== null"
+                v-if="isLatencyValid(element)"
                 size="x-small"
-                :color="getLatencyColor(element.latency)"
+                :color="getLatencyColor(element.latency!)"
                 variant="tonal"
               >
                 {{ element.latency }}ms
@@ -361,7 +361,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import draggable from 'vuedraggable'
 import { api, type Channel, type ChannelMetrics, type ChannelStatus, type TimeWindowStats } from '../services/api'
 import ChannelStatusBadge from './ChannelStatusBadge.vue'
@@ -405,6 +405,12 @@ const schedulerStats = ref<{
 } | null>(null)
 const isLoadingMetrics = ref(false)
 const isSavingOrder = ref(false)
+
+// 延迟测试结果有效期（5 分钟）
+const LATENCY_VALID_DURATION = 5 * 60 * 1000
+// 用于触发响应式更新的时间戳
+const currentTime = ref(Date.now())
+let latencyCheckTimer: ReturnType<typeof setInterval> | null = null
 
 // 图表展开状态
 const expandedChannelIndex = ref<number | null>(null)
@@ -516,6 +522,16 @@ const getLatencyColor = (latency: number): string => {
   if (latency < 500) return 'success'
   if (latency < 1000) return 'warning'
   return 'error'
+}
+
+// 判断延迟测试结果是否仍然有效（5 分钟内）
+const isLatencyValid = (channel: Channel): boolean => {
+  // 没有延迟值，不显示
+  if (channel.latency === undefined || channel.latency === null) return false
+  // 没有测试时间戳（兼容旧数据），不显示
+  if (!channel.latencyTestTime) return false
+  // 检查是否在有效期内（使用 currentTime.value 触发响应式更新）
+  return (currentTime.value - channel.latencyTestTime) < LATENCY_VALID_DURATION
 }
 
 // 判断渠道是否处于促销期
@@ -686,9 +702,21 @@ const handleDeleteChannel = (channel: Channel) => {
   emit('delete', channel.index)
 }
 
-// 组件挂载时加载指标
+// 组件挂载时加载指标并启动延迟过期检查定时器
 onMounted(() => {
   refreshMetrics()
+  // 每 30 秒更新一次 currentTime，触发延迟显示的响应式更新
+  latencyCheckTimer = setInterval(() => {
+    currentTime.value = Date.now()
+  }, 30000)
+})
+
+// 组件卸载时清理定时器
+onUnmounted(() => {
+  if (latencyCheckTimer) {
+    clearInterval(latencyCheckTimer)
+    latencyCheckTimer = null
+  }
 })
 
 // 暴露方法给父组件
