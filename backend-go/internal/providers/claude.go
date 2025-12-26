@@ -125,20 +125,39 @@ func (p *ClaudeProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 
 		toolUseStopEmitted := false
 
+		// 注意：为了让下游的 token 注入/修补逻辑保持正确，这里必须按「完整 SSE 事件」转发。
+		// 上游以空行分隔事件：event/data/id/retry/... + "\n"，空行 => 事件结束。
+		var eventBuf strings.Builder
+
+		flushEvent := func() {
+			if eventBuf.Len() == 0 {
+				return
+			}
+			eventChan <- eventBuf.String()
+			eventBuf.Reset()
+		}
+
 		for scanner.Scan() {
 			line := scanner.Text()
 
-			// 直接转发 SSE 事件（包括空行）
-			if strings.HasPrefix(line, "event:") || strings.HasPrefix(line, "data:") || line == "" {
-				eventChan <- line + "\n"
+			// 检测是否发送了 tool_use 相关的 stop_reason（通常在 data 行中）
+			if strings.Contains(line, `"stop_reason":"tool_use"`) ||
+				strings.Contains(line, `"stop_reason": "tool_use"`) {
+				toolUseStopEmitted = true
+			}
 
-				// 检测是否发送了 tool_use 相关的 stop_reason
-				if strings.Contains(line, `"stop_reason":"tool_use"`) ||
-					strings.Contains(line, `"stop_reason": "tool_use"`) {
-					toolUseStopEmitted = true
-				}
+			// 透传所有 SSE 字段（包括注释、id、retry 等）
+			eventBuf.WriteString(line)
+			eventBuf.WriteString("\n")
+
+			// 空行表示一个 SSE event 结束
+			if line == "" {
+				flushEvent()
 			}
 		}
+
+		// 若上游未以空行结尾，仍尝试把最后的残留事件发出去
+		flushEvent()
 
 		if err := scanner.Err(); err != nil {
 			// 在 tool_use 场景下，客户端主动断开是正常行为

@@ -479,6 +479,27 @@ const showSuccessToast = (message: string) => {
   showToast(message, 'info')
 }
 
+// 合并渠道数据，保留本地的延迟测试结果
+const LATENCY_VALID_DURATION = 5 * 60 * 1000 // 5 分钟有效期
+
+const mergeChannelsWithLocalData = (newChannels: Channel[], existingChannels: Channel[] | undefined): Channel[] => {
+  if (!existingChannels) return newChannels
+
+  const now = Date.now()
+  return newChannels.map(newCh => {
+    const existingCh = existingChannels.find(ch => ch.index === newCh.index)
+    // 只有在 5 分钟有效期内才保留本地延迟测试结果
+    if (existingCh?.latencyTestTime && (now - existingCh.latencyTestTime) < LATENCY_VALID_DURATION) {
+      return {
+        ...newCh,
+        latency: existingCh.latency,
+        latencyTestTime: existingCh.latencyTestTime
+      }
+    }
+    return newCh
+  })
+}
+
 // 主要功能函数
 const refreshChannels = async () => {
   try {
@@ -487,13 +508,13 @@ const refreshChannels = async () => {
 
     if (activeTab.value === 'messages') {
       channelsData.value = {
-        channels: dashboard.channels,
+        channels: mergeChannelsWithLocalData(dashboard.channels, channelsData.value.channels),
         current: channelsData.value.current, // 保留当前选中状态
         loadBalance: dashboard.loadBalance
       }
     } else {
       responsesChannelsData.value = {
-        channels: dashboard.channels,
+        channels: mergeChannelsWithLocalData(dashboard.channels, responsesChannelsData.value.channels),
         current: responsesChannelsData.value.current, // 保留当前选中状态
         loadBalance: dashboard.loadBalance
       }
@@ -1002,16 +1023,16 @@ const startAutoRefresh = () => {
         // 使用合并的 dashboard 接口，减少网络请求
         const dashboard = await api.getChannelDashboard(activeTab.value)
 
-        // 更新渠道数据，保留当前选中状态
+        // 更新渠道数据，保留当前选中状态和本地延迟测试结果
         if (activeTab.value === 'messages') {
           channelsData.value = {
-            channels: dashboard.channels,
+            channels: mergeChannelsWithLocalData(dashboard.channels, channelsData.value.channels),
             current: channelsData.value.current, // 保留当前选中状态
             loadBalance: dashboard.loadBalance
           }
         } else {
           responsesChannelsData.value = {
-            channels: dashboard.channels,
+            channels: mergeChannelsWithLocalData(dashboard.channels, responsesChannelsData.value.channels),
             current: responsesChannelsData.value.current, // 保留当前选中状态
             loadBalance: dashboard.loadBalance
           }
@@ -1048,13 +1069,13 @@ watch(activeTab, async () => {
       const dashboard = await api.getChannelDashboard(activeTab.value)
       if (activeTab.value === 'messages') {
         channelsData.value = {
-          channels: dashboard.channels,
+          channels: mergeChannelsWithLocalData(dashboard.channels, channelsData.value.channels),
           current: channelsData.value.current, // 保留当前选中状态
           loadBalance: dashboard.loadBalance
         }
       } else {
         responsesChannelsData.value = {
-          channels: dashboard.channels,
+          channels: mergeChannelsWithLocalData(dashboard.channels, responsesChannelsData.value.channels),
           current: responsesChannelsData.value.current, // 保留当前选中状态
           loadBalance: dashboard.loadBalance
         }
