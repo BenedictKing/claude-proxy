@@ -160,10 +160,12 @@
                 hide-details="auto"
               />
               <!-- 固定高度的提示区域，防止布局跳动；有错误时不显示 -->
-              <div v-show="formExpectedRequestUrl && !baseUrlHasError" class="base-url-hint">
-                <span class="text-caption text-medium-emphasis">
-                  预期请求: {{ formExpectedRequestUrl }}
-                </span>
+              <div v-show="formExpectedRequestUrls.length > 0 && !baseUrlHasError" class="base-url-hint">
+                <div v-for="(item, index) in formExpectedRequestUrls" :key="index" class="expected-request-item">
+                  <span class="text-caption text-medium-emphasis">
+                    预期请求: {{ item.expectedUrl }}
+                  </span>
+                </div>
               </div>
               <!-- BaseURL 策略选择（单 URL 时禁用显示 failover） -->
               <v-select
@@ -190,37 +192,6 @@
                 type="url"
                 :rules="[rules.urlOptional]"
                 :error-messages="errors.website"
-              />
-            </v-col>
-
-            <!-- 跳过 TLS 证书验证 -->
-            <v-col cols="12">
-              <div class="d-flex align-center justify-space-between">
-                <div class="d-flex align-center ga-2">
-                  <v-icon color="warning">mdi-shield-alert</v-icon>
-                  <div>
-                    <div class="text-body-1 font-weight-medium">跳过 TLS 证书验证</div>
-                    <div class="text-caption text-medium-emphasis">
-                      仅在自签名或域名不匹配时临时启用，生产环境请关闭
-                    </div>
-                  </div>
-                </div>
-                <v-switch inset color="warning" hide-details v-model="form.insecureSkipVerify" />
-              </div>
-            </v-col>
-
-            <!-- 描述 -->
-            <v-col cols="12">
-              <v-textarea
-                v-model="form.description"
-                label="描述 (可选)"
-                hint="可选的渠道描述..."
-                persistent-hint
-                prepend-inner-icon="mdi-text"
-                variant="outlined"
-                density="comfortable"
-                rows="3"
-                no-resize
               />
             </v-col>
 
@@ -479,6 +450,37 @@
                 </v-card-text>
               </v-card>
             </v-col>
+
+            <!-- 跳过 TLS 证书验证 -->
+            <v-col cols="12">
+              <div class="d-flex align-center justify-space-between">
+                <div class="d-flex align-center ga-2">
+                  <v-icon color="warning">mdi-shield-alert</v-icon>
+                  <div>
+                    <div class="text-body-1 font-weight-medium">跳过 TLS 证书验证</div>
+                    <div class="text-caption text-medium-emphasis">
+                      仅在自签名或域名不匹配时临时启用，生产环境请关闭
+                    </div>
+                  </div>
+                </div>
+                <v-switch inset color="warning" hide-details v-model="form.insecureSkipVerify" />
+              </div>
+            </v-col>
+
+            <!-- 描述 -->
+            <v-col cols="12">
+              <v-textarea
+                v-model="form.description"
+                label="描述 (可选)"
+                hint="可选的渠道描述..."
+                persistent-hint
+                prepend-inner-icon="mdi-text"
+                variant="outlined"
+                density="comfortable"
+                rows="3"
+                no-resize
+              />
+            </v-col>
           </v-row>
         </v-form>
       </v-card-text>
@@ -556,8 +558,16 @@ let formBaseUrlPreviewTimer: number | null = null
 const toggleMode = () => {
   if (isQuickMode.value) {
     // 从快速模式切换到详细模式：始终用检测到的值覆盖表单
-    if (detectedBaseUrl.value) {
+    if (detectedBaseUrls.value.length > 0) {
+      // 多个 BaseURL
+      form.baseUrl = detectedBaseUrls.value[0]
+      form.baseUrls = [...detectedBaseUrls.value]
+      baseUrlsText.value = detectedBaseUrls.value.join('\n')
+    } else if (detectedBaseUrl.value) {
+      // 单个 BaseURL
       form.baseUrl = detectedBaseUrl.value
+      form.baseUrls = []
+      baseUrlsText.value = detectedBaseUrl.value
     }
     if (detectedApiKeys.value.length > 0) {
       form.apiKeys = [...detectedApiKeys.value]
@@ -746,22 +756,21 @@ const baseUrlHasError = computed(() => {
   }
 })
 
-// 详细模式预期请求 URL（根据表单选择的 serviceType）
-const formExpectedRequestUrl = computed(() => {
-  if (!form.serviceType) return ''
-  const rawBaseUrl = formBaseUrlPreview.value.trim()
-  if (!rawBaseUrl || !isValidUrl(rawBaseUrl)) return ''
+// 详细模式所有 URL 的预期请求（支持多 BaseURL）
+const formExpectedRequestUrls = computed(() => {
+  if (!form.serviceType) return []
 
-  let baseUrl = rawBaseUrl
-  const skipVersion = baseUrl.endsWith('#')
-  if (skipVersion) {
-    baseUrl = baseUrl.slice(0, -1)
+  // 收集所有 URL
+  const urls: string[] = []
+  if (form.baseUrls && form.baseUrls.length > 0) {
+    urls.push(...form.baseUrls)
+  } else if (form.baseUrl) {
+    urls.push(form.baseUrl)
   }
-  baseUrl = baseUrl.replace(/\/$/, '')
 
-  const hasVersion = /\/v\d+[a-z]*$/.test(baseUrl)
+  if (urls.length === 0) return []
 
-  // 根据 serviceType 确定端点（与后端逻辑一致）
+  // 根据 serviceType 确定端点
   let endpoint = ''
   if (props.channelType === 'responses') {
     if (form.serviceType === 'responses') {
@@ -775,15 +784,32 @@ const formExpectedRequestUrl = computed(() => {
     // messages 渠道
     if (form.serviceType === 'claude') {
       endpoint = '/messages'
+    } else if (form.serviceType === 'gemini') {
+      endpoint = '/generateContent'
     } else {
       endpoint = '/chat/completions'
     }
   }
 
-  if (hasVersion || skipVersion) {
-    return baseUrl + endpoint
-  }
-  return baseUrl + '/v1' + endpoint
+  // 为每个 URL 生成预期请求
+  return urls
+    .filter(url => url && isValidUrl(url.replace(/#$/, '')))
+    .map(rawUrl => {
+      let baseUrl = rawUrl.trim()
+      const skipVersion = baseUrl.endsWith('#')
+      if (skipVersion) {
+        baseUrl = baseUrl.slice(0, -1)
+      }
+      baseUrl = baseUrl.replace(/\/$/, '')
+
+      const hasVersion = /\/v\d+[a-z]*$/.test(baseUrl)
+
+      const expectedUrl = (hasVersion || skipVersion)
+        ? baseUrl + endpoint
+        : baseUrl + '/v1' + endpoint
+
+      return { baseUrl: rawUrl, expectedUrl }
+    })
 })
 
 // 处理快速添加提交
@@ -889,37 +915,21 @@ const baseUrlStrategyOptions = [
   { title: '故障转移', value: 'failover' }
 ]
 
-// 多 BaseURL 文本输入（双向绑定）
-const baseUrlsText = computed({
-  get: () => {
-    if (form.baseUrls && form.baseUrls.length > 0) {
-      return form.baseUrls.join('\n')
-    }
-    return form.baseUrl || ''
-  },
-  set: (val: string) => {
-    // 去重：使用 Set 过滤重复 URL（忽略末尾 / 和 # 差异）
-    const seen = new Set<string>()
-    const urls = val
-      .split('\n')
-      .map(s => s.trim())
-      .filter(Boolean)
-      .filter(url => {
-        const normalized = url.replace(/[#/]+$/, '')
-        if (seen.has(normalized)) return false
-        seen.add(normalized)
-        return true
-      })
-    if (urls.length === 0) {
-      form.baseUrl = ''
-      form.baseUrls = []
-    } else if (urls.length === 1) {
-      form.baseUrl = urls[0]
-      form.baseUrls = []
-    } else {
-      form.baseUrl = urls[0]
-      form.baseUrls = urls
-    }
+// 多 BaseURL 文本输入（独立变量，保留用户输入的换行）
+const baseUrlsText = ref('')
+
+// 监听 baseUrlsText 变化，同步到 form（仅做基本同步，不修改用户输入）
+watch(baseUrlsText, (val) => {
+  const urls = val.split('\n').map(s => s.trim()).filter(Boolean)
+  if (urls.length === 0) {
+    form.baseUrl = ''
+    form.baseUrls = []
+  } else if (urls.length === 1) {
+    form.baseUrl = urls[0]
+    form.baseUrls = []
+  } else {
+    form.baseUrl = urls[0]
+    form.baseUrls = urls
   }
 })
 
@@ -1065,6 +1075,9 @@ const resetForm = () => {
   newMapping.source = ''
   newMapping.target = ''
 
+  // 重置 baseUrlsText
+  baseUrlsText.value = ''
+
   // 清空原始密钥映射
   originalKeyMap.value.clear()
 
@@ -1094,6 +1107,13 @@ const loadChannelData = (channel: Channel) => {
   form.website = channel.website || ''
   form.insecureSkipVerify = !!channel.insecureSkipVerify
   form.description = channel.description || ''
+
+  // 同步 baseUrlsText（优先使用 baseUrls，否则使用 baseUrl）
+  if (channel.baseUrls && channel.baseUrls.length > 0) {
+    baseUrlsText.value = channel.baseUrls.join('\n')
+  } else {
+    baseUrlsText.value = channel.baseUrl || ''
+  }
 
   // 直接存储原始密钥，不需要映射关系
   form.apiKeys = [...channel.apiKeys]
@@ -1227,11 +1247,25 @@ const handleSubmit = async () => {
   // 直接使用原始密钥，不需要转换
   const processedApiKeys = form.apiKeys.filter(key => key.trim())
 
+  // 处理 BaseURL：去重（忽略末尾 / 和 # 差异），并移除 UI 专用的尾部 #
+  const seenUrls = new Set<string>()
+  const deduplicatedUrls = form.baseUrls.length > 0
+    ? form.baseUrls
+        .map(url => url.trim().replace(/[#/]+$/, ''))
+        .filter(Boolean)
+        .filter(url => {
+          const normalized = url.replace(/[#/]+$/, '')
+          if (seenUrls.has(normalized)) return false
+          seenUrls.add(normalized)
+          return true
+        })
+    : [form.baseUrl.trim().replace(/[#/]+$/, '')].filter(Boolean)
+
   // 构建渠道数据
   const channelData: Omit<Channel, 'index' | 'latency' | 'status'> = {
     name: form.name.trim(),
     serviceType: form.serviceType as 'openai' | 'gemini' | 'claude' | 'responses',
-    baseUrl: form.baseUrl.trim().replace(/\/$/, ''), // 移除末尾斜杠
+    baseUrl: deduplicatedUrls[0] || '',
     website: form.website.trim(), // 空字符串也需要传递，以便清除已有值
     insecureSkipVerify: form.insecureSkipVerify,
     description: form.description.trim(),
@@ -1240,8 +1274,8 @@ const handleSubmit = async () => {
   }
 
   // 多 BaseURL 支持
-  if (form.baseUrls && form.baseUrls.length > 1) {
-    channelData.baseUrls = form.baseUrls.map(url => url.trim().replace(/\/$/, ''))
+  if (deduplicatedUrls.length > 1) {
+    channelData.baseUrls = deduplicatedUrls
     channelData.baseUrlStrategy = form.baseUrlStrategy
   }
 
@@ -1323,8 +1357,13 @@ onUnmounted(() => {
 /* 基础URL下方的提示区域 - 固定高度防止布局跳动 */
 .base-url-hint {
   min-height: 20px;
-  padding: 4px 12px 0;
+  padding: 4px 12px 8px;
   line-height: 1.25;
+}
+
+/* 多个预期请求项样式 */
+.expected-request-item + .expected-request-item {
+  margin-top: 2px;
 }
 
 /* 浅色模式下副标题使用白色带透明度 */
