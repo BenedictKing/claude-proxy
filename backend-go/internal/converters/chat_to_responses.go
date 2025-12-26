@@ -672,46 +672,45 @@ func (st *chatToResponsesState) generateCompletedEvents(originalRequestRawJSON [
 	}
 
 	// 添加 usage（完整支持多格式详细字段，参考 claude-code-hub）
-	// 如果有 reasoning buffer 但上游没有返回 reasoning_tokens，则估算
 	reasoningTokens := st.ReasoningTokens
 	if reasoningTokens == 0 && st.ReasoningBuf.Len() > 0 {
 		reasoningTokens = int64(st.ReasoningBuf.Len() / 4)
 	}
 
-	usagePresent := st.UsageSeen || reasoningTokens > 0
-	if usagePresent {
-		// 基础字段
-		completed, _ = sjson.Set(completed, "response.usage.input_tokens", st.InputTokens)
-		completed, _ = sjson.Set(completed, "response.usage.output_tokens", st.OutputTokens)
-		total := st.InputTokens + st.OutputTokens
-		completed, _ = sjson.Set(completed, "response.usage.total_tokens", total)
+	// 始终添加基础 usage 字段，即使值为 0
+	// 这样 handler 可以检测到 usage 存在，并在需要时用本地估算值替换 0 值
+	// 参见 handler.go 中的 patchResponsesCompletedEventUsage 和 injectResponsesUsageToCompletedEvent
+	completed, _ = sjson.Set(completed, "response.usage.input_tokens", st.InputTokens)
+	completed, _ = sjson.Set(completed, "response.usage.output_tokens", st.OutputTokens)
+	total := st.InputTokens + st.OutputTokens
+	completed, _ = sjson.Set(completed, "response.usage.total_tokens", total)
 
-		// input_tokens_details
-		if st.CachedTokens > 0 {
-			completed, _ = sjson.Set(completed, "response.usage.input_tokens_details.cached_tokens", st.CachedTokens)
-		}
+	// 可选的详情字段，仅在有值时添加
+	// input_tokens_details
+	if st.CachedTokens > 0 {
+		completed, _ = sjson.Set(completed, "response.usage.input_tokens_details.cached_tokens", st.CachedTokens)
+	}
 
-		// output_tokens_details
-		if reasoningTokens > 0 {
-			completed, _ = sjson.Set(completed, "response.usage.output_tokens_details.reasoning_tokens", reasoningTokens)
-		}
+	// output_tokens_details
+	if reasoningTokens > 0 {
+		completed, _ = sjson.Set(completed, "response.usage.output_tokens_details.reasoning_tokens", reasoningTokens)
+	}
 
-		// Claude 缓存 TTL 细分字段
-		if st.CacheCreationTokens > 0 {
-			completed, _ = sjson.Set(completed, "response.usage.cache_creation_input_tokens", st.CacheCreationTokens)
-		}
-		if st.CacheCreation5mTokens > 0 {
-			completed, _ = sjson.Set(completed, "response.usage.cache_creation_5m_input_tokens", st.CacheCreation5mTokens)
-		}
-		if st.CacheCreation1hTokens > 0 {
-			completed, _ = sjson.Set(completed, "response.usage.cache_creation_1h_input_tokens", st.CacheCreation1hTokens)
-		}
-		if st.CachedTokens > 0 {
-			completed, _ = sjson.Set(completed, "response.usage.cache_read_input_tokens", st.CachedTokens)
-		}
-		if st.CacheTTL != "" {
-			completed, _ = sjson.Set(completed, "response.usage.cache_ttl", st.CacheTTL)
-		}
+	// Claude 缓存 TTL 细分字段
+	if st.CacheCreationTokens > 0 {
+		completed, _ = sjson.Set(completed, "response.usage.cache_creation_input_tokens", st.CacheCreationTokens)
+	}
+	if st.CacheCreation5mTokens > 0 {
+		completed, _ = sjson.Set(completed, "response.usage.cache_creation_5m_input_tokens", st.CacheCreation5mTokens)
+	}
+	if st.CacheCreation1hTokens > 0 {
+		completed, _ = sjson.Set(completed, "response.usage.cache_creation_1h_input_tokens", st.CacheCreation1hTokens)
+	}
+	if st.CachedTokens > 0 {
+		completed, _ = sjson.Set(completed, "response.usage.cache_read_input_tokens", st.CachedTokens)
+	}
+	if st.CacheTTL != "" {
+		completed, _ = sjson.Set(completed, "response.usage.cache_ttl", st.CacheTTL)
 	}
 
 	out = append(out, emitResponsesEvent("response.completed", completed))
