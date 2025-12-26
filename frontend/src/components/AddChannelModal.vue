@@ -939,11 +939,11 @@ const hasMultipleBaseUrls = computed(() => form.baseUrls && form.baseUrls.length
 // 是否有多个 API Key
 const hasMultipleApiKeys = computed(() => form.apiKeys && form.apiKeys.length > 1)
 
-// API Key 策略选项
+// API Key 策略选项（故障转移在首位作为默认值）
 const apiKeyStrategyOptions = [
+  { title: '故障转移 (推荐)', value: 'failover' },
   { title: '轮询', value: 'round-robin' },
-  { title: '随机', value: 'random' },
-  { title: '故障转移 (推荐)', value: 'failover' }
+  { title: '随机', value: 'random' }
 ]
 
 // 原始密钥映射 (掩码密钥 -> 原始密钥)
