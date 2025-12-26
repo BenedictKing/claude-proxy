@@ -4,6 +4,18 @@
 
 ---
 
+## [v2.4.3] - 2025-12-27
+
+### 🐛 修复
+
+- **Responses API Token 统计修复** - 解决上游无 usage 时本地统计无数据的问题：
+  - 修复 SSE 事件解析格式兼容性：支持 `data:` 和 `data: ` 两种格式（某些上游不带空格）
+  - 修复 `handleSuccess` / `handleStreamSuccess` 不返回 usage 数据的问题
+  - 修复调用点使用 `RecordSuccess` 而非 `RecordSuccessWithUsage` 导致 token 统计未入库
+  - 涉及函数：`checkResponsesEventUsage`、`injectResponsesUsageToCompletedEvent`、`patchResponsesCompletedEventUsage`、`tryChannelWithAllKeys`
+
+---
+
 ## [v2.4.2] - 2025-12-26
 
 ### 🐛 修复
