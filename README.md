@@ -66,6 +66,8 @@
 
 > 📚 详细架构设计和技术选型请参考 [ARCHITECTURE.md](ARCHITECTURE.md)
 
+> 💡 **负载均衡提示**: 本项目内置的负载均衡策略（failover/round-robin）适用于大多数场景。如果您需要更高级的负载均衡功能（如加权分配、健康检查间隔自定义、更复杂的路由策略等），建议在本服务前添加 [gpt-load](https://github.com/tbphp/gpt-load) 作为负载均衡层。
+
 ## 🏁 快速开始
 
 ### 📦 推荐部署方式
