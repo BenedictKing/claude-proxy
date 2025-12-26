@@ -14,8 +14,9 @@ type EnvConfig struct {
 	LogLevel            string
 	EnableRequestLogs   bool
 	EnableResponseLogs  bool
-	QuietPollingLogs    bool // 静默轮询端点日志
-	RawLogOutput        bool // 原始日志输出（不缩进、不截断、不重排序）
+	QuietPollingLogs    bool   // 静默轮询端点日志
+	RawLogOutput        bool   // 原始日志输出（不缩进、不截断、不重排序）
+	SSEDebugLevel       string // SSE 调试级别: off, summary, full
 
 	RequestTimeout     int
 	MaxConcurrentReqs  int
@@ -59,6 +60,7 @@ func NewEnvConfig() *EnvConfig {
 		EnableResponseLogs:  getEnv("ENABLE_RESPONSE_LOGS", "true") != "false",
 		QuietPollingLogs:    getEnv("QUIET_POLLING_LOGS", "true") != "false",
 		RawLogOutput:        getEnv("RAW_LOG_OUTPUT", "false") == "true",
+		SSEDebugLevel:       getEnv("SSE_DEBUG_LEVEL", "off"),
 
 		RequestTimeout:     getEnvAsInt("REQUEST_TIMEOUT", 300000),
 		MaxConcurrentReqs:  getEnvAsInt("MAX_CONCURRENT_REQUESTS", 100),

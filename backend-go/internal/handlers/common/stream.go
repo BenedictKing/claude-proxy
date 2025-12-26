@@ -29,6 +29,12 @@ type StreamContext struct {
 	NeedTokenPatch   bool
 	// 累积的 token 统计
 	CollectedUsage CollectedUsageData
+	// 用于日志的“续写前缀”（不参与真实转发，只影响 Stream-Synth 输出可读性）
+	LogPrefillText string
+	// SSE 事件调试追踪
+	EventCount        int            // 事件总数
+	ContentBlockCount int            // content block 计数
+	ContentBlockTypes map[int]string // 每个 block 的类型
 }
 
 // CollectedUsageData 从流事件中收集的 usage 数据
@@ -46,12 +52,56 @@ type CollectedUsageData struct {
 // NewStreamContext 创建流处理上下文
 func NewStreamContext(envCfg *config.EnvConfig) *StreamContext {
 	ctx := &StreamContext{
-		LoggingEnabled: envCfg.IsDevelopment() && envCfg.EnableResponseLogs,
+		LoggingEnabled:    envCfg.IsDevelopment() && envCfg.EnableResponseLogs,
+		ContentBlockTypes: make(map[int]string),
 	}
 	if ctx.LoggingEnabled {
 		ctx.Synthesizer = utils.NewStreamSynthesizer("claude")
 	}
 	return ctx
+}
+
+// seedSynthesizerFromRequest 将请求里预置的 assistant 文本拼接进合成器（仅用于日志可读性）
+//
+// Claude Code 的部分内部调用会在 messages 里预置一条 assistant 内容（例如 "{"），让模型只输出“续写”部分。
+// 这会导致我们仅基于 SSE delta 合成的日志缺失开头。这里用请求体做一次轻量补齐。
+func seedSynthesizerFromRequest(ctx *StreamContext, requestBody []byte) {
+	if ctx == nil || ctx.Synthesizer == nil || len(requestBody) == 0 {
+		return
+	}
+
+	var req struct {
+		Messages []struct {
+			Role    string `json:"role"`
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(requestBody, &req); err != nil {
+		return
+	}
+
+	// 只取最后一条 assistant，避免把历史上下文都拼进日志
+	for i := len(req.Messages) - 1; i >= 0; i-- {
+		msg := req.Messages[i]
+		if msg.Role != "assistant" {
+			continue
+		}
+		var b strings.Builder
+		for _, c := range msg.Content {
+			if c.Type == "text" && c.Text != "" {
+				b.WriteString(c.Text)
+			}
+		}
+		prefill := b.String()
+		// 防止把很长的预置内容刷进日志
+		if len(prefill) > 0 && len(prefill) <= 256 {
+			ctx.LogPrefillText = prefill
+		}
+		return
+	}
 }
 
 // SetupStreamHeaders 设置流式响应头
@@ -123,6 +173,26 @@ func ProcessStreamEvent(
 	envCfg *config.EnvConfig,
 	requestBody []byte,
 ) {
+	// SSE 事件调试日志
+	ctx.EventCount++
+	if envCfg.SSEDebugLevel == "full" || envCfg.SSEDebugLevel == "summary" {
+		eventType, blockIndex, blockType := extractSSEEventInfo(event)
+		if eventType == "content_block_start" {
+			ctx.ContentBlockCount++
+			if blockType != "" {
+				ctx.ContentBlockTypes[blockIndex] = blockType
+			}
+		}
+		if envCfg.SSEDebugLevel == "full" {
+			log.Printf("[Stream-Event] #%d 类型=%s 长度=%d block_index=%d block_type=%s",
+				ctx.EventCount, eventType, len(event), blockIndex, blockType)
+			// 对于 content_block 相关事件，记录详细内容
+			if strings.Contains(event, "content_block") {
+				log.Printf("[Stream-Event-Detail] %s", truncateForLog(event, 500))
+			}
+		}
+	}
+
 	// 提取文本用于估算 token
 	ExtractTextFromEvent(event, &ctx.OutputTextBuffer)
 
@@ -225,6 +295,16 @@ func logStreamCompletion(ctx *StreamContext, envCfg *config.EnvConfig, startTime
 		log.Printf("[Stream-Complete] 流式响应完成: %dms", time.Since(startTime).Milliseconds())
 	}
 
+	// SSE 事件统计日志
+	if envCfg.SSEDebugLevel == "full" || envCfg.SSEDebugLevel == "summary" {
+		blockTypeSummary := make(map[string]int)
+		for _, bt := range ctx.ContentBlockTypes {
+			blockTypeSummary[bt]++
+		}
+		log.Printf("[Stream-Summary] 总事件数=%d, content_blocks=%d, 类型分布=%v",
+			ctx.EventCount, ctx.ContentBlockCount, blockTypeSummary)
+	}
+
 	if envCfg.IsDevelopment() {
 		logSynthesizedContent(ctx)
 	}
@@ -265,7 +345,17 @@ func logSynthesizedContent(ctx *StreamContext) {
 	if ctx.Synthesizer != nil {
 		content := ctx.Synthesizer.GetSynthesizedContent()
 		if content != "" && !ctx.Synthesizer.IsParseFailed() {
-			log.Printf("[Stream-Synth] 上游流式响应合成内容:\n%s", strings.TrimSpace(content))
+			trimmed := strings.TrimSpace(content)
+
+			// 仅在“明显是 JSON 续写”的情况下拼接预置前缀，避免出现 "{OK" 这类误导日志
+			if ctx.LogPrefillText == "{" && !strings.HasPrefix(strings.TrimLeft(trimmed, " \t\r\n"), "{") {
+				left := strings.TrimLeft(trimmed, " \t\r\n")
+				if strings.HasPrefix(left, "\"") {
+					trimmed = ctx.LogPrefillText + trimmed
+				}
+			}
+
+			log.Printf("[Stream-Synth] 上游流式响应合成内容:\n%s", strings.TrimSpace(trimmed))
 			return
 		}
 	}
@@ -311,6 +401,7 @@ func HandleStreamResponse(
 	flusher.Flush()
 
 	ctx := NewStreamContext(envCfg)
+	seedSynthesizerFromRequest(ctx, requestBody)
 	ProcessStreamEvents(c, w, flusher, eventChan, errChan, ctx, envCfg, startTime, requestBody, channelScheduler, upstream, apiKey)
 }
 
@@ -654,4 +745,40 @@ func ExtractTextFromEvent(event string, buf *bytes.Buffer) {
 			}
 		}
 	}
+}
+
+// extractSSEEventInfo 从 SSE 事件中提取事件类型、block 索引和 block 类型
+func extractSSEEventInfo(event string) (eventType string, blockIndex int, blockType string) {
+	for _, line := range strings.Split(event, "\n") {
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		jsonStr := strings.TrimPrefix(line, "data: ")
+
+		var data map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+			continue
+		}
+
+		eventType, _ = data["type"].(string)
+		if idx, ok := data["index"].(float64); ok {
+			blockIndex = int(idx)
+		}
+
+		// 从 content_block 中提取类型
+		if cb, ok := data["content_block"].(map[string]interface{}); ok {
+			blockType, _ = cb["type"].(string)
+		}
+
+		return
+	}
+	return
+}
+
+// truncateForLog 截断字符串用于日志输出
+func truncateForLog(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

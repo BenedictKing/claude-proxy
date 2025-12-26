@@ -306,6 +306,52 @@ func (s *StreamSynthesizer) processClaude(data map[string]interface{}) {
 	eventType, _ := data["type"].(string)
 
 	switch eventType {
+	case "message_start":
+		// 从 message_start 中提取初始内容（如果有）
+		if msg, ok := data["message"].(map[string]interface{}); ok {
+			if content, ok := msg["content"].([]interface{}); ok {
+				for _, c := range content {
+					if cm, ok := c.(map[string]interface{}); ok {
+						if text, ok := cm["text"].(string); ok {
+							s.synthesizedContent.WriteString(text)
+						}
+					}
+				}
+			}
+		}
+
+	case "content_block_start":
+		contentBlock, ok := data["content_block"].(map[string]interface{})
+		if !ok {
+			return
+		}
+
+		blockIndex := 0
+		if idx, ok := data["index"].(float64); ok {
+			blockIndex = int(idx)
+		}
+
+		blockType, _ := contentBlock["type"].(string)
+
+		switch blockType {
+		case "tool_use":
+			if s.toolCallAccumulator[blockIndex] == nil {
+				s.toolCallAccumulator[blockIndex] = &ToolCall{}
+			}
+			accumulated := s.toolCallAccumulator[blockIndex]
+			if id, ok := contentBlock["id"].(string); ok {
+				accumulated.ID = id
+			}
+			if name, ok := contentBlock["name"].(string); ok {
+				accumulated.Name = name
+			}
+		case "text":
+			// text 类型的 content_block_start 可能包含初始文本
+			if text, ok := contentBlock["text"].(string); ok && text != "" {
+				s.synthesizedContent.WriteString(text)
+			}
+		}
+
 	case "content_block_delta":
 		delta, ok := data["delta"].(map[string]interface{})
 		if !ok {
@@ -314,11 +360,12 @@ func (s *StreamSynthesizer) processClaude(data map[string]interface{}) {
 
 		deltaType, _ := delta["type"].(string)
 
-		if deltaType == "text_delta" {
+		switch deltaType {
+		case "text_delta":
 			if text, ok := delta["text"].(string); ok {
 				s.synthesizedContent.WriteString(text)
 			}
-		} else if deltaType == "input_json_delta" {
+		case "input_json_delta":
 			if partialJSON, ok := delta["partial_json"].(string); ok {
 				blockIndex := 0
 				if idx, ok := data["index"].(float64); ok {
@@ -332,31 +379,19 @@ func (s *StreamSynthesizer) processClaude(data map[string]interface{}) {
 				accumulated := s.toolCallAccumulator[blockIndex]
 				accumulated.Arguments += partialJSON
 			}
+		case "thinking_delta":
+			// thinking 内容不记录到合成内容中（可选：如需记录可取消注释）
+			// if thinking, ok := delta["thinking"].(string); ok {
+			// 	s.synthesizedContent.WriteString(thinking)
+			// }
 		}
 
-	case "content_block_start":
-		contentBlock, ok := data["content_block"].(map[string]interface{})
-		if !ok {
-			return
-		}
-
-		if contentBlock["type"] == "tool_use" {
-			blockIndex := 0
-			if idx, ok := data["index"].(float64); ok {
-				blockIndex = int(idx)
-			}
-
-			if s.toolCallAccumulator[blockIndex] == nil {
-				s.toolCallAccumulator[blockIndex] = &ToolCall{}
-			}
-
-			accumulated := s.toolCallAccumulator[blockIndex]
-
-			if id, ok := contentBlock["id"].(string); ok {
-				accumulated.ID = id
-			}
-			if name, ok := contentBlock["name"].(string); ok {
-				accumulated.Name = name
+	case "message_delta":
+		// message_delta 通常包含 stop_reason 和 usage，不包含文本内容
+		// 但某些情况下可能有额外数据，这里做兜底处理
+		if delta, ok := data["delta"].(map[string]interface{}); ok {
+			if text, ok := delta["text"].(string); ok {
+				s.synthesizedContent.WriteString(text)
 			}
 		}
 	}
