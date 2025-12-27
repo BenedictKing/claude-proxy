@@ -11,6 +11,7 @@ import (
 	"github.com/BenedictKing/claude-proxy/internal/metrics"
 	"github.com/BenedictKing/claude-proxy/internal/session"
 	"github.com/BenedictKing/claude-proxy/internal/types"
+	"github.com/BenedictKing/claude-proxy/internal/warmup"
 )
 
 // ChannelScheduler 多渠道调度器
@@ -20,6 +21,7 @@ type ChannelScheduler struct {
 	messagesMetricsManager  *metrics.MetricsManager // Messages 渠道指标
 	responsesMetricsManager *metrics.MetricsManager // Responses 渠道指标
 	traceAffinity           *session.TraceAffinityManager
+	warmupManager           *warmup.URLWarmupManager // 端点预热管理器
 }
 
 // NewChannelScheduler 创建多渠道调度器
@@ -28,12 +30,14 @@ func NewChannelScheduler(
 	messagesMetrics *metrics.MetricsManager,
 	responsesMetrics *metrics.MetricsManager,
 	traceAffinity *session.TraceAffinityManager,
+	warmupMgr *warmup.URLWarmupManager,
 ) *ChannelScheduler {
 	return &ChannelScheduler{
 		configManager:           cfgManager,
 		messagesMetricsManager:  messagesMetrics,
 		responsesMetricsManager: responsesMetrics,
 		traceAffinity:           traceAffinity,
+		warmupManager:           warmupMgr,
 	}
 }
 
@@ -368,4 +372,42 @@ func maskUserID(userID string) string {
 		return "***"
 	}
 	return userID[:8] + "***" + userID[len(userID)-4:]
+}
+
+// GetSortedURLsForChannel 获取渠道排序后的 URL 列表（触发预热）
+// 返回按延迟排序的 URL 结果列表，包含原始索引用于指标记录
+func (s *ChannelScheduler) GetSortedURLsForChannel(
+	ctx context.Context,
+	channelIndex int,
+	urls []string,
+	insecureSkipVerify bool,
+) []warmup.URLLatencyResult {
+	if s.warmupManager == nil || len(urls) <= 1 {
+		// 无预热管理器或单 URL，返回默认结果
+		results := make([]warmup.URLLatencyResult, len(urls))
+		for i, url := range urls {
+			results[i] = warmup.URLLatencyResult{
+				URL:         url,
+				OriginalIdx: i,
+				Success:     true,
+			}
+		}
+		return results
+	}
+	return s.warmupManager.GetSortedURLs(ctx, channelIndex, urls, insecureSkipVerify)
+}
+
+// InvalidateWarmupCache 使渠道预热缓存失效
+func (s *ChannelScheduler) InvalidateWarmupCache(channelIndex int) {
+	if s.warmupManager != nil {
+		s.warmupManager.InvalidateCache(channelIndex)
+	}
+}
+
+// GetWarmupCacheStats 获取预热缓存统计
+func (s *ChannelScheduler) GetWarmupCacheStats() map[string]interface{} {
+	if s.warmupManager != nil {
+		return s.warmupManager.GetCacheStats()
+	}
+	return nil
 }

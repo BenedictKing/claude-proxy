@@ -150,6 +150,9 @@ func tryChannelWithAllKeys(
 	metricsManager := channelScheduler.GetResponsesMetricsManager()
 	baseURLs := upstream.GetAllBaseURLs()
 
+	// 获取预热排序后的 URL 列表（首次访问时触发预热）
+	sortedURLResults := channelScheduler.GetSortedURLsForChannel(c.Request.Context(), channelIndex, baseURLs, upstream.InsecureSkipVerify)
+
 	var lastFailoverError *common.FailoverError
 	deprioritizeCandidates := make(map[string]bool)
 
@@ -159,9 +162,11 @@ func tryChannelWithAllKeys(
 		log.Printf("[Responses-ForceProbe] 渠道 %s 所有 Key 都被熔断，启用强制探测模式", upstream.Name)
 	}
 
-	// 纯 failover：遍历所有 BaseURL，每个 BaseURL 尝试所有 Key
-	for baseURLIdx, currentBaseURL := range baseURLs {
-		failedKeys := make(map[string]bool) // 每个 BaseURL 重置失败 Key 列表
+	// 纯 failover：按预热排序遍历所有 BaseURL，每个 BaseURL 尝试所有 Key
+	for sortedIdx, urlResult := range sortedURLResults {
+		currentBaseURL := urlResult.URL
+		originalIdx := urlResult.OriginalIdx // 原始索引用于指标记录
+		failedKeys := make(map[string]bool)  // 每个 BaseURL 重置失败 Key 列表
 		maxRetries := len(upstream.APIKeys)
 
 		for attempt := 0; attempt < maxRetries; attempt++ {
@@ -181,7 +186,7 @@ func tryChannelWithAllKeys(
 			}
 
 			if envCfg.ShouldLog("info") {
-				log.Printf("[Responses-Key] 使用API密钥: %s (BaseURL %d/%d, 尝试 %d/%d)", utils.MaskAPIKey(apiKey), baseURLIdx+1, len(baseURLs), attempt+1, maxRetries)
+				log.Printf("[Responses-Key] 使用API密钥: %s (BaseURL %d/%d, 尝试 %d/%d)", utils.MaskAPIKey(apiKey), sortedIdx+1, len(sortedURLResults), attempt+1, maxRetries)
 			}
 
 			// 临时设置 BaseURL 用于本次请求
@@ -242,11 +247,11 @@ func tryChannelWithAllKeys(
 			}
 
 			usage := handleSuccess(c, resp, provider, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, bodyBytes)
-			return true, apiKey, baseURLIdx, nil, usage
+			return true, apiKey, originalIdx, nil, usage
 		}
 		// 当前 BaseURL 的所有 Key 都失败，记录并尝试下一个 BaseURL
-		if baseURLIdx < len(baseURLs)-1 {
-			log.Printf("[Responses-BaseURL] BaseURL %d/%d 所有 Key 失败，切换到下一个 BaseURL", baseURLIdx+1, len(baseURLs))
+		if sortedIdx < len(sortedURLResults)-1 {
+			log.Printf("[Responses-BaseURL] BaseURL %d/%d 所有 Key 失败，切换到下一个 BaseURL", sortedIdx+1, len(sortedURLResults))
 		}
 	}
 

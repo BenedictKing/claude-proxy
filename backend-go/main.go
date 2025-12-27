@@ -20,6 +20,7 @@ import (
 	"github.com/BenedictKing/claude-proxy/internal/middleware"
 	"github.com/BenedictKing/claude-proxy/internal/scheduler"
 	"github.com/BenedictKing/claude-proxy/internal/session"
+	"github.com/BenedictKing/claude-proxy/internal/warmup"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
@@ -95,7 +96,12 @@ func main() {
 		responsesMetricsManager = metrics.NewMetricsManagerWithConfig(envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold)
 	}
 	traceAffinityManager := session.NewTraceAffinityManager()
-	channelScheduler := scheduler.NewChannelScheduler(cfgManager, messagesMetricsManager, responsesMetricsManager, traceAffinityManager)
+
+	// 初始化端点预热管理器
+	urlWarmupManager := warmup.NewURLWarmupManager(5*time.Minute, 5*time.Second)
+	log.Printf("[Warmup-Init] 端点预热管理器已初始化 (缓存TTL: 5分钟, ping超时: 5秒)")
+
+	channelScheduler := scheduler.NewChannelScheduler(cfgManager, messagesMetricsManager, responsesMetricsManager, traceAffinityManager, urlWarmupManager)
 	log.Printf("[Scheduler-Init] 多渠道调度器已初始化 (失败率阈值: %.0f%%, 滑动窗口: %d)",
 		messagesMetricsManager.GetFailureThreshold()*100, messagesMetricsManager.GetWindowSize())
 
