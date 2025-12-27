@@ -100,6 +100,8 @@ func isPollingEndpoint(path string) bool {
 	pollingPrefixes := []string{
 		"/api/messages/channels",
 		"/api/responses/channels",
+		"/api/messages/global/stats",
+		"/api/responses/global/stats",
 	}
 	for _, prefix := range pollingPrefixes {
 		if strings.HasPrefix(path, prefix) {

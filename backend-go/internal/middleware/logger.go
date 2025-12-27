@@ -12,6 +12,8 @@ import (
 var defaultSkipPrefixes = []string{
 	"/api/messages/channels",
 	"/api/responses/channels",
+	"/api/messages/global/stats",
+	"/api/responses/global/stats",
 }
 
 // FilteredLogger 创建一个可过滤路径的 Logger 中间件
