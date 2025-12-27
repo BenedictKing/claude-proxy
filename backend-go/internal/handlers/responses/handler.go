@@ -150,8 +150,8 @@ func tryChannelWithAllKeys(
 	metricsManager := channelScheduler.GetResponsesMetricsManager()
 	baseURLs := upstream.GetAllBaseURLs()
 
-	// 获取预热排序后的 URL 列表（首次访问时触发预热）
-	sortedURLResults := channelScheduler.GetSortedURLsForChannel(c.Request.Context(), channelIndex, baseURLs, upstream.InsecureSkipVerify)
+	// 获取动态排序后的 URL 列表（非阻塞，立即返回）
+	sortedURLResults := channelScheduler.GetSortedURLsForChannel(channelIndex, baseURLs)
 
 	var lastFailoverError *common.FailoverError
 	deprioritizeCandidates := make(map[string]bool)
@@ -206,8 +206,8 @@ func tryChannelWithAllKeys(
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey)
 				channelScheduler.RecordFailure(currentBaseURL, apiKey, true)
-				// 网络错误（超时等）触发预热缓存失效
-				channelScheduler.MarkWarmupURLFailed(channelIndex, currentBaseURL)
+				// 网络错误（超时等）触发 URL 动态降级
+				channelScheduler.MarkURLFailure(channelIndex, currentBaseURL)
 				log.Printf("[Responses-Key] 警告: API密钥失败: %v", err)
 				continue
 			}
@@ -222,8 +222,8 @@ func tryChannelWithAllKeys(
 					failedKeys[apiKey] = true
 					cfgManager.MarkKeyAsFailed(apiKey)
 					channelScheduler.RecordFailure(currentBaseURL, apiKey, true)
-					// HTTP 5xx 等错误也触发预热缓存失效
-					channelScheduler.MarkWarmupURLFailed(channelIndex, currentBaseURL)
+					// HTTP 5xx 等错误也触发 URL 动态降级
+					channelScheduler.MarkURLFailure(channelIndex, currentBaseURL)
 					log.Printf("[Responses-Key] 警告: API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
 
 					lastFailoverError = &common.FailoverError{
@@ -248,6 +248,9 @@ func tryChannelWithAllKeys(
 					_ = cfgManager.DeprioritizeAPIKey(key)
 				}
 			}
+
+			// 标记 URL 成功，触发动态排序优化
+			channelScheduler.MarkURLSuccess(channelIndex, currentBaseURL)
 
 			usage := handleSuccess(c, resp, provider, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, bodyBytes)
 			return true, apiKey, originalIdx, nil, usage

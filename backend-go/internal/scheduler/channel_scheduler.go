@@ -21,7 +21,7 @@ type ChannelScheduler struct {
 	messagesMetricsManager  *metrics.MetricsManager // Messages 渠道指标
 	responsesMetricsManager *metrics.MetricsManager // Responses 渠道指标
 	traceAffinity           *session.TraceAffinityManager
-	warmupManager           *warmup.URLWarmupManager // 端点预热管理器
+	urlManager              *warmup.URLManager // URL 管理器（非阻塞，动态排序）
 }
 
 // NewChannelScheduler 创建多渠道调度器
@@ -30,14 +30,14 @@ func NewChannelScheduler(
 	messagesMetrics *metrics.MetricsManager,
 	responsesMetrics *metrics.MetricsManager,
 	traceAffinity *session.TraceAffinityManager,
-	warmupMgr *warmup.URLWarmupManager,
+	urlMgr *warmup.URLManager,
 ) *ChannelScheduler {
 	return &ChannelScheduler{
 		configManager:           cfgManager,
 		messagesMetricsManager:  messagesMetrics,
 		responsesMetricsManager: responsesMetrics,
 		traceAffinity:           traceAffinity,
-		warmupManager:           warmupMgr,
+		urlManager:              urlMgr,
 	}
 }
 
@@ -374,16 +374,14 @@ func maskUserID(userID string) string {
 	return userID[:8] + "***" + userID[len(userID)-4:]
 }
 
-// GetSortedURLsForChannel 获取渠道排序后的 URL 列表（触发预热）
-// 返回按延迟排序的 URL 结果列表，包含原始索引用于指标记录
+// GetSortedURLsForChannel 获取渠道排序后的 URL 列表（非阻塞，立即返回）
+// 返回按动态排序的 URL 结果列表，包含原始索引用于指标记录
 func (s *ChannelScheduler) GetSortedURLsForChannel(
-	ctx context.Context,
 	channelIndex int,
 	urls []string,
-	insecureSkipVerify bool,
 ) []warmup.URLLatencyResult {
-	if s.warmupManager == nil || len(urls) <= 1 {
-		// 无预热管理器或单 URL，返回默认结果
+	if s.urlManager == nil || len(urls) <= 1 {
+		// 无 URL 管理器或单 URL，返回默认结果
 		results := make([]warmup.URLLatencyResult, len(urls))
 		for i, url := range urls {
 			results[i] = warmup.URLLatencyResult{
@@ -394,28 +392,34 @@ func (s *ChannelScheduler) GetSortedURLsForChannel(
 		}
 		return results
 	}
-	return s.warmupManager.GetSortedURLs(ctx, channelIndex, urls, insecureSkipVerify)
+	return s.urlManager.GetSortedURLs(channelIndex, urls)
 }
 
-// InvalidateWarmupCache 使渠道预热缓存失效
-func (s *ChannelScheduler) InvalidateWarmupCache(channelIndex int) {
-	if s.warmupManager != nil {
-		s.warmupManager.InvalidateCache(channelIndex)
+// MarkURLSuccess 标记 URL 成功
+func (s *ChannelScheduler) MarkURLSuccess(channelIndex int, url string) {
+	if s.urlManager != nil {
+		s.urlManager.MarkSuccess(channelIndex, url)
 	}
 }
 
-// MarkWarmupURLFailed 标记 URL 失败，触发下次请求时重新预热
-// 当请求失败（超时或 5xx 错误）时调用此方法
-func (s *ChannelScheduler) MarkWarmupURLFailed(channelIndex int, failedURL string) {
-	if s.warmupManager != nil {
-		s.warmupManager.MarkURLFailed(channelIndex, failedURL)
+// MarkURLFailure 标记 URL 失败，触发动态排序
+func (s *ChannelScheduler) MarkURLFailure(channelIndex int, url string) {
+	if s.urlManager != nil {
+		s.urlManager.MarkFailure(channelIndex, url)
 	}
 }
 
-// GetWarmupCacheStats 获取预热缓存统计
-func (s *ChannelScheduler) GetWarmupCacheStats() map[string]interface{} {
-	if s.warmupManager != nil {
-		return s.warmupManager.GetCacheStats()
+// InvalidateURLCache 使渠道 URL 状态失效
+func (s *ChannelScheduler) InvalidateURLCache(channelIndex int) {
+	if s.urlManager != nil {
+		s.urlManager.InvalidateChannel(channelIndex)
+	}
+}
+
+// GetURLManagerStats 获取 URL 管理器统计
+func (s *ChannelScheduler) GetURLManagerStats() map[string]interface{} {
+	if s.urlManager != nil {
+		return s.urlManager.GetStats()
 	}
 	return nil
 }

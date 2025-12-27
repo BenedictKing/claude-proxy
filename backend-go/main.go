@@ -97,11 +97,11 @@ func main() {
 	}
 	traceAffinityManager := session.NewTraceAffinityManager()
 
-	// 初始化端点预热管理器
-	urlWarmupManager := warmup.NewURLWarmupManager(5*time.Minute, 5*time.Second)
-	log.Printf("[Warmup-Init] 端点预热管理器已初始化 (缓存TTL: 5分钟, ping超时: 5秒)")
+	// 初始化 URL 管理器（非阻塞，动态排序）
+	urlManager := warmup.NewURLManager(30*time.Second, 3) // 30秒冷却期，连续3次失败后移到末尾
+	log.Printf("[URLManager-Init] URL管理器已初始化 (冷却期: 30秒, 最大连续失败: 3)")
 
-	channelScheduler := scheduler.NewChannelScheduler(cfgManager, messagesMetricsManager, responsesMetricsManager, traceAffinityManager, urlWarmupManager)
+	channelScheduler := scheduler.NewChannelScheduler(cfgManager, messagesMetricsManager, responsesMetricsManager, traceAffinityManager, urlManager)
 	log.Printf("[Scheduler-Init] 多渠道调度器已初始化 (失败率阈值: %.0f%%, 滑动窗口: %d)",
 		messagesMetricsManager.GetFailureThreshold()*100, messagesMetricsManager.GetWindowSize())
 
