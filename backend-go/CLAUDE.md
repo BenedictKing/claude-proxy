@@ -94,7 +94,10 @@ log.Printf("[Component] 警告: 消息内容")
 | 会话 | `[Session-Manager]` | 会话管理 |
 | 配置 | `[Config-Watcher]` | 配置热重载 |
 | 压缩 | `[Gzip]` | Gzip 解压缩 |
-| 流式 | `[Stream-Token]` | Token 注入 |
+| Messages | `[Messages-Stream]` | Messages 流式处理 |
+| Messages | `[Messages-Stream-Token]` | Messages Token 统计 |
+| Responses | `[Responses-Stream]` | Responses 流式处理 |
+| Responses | `[Responses-Stream-Token]` | Responses Token 统计 |
 
 ## 扩展指南
 

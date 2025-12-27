@@ -218,7 +218,7 @@ func tryChannelWithAllKeys(
 						}
 						log.Printf("[Messages-Error] 失败原因:\n%s", formattedBody)
 					} else if envCfg.EnableResponseLogs {
-						log.Printf("失败原因: %s", string(respBodyBytes))
+						log.Printf("[Messages-Error] 失败原因: %s", string(respBodyBytes))
 					}
 
 					lastFailoverError = &common.FailoverError{
@@ -381,7 +381,7 @@ func handleSingleChannel(
 						}
 						log.Printf("[Messages-Error] 失败原因:\n%s", formattedBody)
 					} else if envCfg.EnableResponseLogs {
-						log.Printf("失败原因: %s", string(respBodyBytes))
+						log.Printf("[Messages-Error] 失败原因: %s", string(respBodyBytes))
 					}
 
 					lastFailoverError = &common.FailoverError{

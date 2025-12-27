@@ -4,6 +4,18 @@
 
 ---
 
+## [v2.4.5] - 2025-12-27
+
+### 🔧 改进
+
+- **统一日志前缀规范** - Messages 和 Responses 接口日志标签标准化：
+  - Messages 流式处理日志统一使用 `[Messages-Stream]`、`[Messages-Stream-Token]` 前缀
+  - Responses 流式处理日志保持 `[Responses-Stream]`、`[Responses-Stream-Token]` 前缀
+  - 修复 3 处遗漏前缀的错误日志（`messages/handler.go`、`responses/handler.go`）
+  - 更新 `backend-go/CLAUDE.md` 日志规范文档
+
+---
+
 ## [v2.4.4] - 2025-12-27
 
 ### ✨ 新功能

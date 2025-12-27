@@ -144,7 +144,7 @@ func ProcessStreamEvents(
 				continue
 			}
 			if err != nil {
-				log.Printf("[Stream-Error] 流式传输错误: %v", err)
+				log.Printf("[Messages-Stream] 错误: 流式传输错误: %v", err)
 				logPartialResponse(ctx, envCfg)
 
 				// 记录失败指标
@@ -184,11 +184,11 @@ func ProcessStreamEvent(
 			}
 		}
 		if envCfg.SSEDebugLevel == "full" {
-			log.Printf("[Stream-Event] #%d 类型=%s 长度=%d block_index=%d block_type=%s",
+			log.Printf("[Messages-Stream-Event] #%d 类型=%s 长度=%d block_index=%d block_type=%s",
 				ctx.EventCount, eventType, len(event), blockIndex, blockType)
 			// 对于 content_block 相关事件，记录详细内容
 			if strings.Contains(event, "content_block") {
-				log.Printf("[Stream-Event-Detail] %s", truncateForLog(event, 500))
+				log.Printf("[Messages-Stream-Event] 详情: %s", truncateForLog(event, 500))
 			}
 		}
 	}
@@ -203,7 +203,7 @@ func ProcessStreamEvent(
 			ctx.HasUsage = true
 			ctx.NeedTokenPatch = needPatch
 			if envCfg.EnableResponseLogs && envCfg.ShouldLog("debug") && needPatch && !IsMessageDeltaEvent(event) {
-				log.Printf("[Stream-Token] 检测到虚假值, 延迟到流结束修补")
+				log.Printf("[Messages-Stream-Token] 检测到虚假值, 延迟到流结束修补")
 			}
 		}
 		// 累积收集 usage 数据
@@ -224,7 +224,7 @@ func ProcessStreamEvent(
 	if !ctx.HasUsage && !ctx.ClientGone && IsMessageStopEvent(event) {
 		usageEvent := BuildUsageEvent(requestBody, ctx.OutputTextBuffer.String())
 		if envCfg.EnableResponseLogs && envCfg.ShouldLog("debug") {
-			log.Printf("[Stream-Token注入] 上游无usage, 注入本地估算事件")
+			log.Printf("[Messages-Stream-Token] 上游无usage, 注入本地估算事件")
 		}
 		w.Write([]byte(usageEvent))
 		flusher.Flush()
@@ -254,9 +254,9 @@ func ProcessStreamEvent(
 		if _, err := w.Write([]byte(eventToSend)); err != nil {
 			ctx.ClientGone = true
 			if !IsClientDisconnectError(err) {
-				log.Printf("[Stream-Write] 警告: 流式传输写入错误: %v", err)
+				log.Printf("[Messages-Stream] 警告: 写入错误: %v", err)
 			} else if envCfg.ShouldLog("info") {
-				log.Printf("[Stream-Client] 客户端中断连接 (正常行为)，继续接收上游数据...")
+				log.Printf("[Messages-Stream] 客户端中断连接 (正常行为)，继续接收上游数据...")
 			}
 		} else {
 			flusher.Flush()
@@ -292,7 +292,7 @@ func updateCollectedUsage(collected *CollectedUsageData, usageData CollectedUsag
 // logStreamCompletion 记录流完成日志
 func logStreamCompletion(ctx *StreamContext, envCfg *config.EnvConfig, startTime time.Time, channelScheduler *scheduler.ChannelScheduler, upstream *config.UpstreamConfig, apiKey string) {
 	if envCfg.EnableResponseLogs {
-		log.Printf("[Stream-Complete] 流式响应完成: %dms", time.Since(startTime).Milliseconds())
+		log.Printf("[Messages-Stream] 流式响应完成: %dms", time.Since(startTime).Milliseconds())
 	}
 
 	// SSE 事件统计日志
@@ -301,7 +301,7 @@ func logStreamCompletion(ctx *StreamContext, envCfg *config.EnvConfig, startTime
 		for _, bt := range ctx.ContentBlockTypes {
 			blockTypeSummary[bt]++
 		}
-		log.Printf("[Stream-Summary] 总事件数=%d, content_blocks=%d, 类型分布=%v",
+		log.Printf("[Messages-Stream-Summary] 总事件数=%d, content_blocks=%d, 类型分布=%v",
 			ctx.EventCount, ctx.ContentBlockCount, blockTypeSummary)
 	}
 
@@ -355,12 +355,12 @@ func logSynthesizedContent(ctx *StreamContext) {
 				}
 			}
 
-			log.Printf("[Stream-Synth] 上游流式响应合成内容:\n%s", strings.TrimSpace(trimmed))
+			log.Printf("[Messages-Stream] 上游流式响应合成内容:\n%s", strings.TrimSpace(trimmed))
 			return
 		}
 	}
 	if ctx.LogBuffer.Len() > 0 {
-		log.Printf("[Stream-Raw] 上游流式响应原始内容:\n%s", ctx.LogBuffer.String())
+		log.Printf("[Messages-Stream] 上游流式响应原始内容:\n%s", ctx.LogBuffer.String())
 	}
 }
 
@@ -395,7 +395,7 @@ func HandleStreamResponse(
 	w := c.Writer
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		log.Printf("[Stream-Flush] 警告: ResponseWriter不支持Flush接口")
+		log.Printf("[Messages-Stream] 警告: ResponseWriter不支持Flush接口")
 		return
 	}
 	flusher.Flush()
@@ -525,7 +525,7 @@ func logUsageDetection(location string, usage map[string]interface{}, needPatch 
 	cacheCreation, _ := usage["cache_creation_input_tokens"].(float64)
 	cacheRead, _ := usage["cache_read_input_tokens"].(float64)
 
-	log.Printf("[Stream-Token检测] %s: InputTokens=%v, OutputTokens=%v, CacheCreation=%.0f, CacheRead=%.0f, 需补全=%v",
+	log.Printf("[Messages-Stream-Token] %s: InputTokens=%v, OutputTokens=%v, CacheCreation=%.0f, CacheRead=%.0f, 需补全=%v",
 		location, inputTokens, outputTokens, cacheCreation, cacheRead, needPatch)
 }
 
@@ -633,10 +633,10 @@ func patchUsageFieldsWithLog(usage map[string]interface{}, estimatedInput, estim
 
 	if enableLog {
 		if inputPatched || outputPatched {
-			log.Printf("[Stream-Token补全] %s: InputTokens=%v->%v, OutputTokens=%v->%v",
+			log.Printf("[Messages-Stream-Token] %s: InputTokens=%v->%v, OutputTokens=%v->%v",
 				location, originalInput, usage["input_tokens"], originalOutput, usage["output_tokens"])
 		}
-		log.Printf("[Stream-Token统计] %s: InputTokens=%v, OutputTokens=%v, CacheCreationInputTokens=%.0f, CacheReadInputTokens=%.0f, CacheCreation5m=%.0f, CacheCreation1h=%.0f, CacheTTL=%s",
+		log.Printf("[Messages-Stream-Token] %s: InputTokens=%v, OutputTokens=%v, CacheCreationInputTokens=%.0f, CacheReadInputTokens=%.0f, CacheCreation5m=%.0f, CacheCreation1h=%.0f, CacheTTL=%s",
 			location, usage["input_tokens"], usage["output_tokens"], cacheCreation, cacheRead, cacheCreation5m, cacheCreation1h, cacheTTL)
 	}
 }
