@@ -140,6 +140,27 @@ func (m *URLWarmupManager) InvalidateCache(channelIndex int) {
 	}
 }
 
+// MarkURLFailed 标记 URL 失败，触发下次请求时重新预热
+// 当请求失败（超时或 5xx 错误）时调用此方法，使相关缓存失效
+func (m *URLWarmupManager) MarkURLFailed(channelIndex int, failedURL string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// 查找并使相关缓存失效
+	prefix := fmt.Sprintf("%d|", channelIndex)
+	for key, cache := range m.cache {
+		if strings.HasPrefix(key, prefix) {
+			for _, result := range cache.SortedURLs {
+				if result.URL == failedURL {
+					delete(m.cache, key)
+					log.Printf("[Warmup-Cache] URL 失败触发缓存失效: 渠道 [%d], URL: %s", channelIndex, failedURL)
+					return
+				}
+			}
+		}
+	}
+}
+
 // InvalidateAllCache 使所有缓存失效
 func (m *URLWarmupManager) InvalidateAllCache() {
 	m.mu.Lock()

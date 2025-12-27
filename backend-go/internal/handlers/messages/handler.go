@@ -180,12 +180,11 @@ func tryChannelWithAllKeys(
 				log.Printf("[Messages-Key] 使用API密钥: %s (BaseURL %d/%d, 尝试 %d/%d)", utils.MaskAPIKey(apiKey), sortedIdx+1, len(sortedURLResults), attempt+1, maxRetries)
 			}
 
-			// 临时设置 BaseURL 用于本次请求
-			originalBaseURL := upstream.BaseURL
-			upstream.BaseURL = currentBaseURL
+			// 使用深拷贝避免并发修改问题
+			upstreamCopy := upstream.Clone()
+			upstreamCopy.BaseURL = currentBaseURL
 
-			providerReq, _, err := provider.ConvertToProviderRequest(c, upstream, apiKey)
-			upstream.BaseURL = originalBaseURL // 恢复
+			providerReq, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
 
 			if err != nil {
 				failedKeys[apiKey] = true
@@ -198,6 +197,8 @@ func tryChannelWithAllKeys(
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey)
 				channelScheduler.RecordFailure(currentBaseURL, apiKey, false)
+				// 网络错误（超时等）触发预热缓存失效
+				channelScheduler.MarkWarmupURLFailed(channelIndex, currentBaseURL)
 				log.Printf("[Messages-Key] 警告: API密钥失败: %v", err)
 				continue
 			}
@@ -212,6 +213,8 @@ func tryChannelWithAllKeys(
 					failedKeys[apiKey] = true
 					cfgManager.MarkKeyAsFailed(apiKey)
 					channelScheduler.RecordFailure(currentBaseURL, apiKey, false)
+					// HTTP 5xx 等错误也触发预热缓存失效
+					channelScheduler.MarkWarmupURLFailed(channelIndex, currentBaseURL)
 					log.Printf("[Messages-Key] 警告: API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
 
 					if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
@@ -340,12 +343,11 @@ func handleSingleChannel(
 				log.Printf("[Messages-Key] 使用API密钥: %s", utils.MaskAPIKey(apiKey))
 			}
 
-			// 临时设置 BaseURL 用于本次请求
-			originalBaseURL := upstream.BaseURL
-			upstream.BaseURL = currentBaseURL
+			// 使用深拷贝避免并发修改问题
+			upstreamCopy := upstream.Clone()
+			upstreamCopy.BaseURL = currentBaseURL
 
-			providerReq, _, err := provider.ConvertToProviderRequest(c, upstream, apiKey)
-			upstream.BaseURL = originalBaseURL // 恢复
+			providerReq, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
 
 			if err != nil {
 				lastError = err

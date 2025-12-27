@@ -404,6 +404,14 @@ func (s *ChannelScheduler) InvalidateWarmupCache(channelIndex int) {
 	}
 }
 
+// MarkWarmupURLFailed 标记 URL 失败，触发下次请求时重新预热
+// 当请求失败（超时或 5xx 错误）时调用此方法
+func (s *ChannelScheduler) MarkWarmupURLFailed(channelIndex int, failedURL string) {
+	if s.warmupManager != nil {
+		s.warmupManager.MarkURLFailed(channelIndex, failedURL)
+	}
+}
+
 // GetWarmupCacheStats 获取预热缓存统计
 func (s *ChannelScheduler) GetWarmupCacheStats() map[string]interface{} {
 	if s.warmupManager != nil {

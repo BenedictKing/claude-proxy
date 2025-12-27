@@ -1392,6 +1392,35 @@ func GetChannelPriority(upstream *UpstreamConfig, index int) int {
 	return upstream.Priority
 }
 
+// Clone 深拷贝 UpstreamConfig（用于避免并发修改问题）
+// 在多 BaseURL failover 场景下，需要临时修改 BaseURL 字段，
+// 使用深拷贝可避免并发请求之间的竞态条件
+func (u *UpstreamConfig) Clone() *UpstreamConfig {
+	cloned := *u // 浅拷贝
+
+	// 深拷贝切片字段
+	if u.BaseURLs != nil {
+		cloned.BaseURLs = make([]string, len(u.BaseURLs))
+		copy(cloned.BaseURLs, u.BaseURLs)
+	}
+	if u.APIKeys != nil {
+		cloned.APIKeys = make([]string, len(u.APIKeys))
+		copy(cloned.APIKeys, u.APIKeys)
+	}
+	if u.ModelMapping != nil {
+		cloned.ModelMapping = make(map[string]string, len(u.ModelMapping))
+		for k, v := range u.ModelMapping {
+			cloned.ModelMapping[k] = v
+		}
+	}
+	if u.PromotionUntil != nil {
+		t := *u.PromotionUntil
+		cloned.PromotionUntil = &t
+	}
+
+	return &cloned
+}
+
 // GetEffectiveBaseURL 获取当前应使用的 BaseURL（纯 failover 模式）
 // 优先使用 BaseURL 字段（支持调用方临时覆盖），否则从 BaseURLs 数组获取
 func (u *UpstreamConfig) GetEffectiveBaseURL() string {
