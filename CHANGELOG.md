@@ -4,6 +4,24 @@
 
 ---
 
+## [v2.4.4] - 2025-12-27
+
+### ✨ 新功能
+
+- **全局流量和 Token 统计图表** - 新增全局统计可视化功能：
+  - 后端新增 `/api/messages/global/stats/history` 和 `/api/responses/global/stats/history` API
+  - 支持请求数量（成功/失败/总量）和 Token 总量（输入/输出）统计
+  - 前端新增 `GlobalStatsChart.vue` 组件，支持流量/Token 双视图切换
+  - 时间范围支持 1h / 6h / 24h / 今日 多档位切换
+  - 用户偏好（时间范围、视图模式）按 Messages/Responses 分别保存到 localStorage
+  - 以顶部可折叠卡片形式展示，随当前 Tab 自动切换对应 API 类型的统计
+
+- **渠道 Key 趋势图表支持"今日"** - KeyTrendChart 新增今日时间范围选项：
+  - 后端 `GetChannelKeyMetricsHistory` 支持 `duration=today` 参数
+  - 前端添加"今日"按钮，动态计算从今日 0 点到当前的时长
+
+---
+
 ## [v2.4.3] - 2025-12-27
 
 ### 🐛 修复

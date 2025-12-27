@@ -144,6 +144,31 @@
     <!-- 主要内容 -->
     <v-main>
       <v-container fluid class="pa-4 pa-md-6">
+        <!-- 全局统计顶部可折叠卡片（根据当前 Tab 显示对应统计） -->
+        <v-card class="mb-4 global-stats-panel" v-if="isAuthenticated">
+          <div
+            class="global-stats-header d-flex align-center justify-space-between px-4 py-2"
+            @click="showGlobalStats = !showGlobalStats"
+            style="cursor: pointer;"
+          >
+            <div class="d-flex align-center">
+              <v-icon size="20" class="mr-2">mdi-chart-areaspline</v-icon>
+              <span class="text-subtitle-1 font-weight-bold">
+                {{ activeTab === 'messages' ? 'Claude Messages' : 'Codex Responses' }} 流量统计
+              </span>
+            </div>
+            <v-btn icon size="small" variant="text">
+              <v-icon>{{ showGlobalStats ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+            </v-btn>
+          </div>
+          <v-expand-transition>
+            <div v-if="showGlobalStats">
+              <v-divider />
+              <GlobalStatsChart :api-type="activeTab" />
+            </div>
+          </v-expand-transition>
+        </v-card>
+
         <!-- 统计卡片 - 玻璃拟态风格 -->
         <v-row class="mb-6 stat-cards-row">
           <v-col cols="6" sm="4">
@@ -339,6 +364,7 @@ import { api, fetchHealth, type Channel, type ChannelsResponse, type ChannelMetr
 import { versionService, type VersionInfo } from './services/version'
 import AddChannelModal from './components/AddChannelModal.vue'
 import ChannelOrchestration from './components/ChannelOrchestration.vue'
+import GlobalStatsChart from './components/GlobalStatsChart.vue'
 import { useAppTheme } from './composables/useTheme'
 
 // Vuetify主题
@@ -368,6 +394,9 @@ const selectedChannelForKey = ref<number>(-1)
 const newApiKey = ref('')
 const isPingingAll = ref(false)
 const darkModePreference = ref<'light' | 'dark' | 'auto'>('auto')
+
+// 全局统计面板状态
+const showGlobalStats = ref(false) // 顶部可折叠卡片（默认收起）
 
 // Fuzzy 模式状态
 const fuzzyModeEnabled = ref(true)
@@ -1963,6 +1992,28 @@ onUnmounted(() => {
 
 .channel-list-move {
   transition: transform 0.2s ease;
+}
+
+/* ----- 全局统计面板样式 ----- */
+
+/* 方案 B: 顶部可折叠卡片 */
+.global-stats-panel {
+  background: rgb(var(--v-theme-surface)) !important;
+  border: 2px solid rgb(var(--v-theme-on-surface)) !important;
+  box-shadow: 4px 4px 0 0 rgb(var(--v-theme-on-surface)) !important;
+}
+
+.v-theme--dark .global-stats-panel {
+  border-color: rgba(255, 255, 255, 0.7) !important;
+  box-shadow: 4px 4px 0 0 rgba(255, 255, 255, 0.7) !important;
+}
+
+.global-stats-header {
+  transition: background 0.15s ease;
+}
+
+.global-stats-header:hover {
+  background: rgba(var(--v-theme-primary), 0.05);
 }
 </style>
 

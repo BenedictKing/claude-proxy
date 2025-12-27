@@ -1412,3 +1412,171 @@ type keyBucketData struct {
 	cacheCreationTokens int64
 	cacheReadTokens     int64
 }
+
+// ============ 全局统计数据结构和方法（用于全局流量统计图表）============
+
+// GlobalHistoryDataPoint 全局历史数据点（含 Token 数据）
+type GlobalHistoryDataPoint struct {
+	Timestamp           time.Time `json:"timestamp"`
+	RequestCount        int64     `json:"requestCount"`
+	SuccessCount        int64     `json:"successCount"`
+	FailureCount        int64     `json:"failureCount"`
+	SuccessRate         float64   `json:"successRate"`
+	InputTokens         int64     `json:"inputTokens"`
+	OutputTokens        int64     `json:"outputTokens"`
+	CacheCreationTokens int64     `json:"cacheCreationTokens"`
+	CacheReadTokens     int64     `json:"cacheReadTokens"`
+}
+
+// GlobalStatsSummary 全局统计汇总
+type GlobalStatsSummary struct {
+	TotalRequests            int64   `json:"totalRequests"`
+	TotalSuccess             int64   `json:"totalSuccess"`
+	TotalFailure             int64   `json:"totalFailure"`
+	TotalInputTokens         int64   `json:"totalInputTokens"`
+	TotalOutputTokens        int64   `json:"totalOutputTokens"`
+	TotalCacheCreationTokens int64   `json:"totalCacheCreationTokens"`
+	TotalCacheReadTokens     int64   `json:"totalCacheReadTokens"`
+	AvgSuccessRate           float64 `json:"avgSuccessRate"`
+	Duration                 string  `json:"duration"`
+}
+
+// GlobalStatsHistoryResponse 全局统计响应
+type GlobalStatsHistoryResponse struct {
+	DataPoints []GlobalHistoryDataPoint `json:"dataPoints"`
+	Summary    GlobalStatsSummary       `json:"summary"`
+}
+
+// GetGlobalHistoricalStatsWithTokens 获取全局历史统计（包含 Token 数据）
+// 聚合所有 Key 的数据，按时间间隔分桶
+func (m *MetricsManager) GetGlobalHistoricalStatsWithTokens(duration, interval time.Duration) GlobalStatsHistoryResponse {
+	// 参数验证
+	if interval <= 0 || duration <= 0 {
+		return GlobalStatsHistoryResponse{
+			DataPoints: []GlobalHistoryDataPoint{},
+			Summary:    GlobalStatsSummary{Duration: duration.String()},
+		}
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	now := time.Now()
+	// 时间对齐到 interval 边界
+	startTime := now.Add(-duration).Truncate(interval)
+	// endTime 延伸一个 interval，确保当前时间段的请求也被包含
+	endTime := now.Truncate(interval).Add(interval)
+
+	numPoints := int(duration / interval)
+	if numPoints <= 0 {
+		numPoints = 1
+	}
+	numPoints++ // 额外的一个桶用于当前时间段
+
+	// 使用 map 按时间分桶
+	buckets := make(map[int64]*globalBucketData)
+	for i := 0; i < numPoints; i++ {
+		buckets[int64(i)] = &globalBucketData{}
+	}
+
+	// 汇总统计
+	var totalRequests, totalSuccess, totalFailure int64
+	var totalInputTokens, totalOutputTokens, totalCacheCreation, totalCacheRead int64
+
+	// 遍历所有 Key 的请求历史
+	for _, metrics := range m.keyMetrics {
+		for _, record := range metrics.requestHistory {
+			// 使用 Before(endTime) 排除恰好落在 endTime 的记录，避免 offset 越界
+			if record.Timestamp.After(startTime) && record.Timestamp.Before(endTime) {
+				offset := int64(record.Timestamp.Sub(startTime) / interval)
+				if offset >= 0 && offset < int64(numPoints) {
+					b := buckets[offset]
+					b.requestCount++
+					if record.Success {
+						b.successCount++
+					} else {
+						b.failureCount++
+					}
+					b.inputTokens += record.InputTokens
+					b.outputTokens += record.OutputTokens
+					b.cacheCreationTokens += record.CacheCreationInputTokens
+					b.cacheReadTokens += record.CacheReadInputTokens
+
+					// 累加汇总
+					totalRequests++
+					if record.Success {
+						totalSuccess++
+					} else {
+						totalFailure++
+					}
+					totalInputTokens += record.InputTokens
+					totalOutputTokens += record.OutputTokens
+					totalCacheCreation += record.CacheCreationInputTokens
+					totalCacheRead += record.CacheReadInputTokens
+				}
+			}
+		}
+	}
+
+	// 构建数据点结果
+	dataPoints := make([]GlobalHistoryDataPoint, numPoints)
+	for i := 0; i < numPoints; i++ {
+		b := buckets[int64(i)]
+		successRate := float64(0)
+		if b.requestCount > 0 {
+			successRate = float64(b.successCount) / float64(b.requestCount) * 100
+		}
+		dataPoints[i] = GlobalHistoryDataPoint{
+			Timestamp:           startTime.Add(time.Duration(i+1) * interval),
+			RequestCount:        b.requestCount,
+			SuccessCount:        b.successCount,
+			FailureCount:        b.failureCount,
+			SuccessRate:         successRate,
+			InputTokens:         b.inputTokens,
+			OutputTokens:        b.outputTokens,
+			CacheCreationTokens: b.cacheCreationTokens,
+			CacheReadTokens:     b.cacheReadTokens,
+		}
+	}
+
+	// 计算平均成功率
+	avgSuccessRate := float64(0)
+	if totalRequests > 0 {
+		avgSuccessRate = float64(totalSuccess) / float64(totalRequests) * 100
+	}
+
+	summary := GlobalStatsSummary{
+		TotalRequests:            totalRequests,
+		TotalSuccess:             totalSuccess,
+		TotalFailure:             totalFailure,
+		TotalInputTokens:         totalInputTokens,
+		TotalOutputTokens:        totalOutputTokens,
+		TotalCacheCreationTokens: totalCacheCreation,
+		TotalCacheReadTokens:     totalCacheRead,
+		AvgSuccessRate:           avgSuccessRate,
+		Duration:                 duration.String(),
+	}
+
+	return GlobalStatsHistoryResponse{
+		DataPoints: dataPoints,
+		Summary:    summary,
+	}
+}
+
+// globalBucketData 全局统计时间分桶的辅助结构
+type globalBucketData struct {
+	requestCount        int64
+	successCount        int64
+	failureCount        int64
+	inputTokens         int64
+	outputTokens        int64
+	cacheCreationTokens int64
+	cacheReadTokens     int64
+}
+
+// CalculateTodayDuration 计算"今日"时间范围（从今天 0 点到现在）
+func CalculateTodayDuration() time.Duration {
+	now := time.Now()
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	return now.Sub(startOfDay)
+}

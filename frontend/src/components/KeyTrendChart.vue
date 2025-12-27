@@ -16,6 +16,7 @@
           <v-btn value="1h" size="x-small">1小时</v-btn>
           <v-btn value="6h" size="x-small">6小时</v-btn>
           <v-btn value="24h" size="x-small">24小时</v-btn>
+          <v-btn value="today" size="x-small">今日</v-btn>
         </v-btn-toggle>
 
         <v-btn icon size="x-small" variant="text" @click="refreshData" :loading="isLoading" :disabled="isLoading">
@@ -82,7 +83,7 @@ const props = defineProps<{
 
 // View mode type
 type ViewMode = 'traffic' | 'tokens' | 'cache'
-type Duration = '1h' | '6h' | '24h'
+type Duration = '1h' | '6h' | '24h' | 'today'
 
 // Theme
 const theme = useTheme()
@@ -138,11 +139,12 @@ const keyColors = [
 const FAILURE_RATE_THRESHOLD = 0.1 // 10%
 
 // 聚合间隔配置（与后端保持一致）
-// 1h = 1m, 6h = 5m, 24h = 15m
+// 1h = 1m, 6h = 5m, 24h = 15m, today = 动态计算
 const AGGREGATION_INTERVALS: Record<Duration, number> = {
   '1h': 60000,    // 1 分钟
   '6h': 300000,   // 5 分钟
-  '24h': 900000   // 15 分钟
+  '24h': 900000,  // 15 分钟
+  'today': 300000 // 5 分钟（今日默认使用 5 分钟间隔）
 }
 
 // 根据时间范围获取聚合间隔
@@ -579,6 +581,12 @@ const getDurationMs = (duration: Duration): number => {
     case '1h': return 60 * 60 * 1000
     case '6h': return 6 * 60 * 60 * 1000
     case '24h': return 24 * 60 * 60 * 1000
+    case 'today': {
+      // 计算从今日 0 点到现在的毫秒数
+      const now = new Date()
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      return now.getTime() - startOfDay.getTime()
+    }
     default: return 6 * 60 * 60 * 1000
   }
 }

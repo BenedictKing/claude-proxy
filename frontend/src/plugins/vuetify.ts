@@ -93,8 +93,10 @@ import {
   mdiShieldRefresh,
   mdiShieldOffOutline,
   mdiAlertCircleOutline,
-  mdiChartLine,
   mdiChartTimelineVariant,
+  mdiChartAreaspline,
+  mdiChartLine,
+  mdiCodeBraces,
   mdiDatabase,
 } from '@mdi/js'
 
@@ -238,8 +240,10 @@ const iconMap: Record<string, string> = {
   'circle': mdiCircle,
 
   // 图表与数据
-  'chart-line': mdiChartLine,
   'chart-timeline-variant': mdiChartTimelineVariant,
+  'chart-areaspline': mdiChartAreaspline,
+  'chart-line': mdiChartLine,
+  'code-braces': mdiCodeBraces,
   'database': mdiDatabase,
 }
 

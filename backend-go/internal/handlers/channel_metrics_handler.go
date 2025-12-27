@@ -400,10 +400,23 @@ func GetChannelKeyMetricsHistory(metricsManager *metrics.MetricsManager, cfgMana
 	return func(c *gin.Context) {
 		// 解析 duration 参数
 		durationStr := c.DefaultQuery("duration", "6h")
-		duration, err := time.ParseDuration(durationStr)
-		if err != nil {
-			c.JSON(400, gin.H{"error": "Invalid duration parameter"})
-			return
+
+		var duration time.Duration
+		var err error
+
+		// 特殊处理 "today" 参数
+		if durationStr == "today" {
+			duration = metrics.CalculateTodayDuration()
+			// 如果刚过零点，duration 可能非常小，设置最小值
+			if duration < time.Minute {
+				duration = time.Minute
+			}
+		} else {
+			duration, err = time.ParseDuration(durationStr)
+			if err != nil {
+				c.JSON(400, gin.H{"error": "Invalid duration parameter. Use: 1h, 6h, 24h, or today"})
+				return
+			}
 		}
 
 		// 限制最大查询范围为 24 小时
