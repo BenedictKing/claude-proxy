@@ -13,6 +13,7 @@ import (
 
 	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/handlers"
+	"github.com/BenedictKing/claude-proxy/internal/handlers/gemini"
 	"github.com/BenedictKing/claude-proxy/internal/handlers/messages"
 	"github.com/BenedictKing/claude-proxy/internal/handlers/responses"
 	"github.com/BenedictKing/claude-proxy/internal/logger"
@@ -84,16 +85,19 @@ func main() {
 		log.Printf("[Metrics-Init] 指标持久化已禁用，使用纯内存模式")
 	}
 
-	// 初始化多渠道调度器（Messages 和 Responses 使用独立的指标管理器）
-	var messagesMetricsManager, responsesMetricsManager *metrics.MetricsManager
+	// 初始化多渠道调度器（Messages、Responses 和 Gemini 使用独立的指标管理器）
+	var messagesMetricsManager, responsesMetricsManager, geminiMetricsManager *metrics.MetricsManager
 	if metricsStore != nil {
 		messagesMetricsManager = metrics.NewMetricsManagerWithPersistence(
 			envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold, metricsStore, "messages")
 		responsesMetricsManager = metrics.NewMetricsManagerWithPersistence(
 			envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold, metricsStore, "responses")
+		geminiMetricsManager = metrics.NewMetricsManagerWithPersistence(
+			envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold, metricsStore, "gemini")
 	} else {
 		messagesMetricsManager = metrics.NewMetricsManagerWithConfig(envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold)
 		responsesMetricsManager = metrics.NewMetricsManagerWithConfig(envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold)
+		geminiMetricsManager = metrics.NewMetricsManagerWithConfig(envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold)
 	}
 	traceAffinityManager := session.NewTraceAffinityManager()
 
@@ -101,7 +105,7 @@ func main() {
 	urlManager := warmup.NewURLManager(30*time.Second, 3) // 30秒冷却期，连续3次失败后移到末尾
 	log.Printf("[URLManager-Init] URL管理器已初始化 (冷却期: 30秒, 最大连续失败: 3)")
 
-	channelScheduler := scheduler.NewChannelScheduler(cfgManager, messagesMetricsManager, responsesMetricsManager, traceAffinityManager, urlManager)
+	channelScheduler := scheduler.NewChannelScheduler(cfgManager, messagesMetricsManager, responsesMetricsManager, geminiMetricsManager, traceAffinityManager, urlManager)
 	log.Printf("[Scheduler-Init] 多渠道调度器已初始化 (失败率阈值: %.0f%%, 滑动窗口: %d)",
 		messagesMetricsManager.GetFailureThreshold()*100, messagesMetricsManager.GetWindowSize())
 
@@ -124,8 +128,8 @@ func main() {
 	// 健康检查端点（固定路径 /health，与 Dockerfile HEALTHCHECK 保持一致）
 	r.GET("/health", handlers.HealthCheck(envCfg, cfgManager))
 
-	// 配置重载端点
-	r.POST("/admin/config/reload", handlers.ReloadConfig(cfgManager))
+	// 配置保存端点
+	r.POST("/admin/config/save", handlers.SaveConfigHandler(cfgManager))
 
 	// 开发信息端点
 	if envCfg.IsDevelopment() {
@@ -179,6 +183,24 @@ func main() {
 		apiGroup.GET("/responses/channels/:id/keys/metrics/history", handlers.GetChannelKeyMetricsHistory(responsesMetricsManager, cfgManager, true))
 		apiGroup.GET("/responses/global/stats/history", handlers.GetGlobalStatsHistory(responsesMetricsManager))
 
+		// Gemini 渠道管理
+		apiGroup.GET("/gemini/channels", gemini.GetUpstreams(cfgManager))
+		apiGroup.POST("/gemini/channels", gemini.AddUpstream(cfgManager))
+		apiGroup.PUT("/gemini/channels/:id", gemini.UpdateUpstream(cfgManager, channelScheduler))
+		apiGroup.DELETE("/gemini/channels/:id", gemini.DeleteUpstream(cfgManager))
+		apiGroup.POST("/gemini/channels/:id/keys", gemini.AddApiKey(cfgManager))
+		apiGroup.DELETE("/gemini/channels/:id/keys/:apiKey", gemini.DeleteApiKey(cfgManager))
+		apiGroup.POST("/gemini/channels/:id/keys/:apiKey/top", gemini.MoveApiKeyToTop(cfgManager))
+		apiGroup.POST("/gemini/channels/:id/keys/:apiKey/bottom", gemini.MoveApiKeyToBottom(cfgManager))
+
+		// Gemini 多渠道调度 API
+		apiGroup.POST("/gemini/channels/reorder", gemini.ReorderChannels(cfgManager))
+		apiGroup.PATCH("/gemini/channels/:id/status", gemini.SetChannelStatus(cfgManager))
+		apiGroup.POST("/gemini/channels/:id/promotion", gemini.SetChannelPromotion(cfgManager))
+		apiGroup.GET("/gemini/channels/metrics", handlers.GetGeminiChannelMetrics(geminiMetricsManager, cfgManager))
+		apiGroup.GET("/gemini/ping/:id", gemini.PingChannel(cfgManager))
+		apiGroup.GET("/gemini/ping", gemini.PingAllChannels(cfgManager))
+
 		// Fuzzy 模式设置
 		apiGroup.GET("/settings/fuzzy-mode", handlers.GetFuzzyMode(cfgManager))
 		apiGroup.PUT("/settings/fuzzy-mode", handlers.SetFuzzyMode(cfgManager))
@@ -196,6 +218,11 @@ func main() {
 	r.POST("/v1/responses", responses.Handler(envCfg, cfgManager, sessionManager, channelScheduler))
 	r.POST("/v1/responses/compact", responses.CompactHandler(envCfg, cfgManager, sessionManager, channelScheduler))
 
+	// 代理端点 - Gemini API (原生协议)
+	// 注意: Gin 使用 \: 转义冒号
+	r.POST("/v1/models/:model\\:generateContent", gemini.Handler(envCfg, cfgManager, channelScheduler))
+	r.POST("/v1/models/:model\\:streamGenerateContent", gemini.Handler(envCfg, cfgManager, channelScheduler))
+
 	// 静态文件服务 (嵌入的前端)
 	if envCfg.EnableWebUI {
 		handlers.ServeFrontend(r, frontendFS)
@@ -209,7 +236,7 @@ func main() {
 				"endpoints": gin.H{
 					"health": "/health",
 					"proxy":  "/v1/messages",
-					"config": "/admin/config/reload",
+					"config": "/admin/config/save",
 				},
 				"message": "Web界面已禁用，此服务器运行在纯API模式下",
 			})
@@ -230,6 +257,7 @@ func main() {
 	fmt.Printf("[Server-Info] API 地址: http://localhost:%d/v1\n", envCfg.Port)
 	fmt.Printf("[Server-Info] Claude Messages: POST /v1/messages\n")
 	fmt.Printf("[Server-Info] Codex Responses: POST /v1/responses\n")
+	fmt.Printf("[Server-Info] Gemini API: POST /v1/models/{model}:generateContent\n")
 	fmt.Printf("[Server-Info] 健康检查: GET /health\n")
 	fmt.Printf("[Server-Info] 环境: %s\n", envCfg.Env)
 	// 检查是否使用默认密码，给予提示

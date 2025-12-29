@@ -44,23 +44,23 @@ echo "🔨 构建二进制文件..."
 
 # Linux
 echo "  - 构建 Linux (amd64)..."
-GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o dist/claude-proxy-linux-amd64 .
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o dist/claude-proxy-linux-amd64 .
 
 # Linux ARM64
 echo "  - 构建 Linux (arm64)..."
-GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o dist/claude-proxy-linux-arm64 .
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o dist/claude-proxy-linux-arm64 .
 
 # macOS
 echo "  - 构建 macOS (amd64)..."
-GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o dist/claude-proxy-darwin-amd64 .
+CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o dist/claude-proxy-darwin-amd64 .
 
 # macOS ARM64 (M1/M2)
 echo "  - 构建 macOS (arm64)..."
-GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o dist/claude-proxy-darwin-arm64 .
+CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o dist/claude-proxy-darwin-arm64 .
 
 # Windows
 echo "  - 构建 Windows (amd64)..."
-GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o dist/claude-proxy-windows-amd64.exe .
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o dist/claude-proxy-windows-amd64.exe .
 
 echo ""
 echo "✅ 构建完成！"

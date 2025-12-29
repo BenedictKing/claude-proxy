@@ -18,7 +18,6 @@ type EnvConfig struct {
 	SSEDebugLevel      string // SSE 调试级别: off, summary, full
 
 	RequestTimeout     int
-	MaxConcurrentReqs  int
 	MaxRequestBodySize int64 // 请求体最大大小 (字节)，由 MB 配置转换
 	EnableCORS         bool
 	CORSOrigin         string
@@ -61,7 +60,6 @@ func NewEnvConfig() *EnvConfig {
 		SSEDebugLevel:      getEnv("SSE_DEBUG_LEVEL", "off"),
 
 		RequestTimeout:     getEnvAsInt("REQUEST_TIMEOUT", 300000),
-		MaxConcurrentReqs:  getEnvAsInt("MAX_CONCURRENT_REQUESTS", 100),
 		MaxRequestBodySize: getEnvAsInt64("MAX_REQUEST_BODY_SIZE_MB", 50) * 1024 * 1024, // MB 转换为字节
 		EnableCORS:         getEnv("ENABLE_CORS", "true") != "false",
 		CORSOrigin:         getEnv("CORS_ORIGIN", "*"),

@@ -20,6 +20,7 @@ type ChannelScheduler struct {
 	configManager           *config.ConfigManager
 	messagesMetricsManager  *metrics.MetricsManager // Messages 渠道指标
 	responsesMetricsManager *metrics.MetricsManager // Responses 渠道指标
+	geminiMetricsManager    *metrics.MetricsManager // Gemini 渠道指标
 	traceAffinity           *session.TraceAffinityManager
 	urlManager              *warmup.URLManager // URL 管理器（非阻塞，动态排序）
 }
@@ -29,6 +30,7 @@ func NewChannelScheduler(
 	cfgManager *config.ConfigManager,
 	messagesMetrics *metrics.MetricsManager,
 	responsesMetrics *metrics.MetricsManager,
+	geminiMetrics *metrics.MetricsManager,
 	traceAffinity *session.TraceAffinityManager,
 	urlMgr *warmup.URLManager,
 ) *ChannelScheduler {
@@ -36,6 +38,7 @@ func NewChannelScheduler(
 		configManager:           cfgManager,
 		messagesMetricsManager:  messagesMetrics,
 		responsesMetricsManager: responsesMetrics,
+		geminiMetricsManager:    geminiMetrics,
 		traceAffinity:           traceAffinity,
 		urlManager:              urlMgr,
 	}
@@ -422,4 +425,252 @@ func (s *ChannelScheduler) GetURLManagerStats() map[string]interface{} {
 		return s.urlManager.GetStats()
 	}
 	return nil
+}
+
+// ============== Gemini 渠道相关方法 ==============
+
+// SelectGeminiChannel 选择最佳 Gemini 渠道
+// 优先级: 促销期渠道 > Trace亲和（促销渠道失败时回退） > 渠道优先级顺序
+func (s *ChannelScheduler) SelectGeminiChannel(
+	ctx context.Context,
+	userID string,
+	failedChannels map[int]bool,
+) (*SelectionResult, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// 获取活跃渠道列表
+	activeChannels := s.getActiveGeminiChannels()
+	if len(activeChannels) == 0 {
+		return nil, fmt.Errorf("没有可用的活跃 Gemini 渠道")
+	}
+
+	// 获取指标管理器
+	metricsManager := s.geminiMetricsManager
+
+	// 0. 检查促销期渠道（最高优先级，绕过健康检查）
+	promotedChannel := s.findPromotedGeminiChannel(activeChannels)
+	if promotedChannel != nil && !failedChannels[promotedChannel.Index] {
+		upstream := s.getGeminiUpstreamByIndex(promotedChannel.Index)
+		if upstream != nil && len(upstream.APIKeys) > 0 {
+			failureRate := metricsManager.CalculateChannelFailureRate(upstream.BaseURL, upstream.APIKeys)
+			log.Printf("[Scheduler-Gemini-Promotion] 促销期优先选择渠道: [%d] %s (失败率: %.1f%%, 绕过健康检查)", promotedChannel.Index, upstream.Name, failureRate*100)
+			return &SelectionResult{
+				Upstream:     upstream,
+				ChannelIndex: promotedChannel.Index,
+				Reason:       "promotion_priority",
+			}, nil
+		} else if upstream != nil {
+			log.Printf("[Scheduler-Gemini-Promotion] 警告: 促销渠道 [%d] %s 无可用密钥，跳过", promotedChannel.Index, upstream.Name)
+		}
+	} else if promotedChannel != nil {
+		log.Printf("[Scheduler-Gemini-Promotion] 警告: 促销渠道 [%d] %s 已在本次请求中失败，跳过", promotedChannel.Index, promotedChannel.Name)
+	}
+
+	// 1. 检查 Trace 亲和性
+	if userID != "" {
+		if preferredIdx, ok := s.traceAffinity.GetPreferredChannel(userID); ok {
+			for _, ch := range activeChannels {
+				if ch.Index == preferredIdx && !failedChannels[preferredIdx] {
+					if ch.Status != "active" {
+						log.Printf("[Scheduler-Gemini-Affinity] 跳过亲和渠道 [%d] %s: 状态为 %s (user: %s)", preferredIdx, ch.Name, ch.Status, maskUserID(userID))
+						continue
+					}
+					upstream := s.getGeminiUpstreamByIndex(preferredIdx)
+					if upstream != nil && metricsManager.IsChannelHealthyWithKeys(upstream.BaseURL, upstream.APIKeys) {
+						log.Printf("[Scheduler-Gemini-Affinity] Trace亲和选择渠道: [%d] %s (user: %s)", preferredIdx, upstream.Name, maskUserID(userID))
+						return &SelectionResult{
+							Upstream:     upstream,
+							ChannelIndex: preferredIdx,
+							Reason:       "trace_affinity",
+						}, nil
+					}
+				}
+			}
+		}
+	}
+
+	// 2. 按优先级遍历活跃渠道
+	for _, ch := range activeChannels {
+		if failedChannels[ch.Index] {
+			continue
+		}
+
+		if ch.Status != "active" {
+			log.Printf("[Scheduler-Gemini-Channel] 跳过非活跃渠道: [%d] %s (状态: %s)", ch.Index, ch.Name, ch.Status)
+			continue
+		}
+
+		upstream := s.getGeminiUpstreamByIndex(ch.Index)
+		if upstream == nil || len(upstream.APIKeys) == 0 {
+			continue
+		}
+
+		if !metricsManager.IsChannelHealthyWithKeys(upstream.BaseURL, upstream.APIKeys) {
+			failureRate := metricsManager.CalculateChannelFailureRate(upstream.BaseURL, upstream.APIKeys)
+			log.Printf("[Scheduler-Gemini-Channel] 警告: 跳过不健康渠道: [%d] %s (失败率: %.1f%%)", ch.Index, ch.Name, failureRate*100)
+			continue
+		}
+
+		log.Printf("[Scheduler-Gemini-Channel] 选择渠道: [%d] %s (优先级: %d)", ch.Index, upstream.Name, ch.Priority)
+		return &SelectionResult{
+			Upstream:     upstream,
+			ChannelIndex: ch.Index,
+			Reason:       "priority_order",
+		}, nil
+	}
+
+	// 3. 所有健康渠道都失败，选择失败率最低的作为降级
+	return s.selectFallbackGeminiChannel(activeChannels, failedChannels)
+}
+
+// findPromotedGeminiChannel 查找处于促销期的 Gemini 渠道
+func (s *ChannelScheduler) findPromotedGeminiChannel(activeChannels []ChannelInfo) *ChannelInfo {
+	for i := range activeChannels {
+		ch := &activeChannels[i]
+		if ch.Status != "active" {
+			continue
+		}
+		upstream := s.getGeminiUpstreamByIndex(ch.Index)
+		if upstream != nil {
+			if config.IsChannelInPromotion(upstream) {
+				log.Printf("[Scheduler-Gemini-Promotion] 找到促销渠道: [%d] %s (promotionUntil: %v)", ch.Index, upstream.Name, upstream.PromotionUntil)
+				return ch
+			}
+		}
+	}
+	return nil
+}
+
+// selectFallbackGeminiChannel 选择 Gemini 降级渠道（失败率最低的）
+func (s *ChannelScheduler) selectFallbackGeminiChannel(
+	activeChannels []ChannelInfo,
+	failedChannels map[int]bool,
+) (*SelectionResult, error) {
+	metricsManager := s.geminiMetricsManager
+	var bestChannel *ChannelInfo
+	var bestUpstream *config.UpstreamConfig
+	bestFailureRate := float64(2)
+
+	for i := range activeChannels {
+		ch := &activeChannels[i]
+		if failedChannels[ch.Index] {
+			continue
+		}
+		if ch.Status != "active" {
+			continue
+		}
+
+		upstream := s.getGeminiUpstreamByIndex(ch.Index)
+		if upstream == nil || len(upstream.APIKeys) == 0 {
+			continue
+		}
+
+		failureRate := metricsManager.CalculateChannelFailureRate(upstream.BaseURL, upstream.APIKeys)
+		if failureRate < bestFailureRate {
+			bestFailureRate = failureRate
+			bestChannel = ch
+			bestUpstream = upstream
+		}
+	}
+
+	if bestChannel != nil && bestUpstream != nil {
+		log.Printf("[Scheduler-Gemini-Fallback] 警告: 降级选择渠道: [%d] %s (失败率: %.1f%%)",
+			bestChannel.Index, bestUpstream.Name, bestFailureRate*100)
+		return &SelectionResult{
+			Upstream:     bestUpstream,
+			ChannelIndex: bestChannel.Index,
+			Reason:       "fallback",
+		}, nil
+	}
+
+	return nil, fmt.Errorf("所有 Gemini 渠道都不可用")
+}
+
+// getActiveGeminiChannels 获取活跃 Gemini 渠道列表（按优先级排序）
+func (s *ChannelScheduler) getActiveGeminiChannels() []ChannelInfo {
+	cfg := s.configManager.GetConfig()
+	upstreams := cfg.GeminiUpstream
+
+	var activeChannels []ChannelInfo
+	for i, upstream := range upstreams {
+		status := upstream.Status
+		if status == "" {
+			status = "active"
+		}
+
+		if status != "disabled" {
+			priority := upstream.Priority
+			if priority == 0 {
+				priority = i
+			}
+
+			activeChannels = append(activeChannels, ChannelInfo{
+				Index:    i,
+				Name:     upstream.Name,
+				Priority: priority,
+				Status:   status,
+			})
+		}
+	}
+
+	sort.Slice(activeChannels, func(i, j int) bool {
+		return activeChannels[i].Priority < activeChannels[j].Priority
+	})
+
+	return activeChannels
+}
+
+// getGeminiUpstreamByIndex 根据索引获取 Gemini 上游配置
+func (s *ChannelScheduler) getGeminiUpstreamByIndex(index int) *config.UpstreamConfig {
+	cfg := s.configManager.GetConfig()
+	upstreams := cfg.GeminiUpstream
+
+	if index >= 0 && index < len(upstreams) {
+		upstream := upstreams[index]
+		return &upstream
+	}
+	return nil
+}
+
+// RecordGeminiSuccess 记录 Gemini 渠道成功
+func (s *ChannelScheduler) RecordGeminiSuccess(baseURL, apiKey string) {
+	s.geminiMetricsManager.RecordSuccess(baseURL, apiKey)
+}
+
+// RecordGeminiSuccessWithUsage 记录 Gemini 渠道成功（带 Usage 数据）
+func (s *ChannelScheduler) RecordGeminiSuccessWithUsage(baseURL, apiKey string, usage *types.Usage) {
+	s.geminiMetricsManager.RecordSuccessWithUsage(baseURL, apiKey, usage)
+}
+
+// RecordGeminiFailure 记录 Gemini 渠道失败
+func (s *ChannelScheduler) RecordGeminiFailure(baseURL, apiKey string) {
+	s.geminiMetricsManager.RecordFailure(baseURL, apiKey)
+}
+
+// GetGeminiMetricsManager 获取 Gemini 渠道指标管理器
+func (s *ChannelScheduler) GetGeminiMetricsManager() *metrics.MetricsManager {
+	return s.geminiMetricsManager
+}
+
+// ResetGeminiChannelMetrics 重置 Gemini 渠道所有 Key 的指标
+func (s *ChannelScheduler) ResetGeminiChannelMetrics(channelIndex int) {
+	upstream := s.getGeminiUpstreamByIndex(channelIndex)
+	if upstream == nil {
+		return
+	}
+	for _, apiKey := range upstream.APIKeys {
+		s.geminiMetricsManager.ResetKey(upstream.BaseURL, apiKey)
+	}
+	log.Printf("[Scheduler-Gemini-Reset] 渠道 [%d] %s 的所有 Key 指标已重置", channelIndex, upstream.Name)
+}
+
+// GetActiveGeminiChannelCount 获取活跃 Gemini 渠道数量
+func (s *ChannelScheduler) GetActiveGeminiChannelCount() int {
+	return len(s.getActiveGeminiChannels())
+}
+
+// IsMultiChannelModeGemini 判断 Gemini 是否为多渠道模式
+func (s *ChannelScheduler) IsMultiChannelModeGemini() bool {
+	return s.GetActiveGeminiChannelCount() > 1
 }

@@ -4,6 +4,9 @@ FROM oven/bun:alpine AS bun-runtime
 # --- 阶段 2: 构建阶段 (Go + Bun) ---
 FROM golang:1.22-alpine AS builder
 
+# 声明 VERSION 构建参数（用于 CI 传入版本号，留空则从 VERSION 文件读取）
+ARG VERSION
+
 WORKDIR /src
 
 # 安装必要的构建工具和 bun 依赖（libstdc++ libgcc 是 bun:alpine 运行所需）
@@ -28,7 +31,8 @@ RUN cd frontend && bun install
 RUN cd backend-go && go mod tidy && go mod download
 
 # 使用 Makefile 构建整个项目（前端 + 后端）
-RUN make build
+# 如果 CI 传入了 VERSION 则使用，否则 Makefile 会从 VERSION 文件读取
+RUN if [ -n "${VERSION}" ]; then VERSION=${VERSION} make build; else make build; fi
 
 # --- 阶段 3: 运行时 ---
 FROM alpine:latest AS runtime

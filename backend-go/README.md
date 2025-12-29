@@ -123,9 +123,6 @@ ENABLE_RESPONSE_LOGS=true
 # 请求超时时间（毫秒）
 REQUEST_TIMEOUT=30000
 
-# 最大并发请求数
-MAX_CONCURRENT_REQUESTS=100
-
 # ============ CORS 配置 ============
 ENABLE_CORS=true
 CORS_ORIGIN=*

@@ -59,13 +59,13 @@ func SetVersionInfo(version, build, commit string) {
 	gitCommit = commit
 }
 
-// ReloadConfig 配置重载处理器
-func ReloadConfig(cfgManager *config.ConfigManager) gin.HandlerFunc {
+// SaveConfigHandler 配置保存处理器
+func SaveConfigHandler(cfgManager *config.ConfigManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if err := cfgManager.SaveConfig(); err != nil {
 			c.JSON(500, gin.H{
 				"status":    "error",
-				"message":   "配置重载失败",
+				"message":   "配置保存失败",
 				"error":     err.Error(),
 				"timestamp": time.Now().Format(time.RFC3339),
 			})
@@ -75,7 +75,7 @@ func ReloadConfig(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		config := cfgManager.GetConfig()
 		c.JSON(200, gin.H{
 			"status":    "success",
-			"message":   "配置已重载",
+			"message":   "配置已保存",
 			"timestamp": time.Now().Format(time.RFC3339),
 			"config": gin.H{
 				"upstreamCount":        len(config.Upstream),

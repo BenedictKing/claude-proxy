@@ -204,29 +204,8 @@ class ApiService {
     return this.apiKey
   }
 
-  // 从URL查询参数获取密钥
-  getKeyFromUrl(): string | null {
-    const params = new URLSearchParams(window.location.search)
-    return params.get('key')
-  }
-
-  // 初始化密钥（从URL或localStorage）
+  // 初始化密钥（从localStorage）
   initializeAuth() {
-    // 优先从URL获取密钥
-    const urlKey = this.getKeyFromUrl()
-    if (urlKey) {
-      this.setApiKey(urlKey)
-      // 保存到localStorage以便下次使用
-      localStorage.setItem('proxyAccessKey', urlKey)
-
-      // 清理URL中的key参数以提高安全性
-      const url = new URL(window.location.href)
-      url.searchParams.delete('key')
-      window.history.replaceState({}, '', url.toString())
-
-      return urlKey
-    }
-
     // 从localStorage获取保存的密钥
     const savedKey = localStorage.getItem('proxyAccessKey')
     if (savedKey) {

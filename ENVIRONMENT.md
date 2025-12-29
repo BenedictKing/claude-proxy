@@ -58,7 +58,6 @@ QUIET_POLLING_LOGS=true                # 静默前端轮询端点日志（/api/c
 
 # 性能配置
 REQUEST_TIMEOUT=300000                 # 请求超时时间（毫秒）
-MAX_CONCURRENT_REQUESTS=100            # 最大并发请求数
 MAX_REQUEST_BODY_SIZE_MB=50            # 请求体最大大小（MB，默认 50）
 
 # CORS 配置

@@ -617,3 +617,45 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 		})
 	}
 }
+
+// GetGeminiChannelMetrics 获取 Gemini 渠道指标
+func GetGeminiChannelMetrics(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg := cfgManager.GetConfig()
+		upstreams := cfg.GeminiUpstream
+
+		result := make([]gin.H, 0, len(upstreams))
+		for i, upstream := range upstreams {
+			// 使用新的聚合方法获取渠道指标
+			resp := metricsManager.ToResponse(i, upstream.BaseURL, upstream.APIKeys, 0)
+
+			item := gin.H{
+				"channelIndex":        i,
+				"channelName":         upstream.Name,
+				"requestCount":        resp.RequestCount,
+				"successCount":        resp.SuccessCount,
+				"failureCount":        resp.FailureCount,
+				"successRate":         resp.SuccessRate,
+				"errorRate":           resp.ErrorRate,
+				"consecutiveFailures": resp.ConsecutiveFailures,
+				"latency":             resp.Latency,
+				"keyMetrics":          resp.KeyMetrics,  // 各 Key 的详细指标
+				"timeWindows":         resp.TimeWindows, // 分时段统计 (15m, 1h, 6h, 24h)
+			}
+
+			if resp.LastSuccessAt != nil {
+				item["lastSuccessAt"] = *resp.LastSuccessAt
+			}
+			if resp.LastFailureAt != nil {
+				item["lastFailureAt"] = *resp.LastFailureAt
+			}
+			if resp.CircuitBrokenAt != nil {
+				item["circuitBrokenAt"] = *resp.CircuitBrokenAt
+			}
+
+			result = append(result, item)
+		}
+
+		c.JSON(200, result)
+	}
+}

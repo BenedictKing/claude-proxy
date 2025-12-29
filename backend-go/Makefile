@@ -5,7 +5,8 @@ BINARY_NAME=claude-proxy-go
 MAIN_PATH=.
 BUILD_DIR=../dist
 AIR_VERSION=v1.52.0
-VERSION=$(shell cat ../VERSION 2>/dev/null || echo "v0.0.0-dev")
+# 支持环境变量覆盖 VERSION（用于 Docker 构建时传入）
+VERSION?=$(shell cat ../VERSION 2>/dev/null || echo "v0.0.0-dev")
 BUILD_TIME=$(shell date '+%Y-%m-%d_%H:%M:%S_%Z')
 GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 LDFLAGS=-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)
@@ -62,7 +63,7 @@ dev-with-env:
 # 构建生产版本
 build:
 	@echo "$(GREEN)📦 构建生产版本...$(NC)"
-	@go build -ldflags="$(LDFLAGS) -s -w" -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
+	@CGO_ENABLED=0 go build -ldflags="$(LDFLAGS) -s -w" -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 	@echo "$(GREEN)✅ 构建完成: $(BUILD_DIR)/$(BINARY_NAME)$(NC)"
 
 # 构建当前平台版本
