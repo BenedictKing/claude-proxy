@@ -3,6 +3,7 @@ package common
 
 import (
 	"encoding/json"
+	"log"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -28,24 +29,48 @@ type FailoverError struct {
 //   - true: 额度/配额相关，降低密钥优先级
 //   - false: 临时错误，不影响优先级
 func ShouldRetryWithNextKey(statusCode int, bodyBytes []byte, fuzzyMode bool) (bool, bool) {
+	log.Printf("[Failover-Entry] ShouldRetryWithNextKey 入口: statusCode=%d, bodyLen=%d, fuzzyMode=%v",
+		statusCode, len(bodyBytes), fuzzyMode)
 	if fuzzyMode {
-		return shouldRetryWithNextKeyFuzzy(statusCode)
+		return shouldRetryWithNextKeyFuzzy(statusCode, bodyBytes)
 	}
 	return shouldRetryWithNextKeyNormal(statusCode, bodyBytes)
 }
 
 // shouldRetryWithNextKeyFuzzy Fuzzy 模式：所有非 2xx 错误都尝试 failover
-func shouldRetryWithNextKeyFuzzy(statusCode int) (bool, bool) {
+// 同时检查消息体中的配额相关关键词，确保 403 + "预扣费额度" 等情况能正确识别
+func shouldRetryWithNextKeyFuzzy(statusCode int, bodyBytes []byte) (bool, bool) {
+	log.Printf("[Failover-Fuzzy] 进入 Fuzzy 模式处理: statusCode=%d, bodyLen=%d", statusCode, len(bodyBytes))
 	if statusCode >= 200 && statusCode < 300 {
 		return false, false
 	}
-	isQuotaRelated := statusCode == 402 || statusCode == 429
-	return true, isQuotaRelated
+
+	// 状态码直接标记为配额相关
+	if statusCode == 402 || statusCode == 429 {
+		log.Printf("[Failover-Fuzzy] 状态码 %d 直接标记为配额相关", statusCode)
+		return true, true
+	}
+
+	// 对于其他状态码，检查消息体是否包含配额相关关键词
+	// 这样 403 + "预扣费额度" 消息 → isQuotaRelated=true
+	if len(bodyBytes) > 0 {
+		_, msgQuota := classifyByErrorMessage(bodyBytes)
+		if msgQuota {
+			log.Printf("[Failover-Fuzzy] 消息体包含配额相关关键词，标记为配额相关")
+			return true, true
+		}
+	}
+
+	log.Printf("[Failover-Fuzzy] Fuzzy 模式结果: shouldFailover=true, isQuotaRelated=false")
+	return true, false
 }
 
 // shouldRetryWithNextKeyNormal 原有的精确错误分类逻辑
 func shouldRetryWithNextKeyNormal(statusCode int, bodyBytes []byte) (bool, bool) {
 	shouldFailover, isQuotaRelated := classifyByStatusCode(statusCode)
+
+	log.Printf("[Failover-Debug] shouldRetryWithNextKeyNormal: statusCode=%d, bodyLen=%d, shouldFailover=%v, isQuotaRelated=%v",
+		statusCode, len(bodyBytes), shouldFailover, isQuotaRelated)
 
 	if shouldFailover {
 		// 如果状态码已标记为 quota 相关，直接返回
@@ -54,7 +79,9 @@ func shouldRetryWithNextKeyNormal(statusCode int, bodyBytes []byte) (bool, bool)
 		}
 		// 否则，仍检查消息体是否包含 quota 相关关键词
 		// 这样 403 + "预扣费额度" 消息 → isQuotaRelated=true
+		log.Printf("[Failover-Debug] 调用 classifyByErrorMessage, body=%s", string(bodyBytes))
 		_, msgQuota := classifyByErrorMessage(bodyBytes)
+		log.Printf("[Failover-Debug] classifyByErrorMessage 返回: msgQuota=%v", msgQuota)
 		if msgQuota {
 			return true, true
 		}
@@ -116,18 +143,25 @@ func classifyByStatusCode(statusCode int) (bool, bool) {
 func classifyByErrorMessage(bodyBytes []byte) (bool, bool) {
 	var errResp map[string]interface{}
 	if err := json.Unmarshal(bodyBytes, &errResp); err != nil {
+		log.Printf("[Failover-Debug] JSON解析失败: %v, body长度=%d", err, len(bodyBytes))
 		return false, false
 	}
 
 	errObj, ok := errResp["error"].(map[string]interface{})
 	if !ok {
+		log.Printf("[Failover-Debug] 未找到error对象, keys=%v", getMapKeys(errResp))
 		return false, false
 	}
 
 	if msg, ok := errObj["message"].(string); ok {
+		log.Printf("[Failover-Debug] 提取到消息: %s", msg)
 		if failover, quota := classifyMessage(msg); failover {
+			log.Printf("[Failover-Debug] 消息分类结果: failover=%v, quota=%v", failover, quota)
 			return true, quota
 		}
+		log.Printf("[Failover-Debug] 消息未匹配任何关键词")
+	} else {
+		log.Printf("[Failover-Debug] message字段不存在或非字符串, errObj keys=%v", getMapKeys(errObj))
 	}
 
 	if errType, ok := errObj["type"].(string); ok {
@@ -303,4 +337,13 @@ func HandleAllKeysFailed(c *gin.Context, fuzzyMode bool, lastFailoverError *Fail
 			"details": errMsg,
 		})
 	}
+}
+
+// getMapKeys 获取 map 的所有 key（用于调试日志）
+func getMapKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }

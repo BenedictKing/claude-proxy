@@ -209,6 +209,7 @@ func tryChannelWithAllKeys(
 				respBodyBytes = utils.DecompressGzipIfNeeded(resp, respBodyBytes)
 
 				shouldFailover, isQuotaRelated := common.ShouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled())
+				log.Printf("[Messages-Failover] ShouldRetryWithNextKey: statusCode=%d, shouldFailover=%v, isQuotaRelated=%v", resp.StatusCode, shouldFailover, isQuotaRelated)
 				if shouldFailover {
 					failedKeys[apiKey] = true
 					cfgManager.MarkKeyAsFailed(apiKey)
@@ -236,6 +237,7 @@ func tryChannelWithAllKeys(
 
 					if isQuotaRelated {
 						deprioritizeCandidates[apiKey] = true
+						log.Printf("[Messages-Key] 标记密钥为配额相关失败，待降级: %s", utils.MaskAPIKey(apiKey))
 					}
 					continue
 				}
@@ -375,6 +377,7 @@ func handleSingleChannel(
 				respBodyBytes = utils.DecompressGzipIfNeeded(resp, respBodyBytes)
 
 				shouldFailover, isQuotaRelated := common.ShouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled())
+				log.Printf("[Messages-Failover] ShouldRetryWithNextKey(SingleChannel): statusCode=%d, shouldFailover=%v, isQuotaRelated=%v", resp.StatusCode, shouldFailover, isQuotaRelated)
 				if shouldFailover {
 					lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)
 					failedKeys[apiKey] = true
@@ -401,6 +404,7 @@ func handleSingleChannel(
 
 					if isQuotaRelated {
 						deprioritizeCandidates[apiKey] = true
+						log.Printf("[Messages-Key] 标记密钥为配额相关失败，待降级: %s", utils.MaskAPIKey(apiKey))
 					}
 					continue
 				}

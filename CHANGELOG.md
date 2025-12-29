@@ -4,6 +4,26 @@
 
 ---
 
+## [v2.4.11] - 2025-12-29
+
+### 🐛 修复
+
+- **修复 Fuzzy 模式下 403 + 预扣费消息未触发 Key 降级的问题** - 补充 v2.4.10 修复的遗漏场景：
+  - 修改 `shouldRetryWithNextKeyFuzzy` 函数：新增 `bodyBytes` 参数，对非 402/429 状态码检查消息体中的配额关键词
+  - 之前 Fuzzy 模式仅检查状态码（402/429 = quota），不解析消息体，导致 403 + "预扣费额度失败" 返回 `isQuotaRelated=false`
+  - 新增 `TestShouldRetryWithNextKey_FuzzyMode_403WithQuotaMessage` 测试用例
+  - 涉及文件：`internal/handlers/common/failover.go`, `internal/handlers/common/failover_test.go`
+
+### 🔧 调试
+
+- **添加 Key 降级调试日志** - 用于追踪 `isQuotaRelated` 值和密钥降级流程：
+  - 在 `ShouldRetryWithNextKey` 调用后记录返回值（statusCode, shouldFailover, isQuotaRelated）
+  - 在密钥标记为配额相关失败时记录日志
+  - 涉及文件：`internal/handlers/messages/handler.go`
+- **改进 .env.example 文档** - 添加日志配置默认值说明（默认启用，需显式设置 false 禁用）
+
+---
+
 ## [v2.4.10] - 2025-12-29
 
 ### 🐛 修复

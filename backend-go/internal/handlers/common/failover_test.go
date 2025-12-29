@@ -264,6 +264,48 @@ func TestClassifyByErrorMessage_InvalidJSON(t *testing.T) {
 	}
 }
 
+// TestShouldRetryWithNextKey_403WithPredeductQuotaError 测试 403 + 预扣费额度失败的场景
+// 这是生产环境实际发生的错误格式
+func TestShouldRetryWithNextKey_403WithPredeductQuotaError(t *testing.T) {
+	// 使用生产环境的精确 JSON 格式
+	body := []byte(`{"error":{"type":"new_api_error","message":"预扣费额度失败, 用户剩余额度: ¥0.053950, 需要预扣费额度: ¥0.191160, 下次重置时间: 2025-01-01 00:00:00"},"type":"error"}`)
+
+	gotFailover, gotQuota := ShouldRetryWithNextKey(403, body, false)
+
+	if !gotFailover {
+		t.Errorf("ShouldRetryWithNextKey(403, prededuct_error, false) failover = %v, want true", gotFailover)
+	}
+	if !gotQuota {
+		t.Errorf("ShouldRetryWithNextKey(403, prededuct_error, false) quota = %v, want true", gotQuota)
+	}
+}
+
+// TestClassifyMessage_ChineseQuotaKeywords 测试中文额度关键词
+func TestClassifyMessage_ChineseQuotaKeywords(t *testing.T) {
+	tests := []struct {
+		name         string
+		message      string
+		wantFailover bool
+		wantQuota    bool
+	}{
+		{"预扣费额度失败", "预扣费额度失败, 用户剩余额度: ¥0.053950", true, true},
+		{"额度不足", "账户额度不足", true, true},
+		{"预扣费失败", "预扣费失败，请充值", true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotFailover, gotQuota := classifyMessage(tt.message)
+			if gotFailover != tt.wantFailover {
+				t.Errorf("classifyMessage(%q) failover = %v, want %v", tt.message, gotFailover, tt.wantFailover)
+			}
+			if gotQuota != tt.wantQuota {
+				t.Errorf("classifyMessage(%q) quota = %v, want %v", tt.message, gotQuota, tt.wantQuota)
+			}
+		})
+	}
+}
+
 // TestShouldRetryWithNextKey 测试完整的重试判断逻辑
 func TestShouldRetryWithNextKey(t *testing.T) {
 	tests := []struct {
@@ -273,6 +315,20 @@ func TestShouldRetryWithNextKey(t *testing.T) {
 		wantFailover bool
 		wantQuota    bool
 	}{
+		// 403 + 中文配额相关消息
+		{
+			name:       "403 with chinese quota message",
+			statusCode: 403,
+			body: map[string]interface{}{
+				"error": map[string]interface{}{
+					"type":    "new_api_error",
+					"message": "预扣费额度失败, 用户剩余额度: ¥0.053950",
+				},
+				"type": "error",
+			},
+			wantFailover: true,
+			wantQuota:    true,
+		},
 		// 状态码优先
 		{
 			name:         "401 always failover",
@@ -477,6 +533,66 @@ func TestShouldRetryWithNextKeyFuzzyMode(t *testing.T) {
 			}
 			if gotQuota != tt.wantQuota {
 				t.Errorf("shouldRetryWithNextKey(%d, nil, true) quota = %v, want %v", tt.statusCode, gotQuota, tt.wantQuota)
+			}
+		})
+	}
+}
+
+// TestShouldRetryWithNextKey_FuzzyMode_403WithQuotaMessage 测试 Fuzzy 模式下 403 + 预扣费消息
+// 验证修复：Fuzzy 模式下也会检查消息体中的配额相关关键词
+func TestShouldRetryWithNextKey_FuzzyMode_403WithQuotaMessage(t *testing.T) {
+	tests := []struct {
+		name         string
+		statusCode   int
+		body         []byte
+		wantFailover bool
+		wantQuota    bool
+	}{
+		{
+			name:         "403 with prededuct quota error in fuzzy mode",
+			statusCode:   403,
+			body:         []byte(`{"error":{"type":"new_api_error","message":"预扣费额度失败, 用户剩余额度: ¥0.053950, 需要预扣费额度: ¥0.191160"},"type":"error"}`),
+			wantFailover: true,
+			wantQuota:    true,
+		},
+		{
+			name:         "403 with insufficient balance in fuzzy mode",
+			statusCode:   403,
+			body:         []byte(`{"error":{"message":"余额不足，请充值"}}`),
+			wantFailover: true,
+			wantQuota:    true,
+		},
+		{
+			name:         "403 without quota keywords in fuzzy mode",
+			statusCode:   403,
+			body:         []byte(`{"error":{"message":"Access denied"}}`),
+			wantFailover: true,
+			wantQuota:    false,
+		},
+		{
+			name:         "403 with empty body in fuzzy mode",
+			statusCode:   403,
+			body:         nil,
+			wantFailover: true,
+			wantQuota:    false,
+		},
+		{
+			name:         "500 with quota message in fuzzy mode",
+			statusCode:   500,
+			body:         []byte(`{"error":{"message":"Quota exceeded"}}`),
+			wantFailover: true,
+			wantQuota:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, tt.body, true)
+			if gotFailover != tt.wantFailover {
+				t.Errorf("ShouldRetryWithNextKey(%d, body, true) failover = %v, want %v", tt.statusCode, gotFailover, tt.wantFailover)
+			}
+			if gotQuota != tt.wantQuota {
+				t.Errorf("ShouldRetryWithNextKey(%d, body, true) quota = %v, want %v", tt.statusCode, gotQuota, tt.wantQuota)
 			}
 		})
 	}
