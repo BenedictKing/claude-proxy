@@ -231,6 +231,53 @@ func TestClassifyByErrorMessage(t *testing.T) {
 			wantFailover: false,
 			wantQuota:    false,
 		},
+		// upstream_error 字段支持（Responses API 错误格式）
+		{
+			name: "upstream_error string field - auth error",
+			body: map[string]interface{}{
+				"error": map[string]interface{}{
+					"type":           "upstream_error",
+					"upstream_error": "Invalid API key provided",
+				},
+			},
+			wantFailover: true,
+			wantQuota:    false,
+		},
+		{
+			name: "upstream_error string field - quota error",
+			body: map[string]interface{}{
+				"error": map[string]interface{}{
+					"type":           "upstream_error",
+					"upstream_error": "Rate limit exceeded, please retry later",
+				},
+			},
+			wantFailover: true,
+			wantQuota:    true,
+		},
+		{
+			name: "upstream_error nested object with message",
+			body: map[string]interface{}{
+				"error": map[string]interface{}{
+					"type": "upstream_error",
+					"upstream_error": map[string]interface{}{
+						"message": "Insufficient credits",
+					},
+				},
+			},
+			wantFailover: true,
+			wantQuota:    true,
+		},
+		{
+			name: "detail field - auth error",
+			body: map[string]interface{}{
+				"error": map[string]interface{}{
+					"type":   "error",
+					"detail": "Token expired, please refresh",
+				},
+			},
+			wantFailover: true,
+			wantQuota:    false,
+		},
 	}
 
 	for _, tt := range tests {

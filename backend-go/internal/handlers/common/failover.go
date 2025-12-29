@@ -153,23 +153,37 @@ func classifyByErrorMessage(bodyBytes []byte) (bool, bool) {
 		return false, false
 	}
 
-	if msg, ok := errObj["message"].(string); ok {
-		log.Printf("[Failover-Debug] 提取到消息: %s", msg)
-		if failover, quota := classifyMessage(msg); failover {
-			log.Printf("[Failover-Debug] 消息分类结果: failover=%v, quota=%v", failover, quota)
-			return true, quota
+	// 尝试多个可能的消息字段: message, upstream_error, detail
+	messageFields := []string{"message", "upstream_error", "detail"}
+	for _, field := range messageFields {
+		if msg, ok := errObj[field].(string); ok {
+			log.Printf("[Failover-Debug] 提取到消息 (字段: %s): %s", field, msg)
+			if failover, quota := classifyMessage(msg); failover {
+				log.Printf("[Failover-Debug] 消息分类结果: failover=%v, quota=%v", failover, quota)
+				return true, quota
+			}
 		}
-		log.Printf("[Failover-Debug] 消息未匹配任何关键词")
-	} else {
-		log.Printf("[Failover-Debug] message字段不存在或非字符串, errObj keys=%v", getMapKeys(errObj))
 	}
 
+	// 如果 upstream_error 是嵌套对象，尝试提取其中的消息
+	if upstreamErr, ok := errObj["upstream_error"].(map[string]interface{}); ok {
+		if msg, ok := upstreamErr["message"].(string); ok {
+			log.Printf("[Failover-Debug] 提取到嵌套 upstream_error.message: %s", msg)
+			if failover, quota := classifyMessage(msg); failover {
+				log.Printf("[Failover-Debug] 消息分类结果: failover=%v, quota=%v", failover, quota)
+				return true, quota
+			}
+		}
+	}
+
+	// 检查 type 字段
 	if errType, ok := errObj["type"].(string); ok {
 		if failover, quota := classifyErrorType(errType); failover {
 			return true, quota
 		}
 	}
 
+	log.Printf("[Failover-Debug] 未匹配任何关键词, errObj keys=%v", getMapKeys(errObj))
 	return false, false
 }
 

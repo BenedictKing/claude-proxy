@@ -4,6 +4,19 @@
 
 ---
 
+## [v2.4.12] - 2025-12-29
+
+### 🐛 修复
+
+- **修复 Responses API 错误消息提取失败的问题** - 解决 upstream_error 字段无法被正确解析：
+  - 扩展 `classifyByErrorMessage` 函数：支持多个消息字段（`message`, `upstream_error`, `detail`）
+  - 支持嵌套对象格式：当 `upstream_error` 为对象时，提取其中的 `message` 字段
+  - 之前仅检查 `error.message` 字段，导致 `{type, upstream_error}` 格式的错误无法被识别
+  - 新增 4 个测试用例覆盖 upstream_error 字符串、嵌套对象、detail 字段等场景
+  - 涉及文件：`internal/handlers/common/failover.go`, `internal/handlers/common/failover_test.go`
+
+---
+
 ## [v2.4.11] - 2025-12-29
 
 ### 🐛 修复
