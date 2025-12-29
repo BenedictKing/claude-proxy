@@ -6,7 +6,7 @@ set -e
 
 # 版本信息 - 从根目录 VERSION 文件读取
 VERSION=$(cat ../VERSION 2>/dev/null || echo "v0.0.0-dev")
-BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S_UTC')
+BUILD_TIME=$(date '+%Y-%m-%d_%H:%M:%S_%Z')
 GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
 # 构建标志

@@ -6,7 +6,7 @@ MAIN_PATH=.
 BUILD_DIR=../dist
 AIR_VERSION=v1.52.0
 VERSION=$(shell cat ../VERSION 2>/dev/null || echo "v0.0.0-dev")
-BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
+BUILD_TIME=$(shell date '+%Y-%m-%d_%H:%M:%S_%Z')
 GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 LDFLAGS=-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)
 
