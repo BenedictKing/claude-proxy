@@ -20,6 +20,11 @@ func setupRouterWithAuth(envCfg *config.EnvConfig) *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
+	// Protected admin endpoint
+	r.POST("/admin/config/save", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
 	// SPA routes should pass through without access key
 	r.GET("/", func(c *gin.Context) {
 		c.String(http.StatusOK, "home")
@@ -89,4 +94,35 @@ func TestWebAuthMiddleware_SPAPassesThrough(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
+}
+
+func TestWebAuthMiddleware_AdminRequiresKey(t *testing.T) {
+	envCfg := &config.EnvConfig{
+		ProxyAccessKey: "secret-key",
+		EnableWebUI:    true,
+	}
+	router := setupRouterWithAuth(envCfg)
+
+	t.Run("missing key returns 401", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/admin/config/save", nil)
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+		}
+	})
+
+	t.Run("correct key allows access", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/admin/config/save", nil)
+		req.Header.Set("x-api-key", envCfg.ProxyAccessKey)
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+	})
 }

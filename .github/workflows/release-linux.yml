@@ -47,7 +47,7 @@ jobs:
         run: |
           go mod tidy
           go mod download
-          go build -ldflags "-s -w -X main.Version=${{ github.ref_name }} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GitCommit=${{ github.sha }}" -o claude-proxy-linux-amd64
+          CGO_ENABLED=0 go build -ldflags "-s -w -X main.Version=${{ github.ref_name }} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GitCommit=${{ github.sha }}" -o claude-proxy-linux-amd64
         working-directory: ./backend-go
 
       - name: Build Backend for arm64

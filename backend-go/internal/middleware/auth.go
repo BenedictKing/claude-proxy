@@ -16,7 +16,6 @@ func WebAuthMiddleware(envCfg *config.EnvConfig, cfgManager *config.ConfigManage
 
 		// 公开端点直接放行（健康检查固定为 /health）
 		if path == "/health" ||
-			path == "/admin/config/reload" ||
 			(envCfg.IsDevelopment() && path == "/admin/dev/info") {
 			c.Next()
 			return
@@ -45,13 +44,13 @@ func WebAuthMiddleware(envCfg *config.EnvConfig, cfgManager *config.ConfigManage
 		}
 
 		// SPA 页面路由直接交给前端处理，但需要排除 /api* 路径
-		if path == "/" || path == "/index.html" || (!strings.Contains(path, ".") && !strings.HasPrefix(path, "/api")) {
+		if path == "/" || path == "/index.html" || (!strings.Contains(path, ".") && !strings.HasPrefix(path, "/api") && !strings.HasPrefix(path, "/admin")) {
 			c.Next()
 			return
 		}
 
-		// 检查访问密钥（仅对管理 API 请求）
-		if strings.HasPrefix(path, "/api") {
+		// 检查访问密钥（管理 API + 管理端点）
+		if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/admin") {
 			providedKey := getAPIKey(c)
 			expectedKey := envCfg.ProxyAccessKey
 
@@ -137,11 +136,6 @@ func getAPIKey(c *gin.Context) string {
 	if auth := c.GetHeader("Authorization"); auth != "" {
 		// 移除 Bearer 前缀
 		return strings.TrimPrefix(auth, "Bearer ")
-	}
-
-	// 从查询参数获取
-	if key := c.Query("key"); key != "" {
-		return key
 	}
 
 	return ""
