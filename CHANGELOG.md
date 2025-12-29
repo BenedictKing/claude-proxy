@@ -4,6 +4,18 @@
 
 ---
 
+## [v2.4.10] - 2025-12-29
+
+### 🐛 修复
+
+- **修复 403 预扣费额度不足的 Key 未被自动降级的问题** - 解决配额不足的密钥始终被优先尝试：
+  - 修改 `shouldRetryWithNextKeyNormal` 逻辑：即使 HTTP 状态码已触发 failover，仍检查消息体确定是否为配额相关错误
+  - 之前 403 状态码直接返回 `isQuotaRelated=false`，跳过消息体解析，导致 `DeprioritizeAPIKey` 未被调用
+  - 新增 "预扣费" 关键词到 `quotaKeywords` 列表，确保匹配中文预扣费错误消息
+  - 涉及文件：`internal/handlers/common/failover.go`
+
+---
+
 ## [v2.4.9] - 2025-12-27
 
 ### 🔧 改进

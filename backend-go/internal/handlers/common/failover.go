@@ -46,16 +46,23 @@ func shouldRetryWithNextKeyFuzzy(statusCode int) (bool, bool) {
 // shouldRetryWithNextKeyNormal 原有的精确错误分类逻辑
 func shouldRetryWithNextKeyNormal(statusCode int, bodyBytes []byte) (bool, bool) {
 	shouldFailover, isQuotaRelated := classifyByStatusCode(statusCode)
+
 	if shouldFailover {
-		return true, isQuotaRelated
+		// 如果状态码已标记为 quota 相关，直接返回
+		if isQuotaRelated {
+			return true, true
+		}
+		// 否则，仍检查消息体是否包含 quota 相关关键词
+		// 这样 403 + "预扣费额度" 消息 → isQuotaRelated=true
+		_, msgQuota := classifyByErrorMessage(bodyBytes)
+		if msgQuota {
+			return true, true
+		}
+		return true, false
 	}
 
-	msgFailover, msgQuota := classifyByErrorMessage(bodyBytes)
-	if msgFailover {
-		return true, msgQuota
-	}
-
-	return false, false
+	// statusCode 不触发 failover 时，完全依赖消息体判断
+	return classifyByErrorMessage(bodyBytes)
 }
 
 // classifyByStatusCode 基于 HTTP 状态码分类
@@ -141,7 +148,7 @@ func classifyMessage(msg string) (bool, bool) {
 		"insufficient", "quota", "credit", "balance",
 		"rate limit", "limit exceeded", "exceeded",
 		"billing", "payment", "subscription",
-		"积分不足", "余额不足", "请求数限制", "额度",
+		"积分不足", "余额不足", "请求数限制", "额度", "预扣费",
 	}
 	for _, keyword := range quotaKeywords {
 		if strings.Contains(msgLower, keyword) {
