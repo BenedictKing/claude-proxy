@@ -104,7 +104,7 @@ const apexchart = VueApexCharts
 
 // Props
 const props = withDefaults(defineProps<{
-  apiType: 'messages' | 'responses'
+  apiType: 'messages' | 'responses' | 'gemini'
   compact?: boolean
 }>(), {
   compact: false
@@ -357,6 +357,8 @@ const refreshData = async (isAutoRefresh = false) => {
     let newData: GlobalStatsHistoryResponse
     if (props.apiType === 'messages') {
       newData = await api.getMessagesGlobalStats(selectedDuration.value)
+    } else if (props.apiType === 'gemini') {
+      newData = await api.getGeminiGlobalStats(selectedDuration.value)
     } else {
       newData = await api.getResponsesGlobalStats(selectedDuration.value)
     }

@@ -618,6 +618,175 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 	}
 }
 
+// GetGeminiChannelMetricsHistory 获取 Gemini 渠道指标历史数据（用于时间序列图表）
+// Query params:
+//   - duration: 时间范围 (1h, 6h, 24h)，默认 24h
+//   - interval: 时间间隔 (5m, 15m, 1h)，默认根据 duration 自动选择
+func GetGeminiChannelMetricsHistory(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 解析 duration 参数
+		durationStr := c.DefaultQuery("duration", "24h")
+		duration, err := time.ParseDuration(durationStr)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid duration parameter"})
+			return
+		}
+
+		// 限制最大查询范围为 24 小时
+		if duration > 24*time.Hour {
+			duration = 24 * time.Hour
+		}
+
+		// 解析或自动选择 interval
+		intervalStr := c.Query("interval")
+		var interval time.Duration
+		if intervalStr != "" {
+			interval, err = time.ParseDuration(intervalStr)
+			if err != nil {
+				c.JSON(400, gin.H{"error": "Invalid interval parameter"})
+				return
+			}
+			// 限制 interval 最小值为 1 分钟，防止生成过多 bucket
+			if interval < time.Minute {
+				interval = time.Minute
+			}
+		} else {
+			// 根据 duration 自动选择合适的聚合粒度
+			switch {
+			case duration <= time.Hour:
+				interval = time.Minute
+			case duration <= 6*time.Hour:
+				interval = 5 * time.Minute
+			default:
+				interval = 15 * time.Minute
+			}
+		}
+
+		cfg := cfgManager.GetConfig()
+		upstreams := cfg.GeminiUpstream
+
+		result := make([]MetricsHistoryResponse, 0, len(upstreams))
+		for i, upstream := range upstreams {
+			dataPoints := metricsManager.GetHistoricalStats(upstream.BaseURL, upstream.APIKeys, duration, interval)
+
+			result = append(result, MetricsHistoryResponse{
+				ChannelIndex: i,
+				ChannelName:  upstream.Name,
+				DataPoints:   dataPoints,
+			})
+		}
+
+		c.JSON(200, result)
+	}
+}
+
+// GetGeminiChannelKeyMetricsHistory 获取 Gemini 渠道下各 Key 的历史数据（用于 Key 趋势图表）
+// GET /api/gemini/channels/:id/keys/metrics/history?duration=6h
+func GetGeminiChannelKeyMetricsHistory(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 解析 duration 参数
+		durationStr := c.DefaultQuery("duration", "6h")
+
+		var duration time.Duration
+		var err error
+
+		// 特殊处理 "today" 参数
+		if durationStr == "today" {
+			duration = metrics.CalculateTodayDuration()
+			// 如果刚过零点，duration 可能非常小，设置最小值
+			if duration < time.Minute {
+				duration = time.Minute
+			}
+		} else {
+			duration, err = time.ParseDuration(durationStr)
+			if err != nil {
+				c.JSON(400, gin.H{"error": "Invalid duration parameter. Use: 1h, 6h, 24h, or today"})
+				return
+			}
+		}
+
+		// 限制最大查询范围为 24 小时
+		if duration > 24*time.Hour {
+			duration = 24 * time.Hour
+		}
+
+		// 解析或自动选择 interval
+		intervalStr := c.Query("interval")
+		var interval time.Duration
+		if intervalStr != "" {
+			interval, err = time.ParseDuration(intervalStr)
+			if err != nil {
+				c.JSON(400, gin.H{"error": "Invalid interval parameter"})
+				return
+			}
+			// 限制 interval 最小值为 1 分钟，防止生成过多 bucket
+			if interval < time.Minute {
+				interval = time.Minute
+			}
+		} else {
+			// 根据 duration 自动选择合适的聚合粒度
+			switch {
+			case duration <= time.Hour:
+				interval = time.Minute
+			case duration <= 6*time.Hour:
+				interval = 5 * time.Minute
+			default:
+				interval = 15 * time.Minute
+			}
+		}
+
+		// 解析 channel ID
+		channelIDStr := c.Param("id")
+		channelID, err := strconv.Atoi(channelIDStr)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid channel ID"})
+			return
+		}
+
+		cfg := cfgManager.GetConfig()
+		upstreams := cfg.GeminiUpstream
+
+		// 检查 channel ID 是否有效
+		if channelID < 0 || channelID >= len(upstreams) {
+			c.JSON(400, gin.H{"error": "Channel not found"})
+			return
+		}
+
+		upstream := upstreams[channelID]
+
+		// 获取所有 Key 的使用信息并筛选（最多显示 10 个）
+		const maxDisplayKeys = 10
+		allKeyInfos := metricsManager.GetChannelKeyUsageInfo(upstream.BaseURL, upstream.APIKeys)
+		displayKeys := metrics.SelectTopKeys(allKeyInfos, maxDisplayKeys)
+
+		// 构建响应
+		result := ChannelKeyMetricsHistoryResponse{
+			ChannelIndex: channelID,
+			ChannelName:  upstream.Name,
+			Keys:         make([]KeyMetricsHistoryResult, 0, len(displayKeys)),
+		}
+
+		// 为筛选后的 Key 获取历史数据
+		for i, keyInfo := range displayKeys {
+			dataPoints := metricsManager.GetKeyHistoricalStats(upstream.BaseURL, keyInfo.APIKey, duration, interval)
+
+			// 获取 Key 的颜色
+			color := keyColors[i%len(keyColors)]
+
+			// 获取 Key 的脱敏显示（只取前 8 个字符）
+			keyMask := truncateKeyMask(keyInfo.KeyMask, 8)
+
+			result.Keys = append(result.Keys, KeyMetricsHistoryResult{
+				KeyMask:    keyMask,
+				Color:      color,
+				DataPoints: dataPoints,
+			})
+		}
+
+		c.JSON(200, result)
+	}
+}
+
 // GetGeminiChannelMetrics 获取 Gemini 渠道指标
 func GetGeminiChannelMetrics(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager) gin.HandlerFunc {
 	return func(c *gin.Context) {

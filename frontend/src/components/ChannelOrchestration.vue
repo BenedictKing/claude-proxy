@@ -258,7 +258,7 @@
               <KeyTrendChart
                 :key="`chart-${channelType}-${element.index}`"
                 :channel-id="element.index"
-                :is-responses="channelType === 'responses'"
+                :channel-type="channelType"
                 @close="expandedChannelIndex = null"
               />
             </div>
@@ -370,7 +370,7 @@ import KeyTrendChart from './KeyTrendChart.vue'
 const props = defineProps<{
   channels: Channel[]
   currentChannelIndex: number
-  channelType: 'messages' | 'responses'
+  channelType: 'messages' | 'responses' | 'gemini'
   // 可选：从父组件传入的 metrics 和 stats（使用 dashboard 接口时）
   dashboardMetrics?: ChannelMetrics[]
   dashboardStats?: {
@@ -571,7 +571,11 @@ const refreshMetrics = async () => {
   isLoadingMetrics.value = true
   try {
     const [metricsData, statsData] = await Promise.all([
-      props.channelType === 'messages' ? api.getChannelMetrics() : api.getResponsesChannelMetrics(),
+      props.channelType === 'gemini'
+        ? api.getGeminiChannelMetrics()
+        : props.channelType === 'responses'
+          ? api.getResponsesChannelMetrics()
+          : api.getChannelMetrics(),
       api.getSchedulerStats(props.channelType)
     ])
     metrics.value = metricsData
@@ -594,10 +598,12 @@ const saveOrder = async () => {
   isSavingOrder.value = true
   try {
     const order = activeChannels.value.map(ch => ch.index)
-    if (props.channelType === 'messages') {
-      await api.reorderChannels(order)
-    } else {
+    if (props.channelType === 'gemini') {
+      await api.reorderGeminiChannels(order)
+    } else if (props.channelType === 'responses') {
       await api.reorderResponsesChannels(order)
+    } else {
+      await api.reorderChannels(order)
     }
     // 不调用 emit('refresh')，避免触发父组件刷新导致列表闪烁
   } catch (error) {
@@ -614,10 +620,12 @@ const saveOrder = async () => {
 // 设置渠道状态
 const setChannelStatus = async (channelId: number, status: ChannelStatus) => {
   try {
-    if (props.channelType === 'messages') {
-      await api.setChannelStatus(channelId, status)
-    } else {
+    if (props.channelType === 'gemini') {
+      await api.setGeminiChannelStatus(channelId, status)
+    } else if (props.channelType === 'responses') {
       await api.setResponsesChannelStatus(channelId, status)
+    } else {
+      await api.setChannelStatus(channelId, status)
     }
     emit('refresh')
   } catch (error) {
@@ -635,10 +643,12 @@ const enableChannel = async (channelId: number) => {
 // 恢复渠道（重置指标并设为 active）
 const resumeChannel = async (channelId: number) => {
   try {
-    if (props.channelType === 'messages') {
-      await api.resumeChannel(channelId)
-    } else {
+    if (props.channelType === 'gemini') {
+      await api.resumeGeminiChannel(channelId)
+    } else if (props.channelType === 'responses') {
       await api.resumeResponsesChannel(channelId)
+    } else {
+      await api.resumeChannel(channelId)
     }
     await setChannelStatus(channelId, 'active')
   } catch (error) {
@@ -653,18 +663,22 @@ const setPromotion = async (channel: Channel) => {
 
     // 如果渠道是熔断状态，先恢复它
     if (channel.status === 'suspended') {
-      if (props.channelType === 'messages') {
-        await api.resumeChannel(channel.index)
-      } else {
+      if (props.channelType === 'gemini') {
+        await api.resumeGeminiChannel(channel.index)
+      } else if (props.channelType === 'responses') {
         await api.resumeResponsesChannel(channel.index)
+      } else {
+        await api.resumeChannel(channel.index)
       }
       await setChannelStatus(channel.index, 'active')
     }
 
-    if (props.channelType === 'messages') {
-      await api.setChannelPromotion(channel.index, PROMOTION_DURATION)
-    } else {
+    if (props.channelType === 'gemini') {
+      await api.setGeminiChannelPromotion(channel.index, PROMOTION_DURATION)
+    } else if (props.channelType === 'responses') {
       await api.setResponsesChannelPromotion(channel.index, PROMOTION_DURATION)
+    } else {
+      await api.setChannelPromotion(channel.index, PROMOTION_DURATION)
     }
     emit('refresh')
     // 通知用户

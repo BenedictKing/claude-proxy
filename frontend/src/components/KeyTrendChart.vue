@@ -78,7 +78,7 @@ const apexchart = VueApexCharts
 // Props
 const props = defineProps<{
   channelId: number
-  isResponses: boolean
+  channelType: 'messages' | 'responses' | 'gemini'
 }>()
 
 // View mode type
@@ -638,8 +638,10 @@ const refreshData = async (isAutoRefresh = false) => {
   errorMessage.value = ''
   try {
     let newData: ChannelKeyMetricsHistoryResponse
-    if (props.isResponses) {
+    if (props.channelType === 'responses') {
       newData = await api.getResponsesChannelKeyMetricsHistory(props.channelId, selectedDuration.value)
+    } else if (props.channelType === 'gemini') {
+      newData = await api.getGeminiChannelKeyMetricsHistory(props.channelId, selectedDuration.value)
     } else {
       newData = await api.getChannelKeyMetricsHistory(props.channelId, selectedDuration.value)
     }

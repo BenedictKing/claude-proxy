@@ -408,7 +408,7 @@ class ApiService {
   }
 
   // 获取调度器统计信息
-  async getSchedulerStats(type?: 'messages' | 'responses'): Promise<{
+  async getSchedulerStats(type?: 'messages' | 'responses' | 'gemini'): Promise<{
     multiChannelMode: boolean
     activeChannelCount: number
     traceAffinityCount: number
@@ -416,12 +416,27 @@ class ApiService {
     failureThreshold: number
     windowSize: number
   }> {
+    // Gemini 暂无调度器统计，返回默认值
+    if (type === 'gemini') {
+      return {
+        multiChannelMode: false,
+        activeChannelCount: 0,
+        traceAffinityCount: 0,
+        traceAffinityTTL: '0s',
+        failureThreshold: 0,
+        windowSize: 0
+      }
+    }
     const query = type === 'responses' ? '?type=responses' : ''
     return this.request(`/messages/channels/scheduler/stats${query}`)
   }
 
   // 获取渠道仪表盘数据（合并 channels + metrics + stats）
-  async getChannelDashboard(type: 'messages' | 'responses' = 'messages'): Promise<ChannelDashboardResponse> {
+  async getChannelDashboard(type: 'messages' | 'responses' | 'gemini' = 'messages'): Promise<ChannelDashboardResponse> {
+    // Gemini 使用降级实现：组合 getChannels + getMetrics
+    if (type === 'gemini') {
+      return this.getGeminiChannelDashboard()
+    }
     const query = type === 'responses' ? '?type=responses' : ''
     return this.request(`/messages/channels/dashboard${query}`)
   }
@@ -523,6 +538,148 @@ class ApiService {
   // 获取 Responses 全局统计历史
   async getResponsesGlobalStats(duration: '1h' | '6h' | '24h' | 'today' = '24h'): Promise<GlobalStatsHistoryResponse> {
     return this.request(`/responses/global/stats/history?duration=${duration}`)
+  }
+
+  // ============== Gemini 渠道管理 API ==============
+
+  async getGeminiChannels(): Promise<ChannelsResponse> {
+    return this.request('/gemini/channels')
+  }
+
+  async addGeminiChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>): Promise<void> {
+    await this.request('/gemini/channels', {
+      method: 'POST',
+      body: JSON.stringify(channel)
+    })
+  }
+
+  async updateGeminiChannel(id: number, channel: Partial<Channel>): Promise<void> {
+    await this.request(`/gemini/channels/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(channel)
+    })
+  }
+
+  async deleteGeminiChannel(id: number): Promise<void> {
+    await this.request(`/gemini/channels/${id}`, {
+      method: 'DELETE'
+    })
+  }
+
+  async addGeminiApiKey(channelId: number, apiKey: string): Promise<void> {
+    await this.request(`/gemini/channels/${channelId}/keys`, {
+      method: 'POST',
+      body: JSON.stringify({ apiKey })
+    })
+  }
+
+  async removeGeminiApiKey(channelId: number, apiKey: string): Promise<void> {
+    await this.request(`/gemini/channels/${channelId}/keys/${encodeURIComponent(apiKey)}`, {
+      method: 'DELETE'
+    })
+  }
+
+  async moveGeminiApiKeyToTop(channelId: number, apiKey: string): Promise<void> {
+    await this.request(`/gemini/channels/${channelId}/keys/${encodeURIComponent(apiKey)}/top`, {
+      method: 'POST'
+    })
+  }
+
+  async moveGeminiApiKeyToBottom(channelId: number, apiKey: string): Promise<void> {
+    await this.request(`/gemini/channels/${channelId}/keys/${encodeURIComponent(apiKey)}/bottom`, {
+      method: 'POST'
+    })
+  }
+
+  // ============== Gemini 多渠道调度 API ==============
+
+  async reorderGeminiChannels(order: number[]): Promise<void> {
+    await this.request('/gemini/channels/reorder', {
+      method: 'POST',
+      body: JSON.stringify({ order })
+    })
+  }
+
+  async setGeminiChannelStatus(channelId: number, status: ChannelStatus): Promise<void> {
+    await this.request(`/gemini/channels/${channelId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status })
+    })
+  }
+
+  // Gemini 恢复渠道（降级实现：后端未实现 resume 端点，直接设置状态为 active）
+  async resumeGeminiChannel(channelId: number): Promise<void> {
+    await this.setGeminiChannelStatus(channelId, 'active')
+  }
+
+  async getGeminiChannelMetrics(): Promise<ChannelMetrics[]> {
+    return this.request('/gemini/channels/metrics')
+  }
+
+  async setGeminiChannelPromotion(channelId: number, durationSeconds: number): Promise<void> {
+    await this.request(`/gemini/channels/${channelId}/promotion`, {
+      method: 'POST',
+      body: JSON.stringify({ duration: durationSeconds })
+    })
+  }
+
+  async updateGeminiLoadBalance(strategy: string): Promise<void> {
+    await this.request('/gemini/loadbalance', {
+      method: 'PUT',
+      body: JSON.stringify({ strategy })
+    })
+  }
+
+  // ============== Gemini 历史指标 API ==============
+
+  // 获取 Gemini 渠道历史指标
+  async getGeminiChannelMetricsHistory(duration: '1h' | '6h' | '24h' = '24h'): Promise<MetricsHistoryResponse[]> {
+    return this.request(`/gemini/channels/metrics/history?duration=${duration}`)
+  }
+
+  // 获取 Gemini 渠道 Key 级别历史指标
+  async getGeminiChannelKeyMetricsHistory(channelId: number, duration: '1h' | '6h' | '24h' | 'today' = '6h'): Promise<ChannelKeyMetricsHistoryResponse> {
+    return this.request(`/gemini/channels/${channelId}/keys/metrics/history?duration=${duration}`)
+  }
+
+  // 获取 Gemini 全局统计历史
+  async getGeminiGlobalStats(duration: '1h' | '6h' | '24h' | 'today' = '24h'): Promise<GlobalStatsHistoryResponse> {
+    return this.request(`/gemini/global/stats/history?duration=${duration}`)
+  }
+
+  async pingGeminiChannel(id: number): Promise<PingResult> {
+    return this.request(`/gemini/ping/${id}`)
+  }
+
+  async pingAllGeminiChannels(): Promise<Array<{ id: number; name: string; latency: number; status: string }>> {
+    return this.request('/gemini/ping')
+  }
+
+  // Gemini Dashboard（降级实现：组合 channels + metrics 调用）
+  async getGeminiChannelDashboard(): Promise<ChannelDashboardResponse> {
+    const [channelsResp, metrics] = await Promise.all([
+      this.getGeminiChannels(),
+      this.getGeminiChannelMetrics()
+    ])
+
+    const activeCount = channelsResp.channels.filter(
+      ch => ch.status === 'active' || !ch.status
+    ).length
+
+    return {
+      channels: channelsResp.channels,
+      loadBalance: channelsResp.loadBalance,
+      metrics: metrics,
+      stats: {
+        multiChannelMode: activeCount > 1,
+        activeChannelCount: channelsResp.channels.filter(ch => ch.status !== 'disabled').length,
+        traceAffinityCount: 0,
+        traceAffinityTTL: '0s',
+        failureThreshold: 3,
+        windowSize: 100,
+        circuitRecoveryTime: '30s'
+      }
+    }
   }
 }
 

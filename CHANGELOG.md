@@ -4,6 +4,30 @@
 
 ---
 
+## [v2.4.15] - 2025-12-30
+
+### 🐛 修复
+
+- **修复 Gemini API 路由注册失败** - 解决 Gin 框架路由 panic 问题：
+  - 原因：Gin 不支持 `:param\:literal` 格式，即使转义冒号也会被解析为两个通配符
+  - 方案：使用 `*modelAction` 通配符捕获 `model:action` 整体，在 handler 内解析
+  - 涉及文件：`main.go`、`internal/handlers/gemini/handler.go`
+
+### ✨ 新功能
+
+- **Gemini 历史指标 API 完整实现** - 补全 Gemini 模块的历史数据端点：
+  - `GET /api/gemini/channels/metrics/history` - 渠道级别指标历史
+  - `GET /api/gemini/channels/:id/keys/metrics/history` - Key 级别指标历史
+  - `GET /api/gemini/global/stats/history` - 全局统计历史
+  - 涉及文件：`internal/handlers/channel_metrics_handler.go`、`main.go`
+
+- **Gemini 前端管理界面完整实现** - 与 Messages/Responses 功能完全对齐：
+  - 新增 Gemini Tab 切换，支持完整渠道 CRUD、Key 管理、状态/促销设置
+  - KeyTrendChart 和 GlobalStatsChart 组件支持 Gemini 数据展示（移除降级显示）
+  - 涉及文件：`frontend/src/App.vue`、`frontend/src/components/`、`frontend/src/services/api.ts`
+
+---
+
 ## [v2.4.14] - 2025-12-29
 
 ### ✨ 新功能

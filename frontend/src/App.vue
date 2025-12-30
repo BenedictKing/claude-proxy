@@ -78,6 +78,10 @@
           <span class="api-type-text" :class="{ active: activeTab === 'responses' }" @click="activeTab = 'responses'">
             Codex
           </span>
+          <span class="api-type-text separator">/</span>
+          <span class="api-type-text" :class="{ active: activeTab === 'gemini' }" @click="activeTab = 'gemini'">
+            Gemini
+          </span>
           <span class="brand-text d-none d-sm-inline">API Proxy</span>
         </div>
       </div>
@@ -154,7 +158,7 @@
             <div class="d-flex align-center">
               <v-icon size="20" class="mr-2">mdi-chart-areaspline</v-icon>
               <span class="text-subtitle-1 font-weight-bold">
-                {{ activeTab === 'messages' ? 'Claude Messages' : 'Codex Responses' }} 流量统计
+                {{ activeTab === 'messages' ? 'Claude Messages' : (activeTab === 'responses' ? 'Codex Responses' : 'Gemini') }} 流量统计
               </span>
             </div>
             <v-btn icon size="small" variant="text">
@@ -381,9 +385,10 @@ let autoRefreshTimer: ReturnType<typeof setInterval> | null = null
 const AUTO_REFRESH_INTERVAL = 2000 // 2秒
 
 // 响应式数据
-const activeTab = ref<'messages' | 'responses'>('messages') // Tab 切换状态
+const activeTab = ref<'messages' | 'responses' | 'gemini'>('messages') // Tab 切换状态
 const channelsData = ref<ChannelsResponse>({ channels: [], current: -1, loadBalance: 'round-robin' })
 const responsesChannelsData = ref<ChannelsResponse>({ channels: [], current: -1, loadBalance: 'round-robin' }) // Responses渠道数据
+const geminiChannelsData = ref<ChannelsResponse>({ channels: [], current: -1, loadBalance: 'round-robin' }) // Gemini渠道数据
 // Dashboard 数据（合并的 metrics 和 stats）
 const dashboardMetrics = ref<ChannelMetrics[]>([])
 const dashboardStats = ref<ChannelDashboardResponse['stats'] | undefined>(undefined)
@@ -444,7 +449,11 @@ let toastId = 0
 
 // 计算属性 - 根据当前Tab动态返回数据
 const currentChannelsData = computed(() => {
-  return activeTab.value === 'messages' ? channelsData.value : responsesChannelsData.value
+  switch (activeTab.value) {
+    case 'messages': return channelsData.value
+    case 'responses': return responsesChannelsData.value
+    case 'gemini': return geminiChannelsData.value
+  }
 })
 
 // 计算属性：活跃渠道数（仅 active 状态）
@@ -532,7 +541,20 @@ const mergeChannelsWithLocalData = (newChannels: Channel[], existingChannels: Ch
 // 主要功能函数
 const refreshChannels = async () => {
   try {
-    // 使用合并的 dashboard 接口
+    // Gemini 使用专用的 dashboard API（降级实现）
+    if (activeTab.value === 'gemini') {
+      const dashboard = await api.getGeminiChannelDashboard()
+      geminiChannelsData.value = {
+        channels: mergeChannelsWithLocalData(dashboard.channels, geminiChannelsData.value.channels),
+        current: geminiChannelsData.value.current,
+        loadBalance: dashboard.loadBalance
+      }
+      dashboardMetrics.value = dashboard.metrics
+      dashboardStats.value = dashboard.stats
+      return
+    }
+
+    // Messages / Responses 使用合并的 dashboard 接口
     const dashboard = await api.getChannelDashboard(activeTab.value)
 
     if (activeTab.value === 'messages') {
@@ -560,15 +582,20 @@ const refreshChannels = async () => {
 const saveChannel = async (channel: Omit<Channel, 'index' | 'latency' | 'status'>, options?: { isQuickAdd?: boolean }) => {
   try {
     const isResponses = activeTab.value === 'responses'
+    const isGemini = activeTab.value === 'gemini'
     if (editingChannel.value) {
-      if (isResponses) {
+      if (isGemini) {
+        await api.updateGeminiChannel(editingChannel.value.index, channel)
+      } else if (isResponses) {
         await api.updateResponsesChannel(editingChannel.value.index, channel)
       } else {
         await api.updateChannel(editingChannel.value.index, channel)
       }
       showToast('渠道更新成功', 'success')
     } else {
-      if (isResponses) {
+      if (isGemini) {
+        await api.addGeminiChannel(channel)
+      } else if (isResponses) {
         await api.addResponsesChannel(channel)
       } else {
         await api.addChannel(channel)
@@ -578,7 +605,7 @@ const saveChannel = async (channel: Omit<Channel, 'index' | 'latency' | 'status'
       // 快速添加模式：将新渠道设为第一优先级并设置5分钟促销期
       if (options?.isQuickAdd) {
         await refreshChannels() // 先刷新获取新渠道的 index
-        const data = isResponses ? responsesChannelsData.value : channelsData.value
+        const data = isGemini ? geminiChannelsData.value : (isResponses ? responsesChannelsData.value : channelsData.value)
 
         // 找到新添加的渠道（应该是列表中 index 最大的 active 状态渠道）
         const activeChannels = data.channels?.filter(ch => ch.status !== 'disabled') || []
@@ -594,14 +621,18 @@ const saveChannel = async (channel: Omit<Channel, 'index' | 'latency' | 'status'
               .map(ch => ch.index)
             const newOrder = [newChannel.index, ...otherIndexes]
 
-            if (isResponses) {
+            if (isGemini) {
+              await api.reorderGeminiChannels(newOrder)
+            } else if (isResponses) {
               await api.reorderResponsesChannels(newOrder)
             } else {
               await api.reorderChannels(newOrder)
             }
 
             // 2. 设置5分钟促销期（300秒）
-            if (isResponses) {
+            if (isGemini) {
+              await api.setGeminiChannelPromotion(newChannel.index, 300)
+            } else if (isResponses) {
               await api.setResponsesChannelPromotion(newChannel.index, 300)
             } else {
               await api.setChannelPromotion(newChannel.index, 300)
@@ -632,7 +663,9 @@ const deleteChannel = async (channelId: number) => {
   if (!confirm('确定要删除这个渠道吗？')) return
 
   try {
-    if (activeTab.value === 'responses') {
+    if (activeTab.value === 'gemini') {
+      await api.deleteGeminiChannel(channelId)
+    } else if (activeTab.value === 'responses') {
       await api.deleteResponsesChannel(channelId)
     } else {
       await api.deleteChannel(channelId)
@@ -659,7 +692,9 @@ const addApiKey = async () => {
   if (!newApiKey.value.trim()) return
 
   try {
-    if (activeTab.value === 'responses') {
+    if (activeTab.value === 'gemini') {
+      await api.addGeminiApiKey(selectedChannelForKey.value, newApiKey.value.trim())
+    } else if (activeTab.value === 'responses') {
       await api.addResponsesApiKey(selectedChannelForKey.value, newApiKey.value.trim())
     } else {
       await api.addApiKey(selectedChannelForKey.value, newApiKey.value.trim())
@@ -677,7 +712,9 @@ const removeApiKey = async (channelId: number, apiKey: string) => {
   if (!confirm('确定要删除这个API密钥吗？')) return
 
   try {
-    if (activeTab.value === 'responses') {
+    if (activeTab.value === 'gemini') {
+      await api.removeGeminiApiKey(channelId, apiKey)
+    } else if (activeTab.value === 'responses') {
       await api.removeResponsesApiKey(channelId, apiKey)
     } else {
       await api.removeApiKey(channelId, apiKey)
@@ -691,8 +728,12 @@ const removeApiKey = async (channelId: number, apiKey: string) => {
 
 const pingChannel = async (channelId: number) => {
   try {
-    const result = await api.pingChannel(channelId)
-    const data = activeTab.value === 'messages' ? channelsData.value : responsesChannelsData.value
+    const result = activeTab.value === 'gemini'
+      ? await api.pingGeminiChannel(channelId)
+      : await api.pingChannel(channelId)
+    const data = activeTab.value === 'gemini'
+      ? geminiChannelsData.value
+      : (activeTab.value === 'messages' ? channelsData.value : responsesChannelsData.value)
     const channel = data.channels?.find(c => c.index === channelId)
     if (channel) {
       channel.latency = result.latency
@@ -710,8 +751,12 @@ const pingAllChannels = async () => {
 
   isPingingAll.value = true
   try {
-    const results = await api.pingAllChannels()
-    const data = activeTab.value === 'messages' ? channelsData.value : responsesChannelsData.value
+    const results = activeTab.value === 'gemini'
+      ? await api.pingAllGeminiChannels()
+      : await api.pingAllChannels()
+    const data = activeTab.value === 'gemini'
+      ? geminiChannelsData.value
+      : (activeTab.value === 'messages' ? channelsData.value : responsesChannelsData.value)
     const now = Date.now()
     results.forEach(result => {
       const channel = data.channels?.find(c => c.index === result.id)
@@ -731,7 +776,10 @@ const pingAllChannels = async () => {
 
 const updateLoadBalance = async (strategy: string) => {
   try {
-    if (activeTab.value === 'messages') {
+    if (activeTab.value === 'gemini') {
+      await api.updateGeminiLoadBalance(strategy)
+      geminiChannelsData.value.loadBalance = strategy
+    } else if (activeTab.value === 'messages') {
       await api.updateLoadBalance(strategy)
       channelsData.value.loadBalance = strategy
     } else {
@@ -1059,10 +1107,16 @@ const startAutoRefresh = () => {
             current: channelsData.value.current, // 保留当前选中状态
             loadBalance: dashboard.loadBalance
           }
-        } else {
+        } else if (activeTab.value === 'responses') {
           responsesChannelsData.value = {
             channels: mergeChannelsWithLocalData(dashboard.channels, responsesChannelsData.value.channels),
             current: responsesChannelsData.value.current, // 保留当前选中状态
+            loadBalance: dashboard.loadBalance
+          }
+        } else {
+          geminiChannelsData.value = {
+            channels: mergeChannelsWithLocalData(dashboard.channels, geminiChannelsData.value.channels),
+            current: geminiChannelsData.value.current, // 保留当前选中状态
             loadBalance: dashboard.loadBalance
           }
         }
@@ -1102,10 +1156,16 @@ watch(activeTab, async () => {
           current: channelsData.value.current, // 保留当前选中状态
           loadBalance: dashboard.loadBalance
         }
-      } else {
+      } else if (activeTab.value === 'responses') {
         responsesChannelsData.value = {
           channels: mergeChannelsWithLocalData(dashboard.channels, responsesChannelsData.value.channels),
           current: responsesChannelsData.value.current, // 保留当前选中状态
+          loadBalance: dashboard.loadBalance
+        }
+      } else {
+        geminiChannelsData.value = {
+          channels: mergeChannelsWithLocalData(dashboard.channels, geminiChannelsData.value.channels),
+          current: geminiChannelsData.value.current, // 保留当前选中状态
           loadBalance: dashboard.loadBalance
         }
       }

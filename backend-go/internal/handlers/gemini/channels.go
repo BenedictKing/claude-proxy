@@ -282,32 +282,31 @@ func SetChannelPromotion(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		}
 
 		var req struct {
-			Duration string `json:"duration"` // 例如 "30m", "1h", "24h"，空字符串表示清除
+			Duration int `json:"duration"` // 促销期时长（秒），0 表示清除
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(400, gin.H{"error": "Invalid request body"})
 			return
 		}
 
-		var duration time.Duration
-		if req.Duration != "" {
-			var err error
-			duration, err = time.ParseDuration(req.Duration)
-			if err != nil {
-				c.JSON(400, gin.H{"error": "Invalid duration format"})
-				return
-			}
-		}
-
+		duration := time.Duration(req.Duration) * time.Second
 		if err := cfgManager.SetGeminiChannelPromotion(id, duration); err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
 		}
 
-		c.JSON(200, gin.H{
-			"success": true,
-			"message": "Gemini 渠道促销期已更新",
-		})
+		if req.Duration <= 0 {
+			c.JSON(200, gin.H{
+				"success": true,
+				"message": "Gemini 渠道促销期已清除",
+			})
+		} else {
+			c.JSON(200, gin.H{
+				"success":  true,
+				"message":  "Gemini 渠道促销期已设置",
+				"duration": req.Duration,
+			})
+		}
 	}
 }
 
@@ -418,6 +417,30 @@ func PingAllChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 
 		c.JSON(200, gin.H{
 			"channels": results,
+		})
+	}
+}
+
+// UpdateLoadBalance 更新 Gemini 负载均衡策略
+func UpdateLoadBalance(cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Strategy string `json:"strategy"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid request body"})
+			return
+		}
+
+		if err := cfgManager.SetGeminiLoadBalance(req.Strategy); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"success":  true,
+			"message":  "Gemini 负载均衡策略已更新",
+			"strategy": req.Strategy,
 		})
 	}
 }

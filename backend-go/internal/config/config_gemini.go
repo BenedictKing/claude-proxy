@@ -359,3 +359,22 @@ func (cm *ConfigManager) GetPromotedGeminiChannel() (int, bool) {
 	}
 	return -1, false
 }
+
+// SetGeminiLoadBalance 设置 Gemini 负载均衡策略
+func (cm *ConfigManager) SetGeminiLoadBalance(strategy string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if err := validateLoadBalanceStrategy(strategy); err != nil {
+		return err
+	}
+
+	cm.config.GeminiLoadBalance = strategy
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("[Config-LoadBalance] 已设置 Gemini 负载均衡策略: %s", strategy)
+	return nil
+}

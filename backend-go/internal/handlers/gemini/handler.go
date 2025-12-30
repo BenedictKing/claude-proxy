@@ -65,8 +65,11 @@ func Handler(
 
 		// 从 URL 路径提取模型名称
 		// 格式: /v1/models/{model}:generateContent 或 /v1/models/{model}:streamGenerateContent
-		modelParam := c.Param("model")
-		model := extractModelName(modelParam)
+		// 使用 *modelAction 通配符捕获整个后缀，如 /gemini-pro:generateContent
+		modelAction := c.Param("modelAction")
+		// 移除前导斜杠（Gin 的 * 通配符会保留前导斜杠）
+		modelAction = strings.TrimPrefix(modelAction, "/")
+		model := extractModelName(modelAction)
 		if model == "" {
 			c.JSON(400, types.GeminiError{
 				Error: types.GeminiErrorDetail{

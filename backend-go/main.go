@@ -197,7 +197,11 @@ func main() {
 		apiGroup.POST("/gemini/channels/reorder", gemini.ReorderChannels(cfgManager))
 		apiGroup.PATCH("/gemini/channels/:id/status", gemini.SetChannelStatus(cfgManager))
 		apiGroup.POST("/gemini/channels/:id/promotion", gemini.SetChannelPromotion(cfgManager))
+		apiGroup.PUT("/gemini/loadbalance", gemini.UpdateLoadBalance(cfgManager))
 		apiGroup.GET("/gemini/channels/metrics", handlers.GetGeminiChannelMetrics(geminiMetricsManager, cfgManager))
+		apiGroup.GET("/gemini/channels/metrics/history", handlers.GetGeminiChannelMetricsHistory(geminiMetricsManager, cfgManager))
+		apiGroup.GET("/gemini/channels/:id/keys/metrics/history", handlers.GetGeminiChannelKeyMetricsHistory(geminiMetricsManager, cfgManager))
+		apiGroup.GET("/gemini/global/stats/history", handlers.GetGlobalStatsHistory(geminiMetricsManager))
 		apiGroup.GET("/gemini/ping/:id", gemini.PingChannel(cfgManager))
 		apiGroup.GET("/gemini/ping", gemini.PingAllChannels(cfgManager))
 
@@ -219,9 +223,8 @@ func main() {
 	r.POST("/v1/responses/compact", responses.CompactHandler(envCfg, cfgManager, sessionManager, channelScheduler))
 
 	// 代理端点 - Gemini API (原生协议)
-	// 注意: Gin 使用 \: 转义冒号
-	r.POST("/v1/models/:model\\:generateContent", gemini.Handler(envCfg, cfgManager, channelScheduler))
-	r.POST("/v1/models/:model\\:streamGenerateContent", gemini.Handler(envCfg, cfgManager, channelScheduler))
+	// 使用通配符捕获 model:action 格式，如 gemini-pro:generateContent
+	r.POST("/v1/models/*modelAction", gemini.Handler(envCfg, cfgManager, channelScheduler))
 
 	// 静态文件服务 (嵌入的前端)
 	if envCfg.EnableWebUI {
