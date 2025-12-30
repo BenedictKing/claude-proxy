@@ -680,7 +680,7 @@ const expectedRequestUrl = computed(() => {
     if (serviceType === 'claude') {
       endpoint = '/messages'
     } else if (serviceType === 'gemini') {
-      endpoint = '/generateContent'
+      endpoint = '/models/{model}:generateContent'
     } else {
       endpoint = '/chat/completions'
     }
@@ -720,7 +720,7 @@ const getExpectedRequestUrl = (inputBaseUrl: string): string => {
     if (serviceType === 'claude') {
       endpoint = '/messages'
     } else if (serviceType === 'gemini') {
-      endpoint = '/generateContent'
+      endpoint = '/models/{model}:generateContent'
     } else {
       endpoint = '/chat/completions'
     }
@@ -775,7 +775,7 @@ const formExpectedRequestUrls = computed(() => {
     if (form.serviceType === 'claude') {
       endpoint = '/messages'
     } else if (form.serviceType === 'gemini') {
-      endpoint = '/generateContent'
+      endpoint = '/models/{model}:generateContent'
     } else {
       endpoint = '/chat/completions'
     }

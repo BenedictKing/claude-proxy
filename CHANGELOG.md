@@ -4,6 +4,18 @@
 
 ---
 
+## [Unreleased]
+
+### 🔧 重构
+
+- **移除非标准 Gemini API 路由** - 简化 API 端点，仅保留官方格式：
+  - 移除：`POST /v1/models/{model}:generateContent`（非标准简化格式）
+  - 保留：`POST /v1beta/models/{model}:generateContent`（Gemini 官方格式）
+  - 更新前端预览 URL 显示完整路径格式 `/models/{model}:generateContent`
+  - 涉及文件：`backend-go/main.go`、`frontend/src/components/AddChannelModal.vue`
+
+---
+
 ## [v2.4.17] - 2025-12-30
 
 ### 🐛 修复
