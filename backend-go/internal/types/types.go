@@ -2,13 +2,14 @@ package types
 
 // ClaudeRequest Claude 请求结构
 type ClaudeRequest struct {
-	Model       string          `json:"model"`
-	Messages    []ClaudeMessage `json:"messages"`
-	System      interface{}     `json:"system,omitempty"` // string 或 content 数组
-	MaxTokens   int             `json:"max_tokens,omitempty"`
-	Temperature float64         `json:"temperature,omitempty"`
-	Stream      bool            `json:"stream,omitempty"`
-	Tools       []ClaudeTool    `json:"tools,omitempty"`
+	Model       string                 `json:"model"`
+	Messages    []ClaudeMessage        `json:"messages"`
+	System      interface{}            `json:"system,omitempty"` // string 或 content 数组
+	MaxTokens   int                    `json:"max_tokens,omitempty"`
+	Temperature float64                `json:"temperature,omitempty"`
+	Stream      bool                   `json:"stream,omitempty"`
+	Tools       []ClaudeTool           `json:"tools,omitempty"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"` // Claude Code CLI 等客户端发送的元数据
 }
 
 // ClaudeMessage Claude 消息
