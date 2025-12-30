@@ -327,3 +327,88 @@ func TestCodexResponsesFormat(t *testing.T) {
 
 	t.Logf("Codex Responses 格式化结果:\n%s", result)
 }
+
+// TestGeminiContentsFormat 测试 Gemini contents 数组的紧凑格式化
+func TestGeminiContentsFormat(t *testing.T) {
+	// 模拟 Gemini 请求格式
+	input := map[string]interface{}{
+		"contents": []interface{}{
+			map[string]interface{}{
+				"role": "user",
+				"parts": []interface{}{
+					map[string]interface{}{
+						"text": "Hello, this is a test message that might be quite long and should be truncated if it exceeds the limit. " + strings.Repeat("More text here. ", 20),
+					},
+				},
+			},
+			map[string]interface{}{
+				"role": "model",
+				"parts": []interface{}{
+					map[string]interface{}{
+						"text": "This is the model response.",
+					},
+					map[string]interface{}{
+						"functionCall": map[string]interface{}{
+							"name": "get_weather",
+							"args": map[string]interface{}{
+								"location": "San Francisco",
+								"unit":     "celsius",
+							},
+						},
+					},
+				},
+			},
+			map[string]interface{}{
+				"role": "user",
+				"parts": []interface{}{
+					map[string]interface{}{
+						"functionResponse": map[string]interface{}{
+							"name": "get_weather",
+							"response": map[string]interface{}{
+								"temperature": 18,
+								"condition":   "Clear sky",
+							},
+						},
+					},
+				},
+			},
+		},
+		"generationConfig": map[string]interface{}{
+			"maxOutputTokens": 1024,
+		},
+	}
+
+	result := FormatJSONForLog(input, 500)
+
+	// 验证 contents 数组被正确处理
+	if !strings.Contains(result, `"contents"`) {
+		t.Error("应该包含 contents 字段")
+	}
+
+	// 验证 parts 字段被保留
+	if !strings.Contains(result, `"parts"`) {
+		t.Error("应该包含 parts 字段")
+	}
+
+	// 验证 role 字段被保留
+	if !strings.Contains(result, `"role": "user"`) {
+		t.Error("应该包含 role 字段")
+	}
+
+	// 验证 functionCall 被保留
+	if !strings.Contains(result, `"functionCall"`) {
+		t.Error("应该包含 functionCall 字段")
+	}
+
+	// 验证 functionResponse 被保留
+	if !strings.Contains(result, `"functionResponse"`) {
+		t.Error("应该包含 functionResponse 字段")
+	}
+
+	// 验证长文本被截断
+	if strings.Contains(result, "More text here. More text here. More text here. More text here. More text here. More text here. More text here. More text here. More text here. More text here. More text here. More text here. More text here. More text here. More text here. More text here. More text here. More text here. More text here. More text here.") {
+		t.Error("长文本应该被截断")
+	}
+
+	t.Logf("Gemini contents 格式化结果:\n%s", result)
+}

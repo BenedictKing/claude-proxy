@@ -532,19 +532,24 @@ func buildProviderRequest(
 		return nil, err
 	}
 
-	// 设置请求头
+	// 使用统一的头部处理逻辑（透明代理）
+	// 保留客户端的大部分 headers，只移除/替换必要的认证和代理相关 headers
+	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
+
+	// 设置 Content-Type（覆盖可能来自客户端的值）
 	req.Header.Set("Content-Type", "application/json")
 
+	// 设置认证头
 	switch upstream.ServiceType {
 	case "gemini":
-		req.Header.Set("x-goog-api-key", apiKey)
+		utils.SetGeminiAuthenticationHeader(req.Header, apiKey)
 	case "claude":
-		req.Header.Set("x-api-key", apiKey)
+		utils.SetAuthenticationHeader(req.Header, apiKey)
 		req.Header.Set("anthropic-version", "2023-06-01")
 	case "openai":
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+		utils.SetAuthenticationHeader(req.Header, apiKey)
 	default:
-		req.Header.Set("x-goog-api-key", apiKey)
+		utils.SetGeminiAuthenticationHeader(req.Header, apiKey)
 	}
 
 	return req, nil
