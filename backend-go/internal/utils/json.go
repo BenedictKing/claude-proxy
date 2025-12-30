@@ -62,11 +62,7 @@ func SimplifyToolsArray(data interface{}) interface{} {
 			// 如果是tools字段且是数组,提取工具名称
 			if key == "tools" {
 				if toolsArray, ok := value.([]interface{}); ok {
-					simplifiedTools := make([]interface{}, len(toolsArray))
-					for i, tool := range toolsArray {
-						simplifiedTools[i] = extractToolName(tool)
-					}
-					result[key] = simplifiedTools
+					result[key] = extractToolNames(toolsArray)
 					continue
 				}
 			}
@@ -347,7 +343,53 @@ func truncateInputValues(data interface{}, maxLength int) interface{} {
 	}
 }
 
-// extractToolName 从工具定义中提取名称
+// extractToolNames 从tools数组中提取所有工具名称
+// 支持Claude格式、OpenAI格式和Gemini格式
+func extractToolNames(toolsArray []interface{}) []interface{} {
+	var names []interface{}
+
+	for _, tool := range toolsArray {
+		toolMap, ok := tool.(map[string]interface{})
+		if !ok {
+			// 如果不是 map，可能已经是简化后的名称字符串
+			names = append(names, tool)
+			continue
+		}
+
+		// Gemini格式: tool.functionDeclarations[].name
+		if funcDecls, ok := toolMap["functionDeclarations"].([]interface{}); ok {
+			for _, funcDecl := range funcDecls {
+				if declMap, ok := funcDecl.(map[string]interface{}); ok {
+					if name, ok := declMap["name"].(string); ok {
+						names = append(names, name)
+					}
+				}
+			}
+			continue
+		}
+
+		// Claude格式: tool.name
+		if name, ok := toolMap["name"].(string); ok {
+			names = append(names, name)
+			continue
+		}
+
+		// OpenAI格式: tool.function.name
+		if function, ok := toolMap["function"].(map[string]interface{}); ok {
+			if name, ok := function["name"].(string); ok {
+				names = append(names, name)
+				continue
+			}
+		}
+
+		// 未知格式，保留原始对象
+		names = append(names, tool)
+	}
+
+	return names
+}
+
+// extractToolName 从工具定义中提取名称（保留用于兼容）
 // 支持Claude格式(tool.name)和OpenAI格式(tool.function.name)
 func extractToolName(tool interface{}) interface{} {
 	toolMap, ok := tool.(map[string]interface{})
