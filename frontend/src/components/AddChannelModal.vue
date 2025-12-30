@@ -689,7 +689,9 @@ const expectedRequestUrl = computed(() => {
   if (hasVersion || skipVersion) {
     return baseUrl + endpoint
   }
-  return baseUrl + '/v1' + endpoint
+  // Gemini 使用 /v1beta，其他使用 /v1
+  const versionPrefix = serviceType === 'gemini' ? '/v1beta' : '/v1'
+  return baseUrl + versionPrefix + endpoint
 })
 
 // 生成单个 URL 的预期请求地址
@@ -727,7 +729,9 @@ const getExpectedRequestUrl = (inputBaseUrl: string): string => {
   if (hasVersion || skipVersion) {
     return baseUrl + endpoint
   }
-  return baseUrl + '/v1' + endpoint
+  // Gemini 使用 /v1beta，其他使用 /v1
+  const versionPrefix = serviceType === 'gemini' ? '/v1beta' : '/v1'
+  return baseUrl + versionPrefix + endpoint
 }
 
 // 检测 baseUrl 是否有验证错误
@@ -790,7 +794,9 @@ const formExpectedRequestUrls = computed(() => {
 
       const hasVersion = /\/v\d+[a-z]*$/.test(baseUrl)
 
-      const expectedUrl = hasVersion || skipVersion ? baseUrl + endpoint : baseUrl + '/v1' + endpoint
+      // Gemini 使用 /v1beta，其他使用 /v1
+      const versionPrefix = form.serviceType === 'gemini' ? '/v1beta' : '/v1'
+      const expectedUrl = hasVersion || skipVersion ? baseUrl + endpoint : baseUrl + versionPrefix + endpoint
 
       return { baseUrl: rawUrl, expectedUrl }
     })

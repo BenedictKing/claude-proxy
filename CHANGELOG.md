@@ -4,14 +4,14 @@
 
 ---
 
-## [Unreleased]
+## [v2.4.16] - 2025-12-30
 
-### ✨ 新功能
+### 🐛 修复
 
-- **Gemini API 支持原生路径格式** - 同时支持两种 API 路径：
-  - `/v1/models/{model}:generateContent`（简化格式）
-  - `/v1beta/models/{model}:generateContent`（Gemini 原生格式）
-  - 涉及文件：`main.go`
+- **修复 Gemini 渠道预期请求 URL 预览** - 创建渠道时预览显示正确的 `/v1beta` 路径：
+  - 原问题：Gemini 渠道预览错误显示 `/v1` 而后端实际使用 `/v1beta`
+  - 修复：当 serviceType 为 gemini 时使用 `/v1beta` 作为版本前缀
+  - 涉及文件：`frontend/src/components/AddChannelModal.vue`
 
 ---
 
