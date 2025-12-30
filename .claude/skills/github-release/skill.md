@@ -1,7 +1,7 @@
 ---
 name: github-release
 description: 发布 GitHub Release，从 CHANGELOG 生成发布公告并更新 Draft Release (project)
-version: 1.1.0
+version: 1.1.1
 author: https://github.com/BenedictKing/claude-proxy/
 allowed-tools: Bash, Read
 ---
@@ -11,6 +11,7 @@ allowed-tools: Bash, Read
 ## 触发条件
 
 当用户输入包含以下关键词时触发：
+
 - "发布公告"、"发布说明"、"release notes"
 - "发布 release"、"publish release"
 - "更新 draft"、"编辑 release"
@@ -31,6 +32,7 @@ gh release list --limit 10
 ```
 
 **多 Draft 处理策略**：
+
 - 如果存在多个 Draft Release，只发布最新版本
 - 删除中间版本的 Draft Release（快速迭代场景下的合理做法）
 - 合并所有中间版本的 changelog 到最新版本的发布公告
@@ -66,22 +68,59 @@ cat CHANGELOG.md
 ## 主要更新 (v2.3.5 ~ v2.3.7)
 
 ### ✨ 新功能
-- 功能点1
-- 功能点2
+
+- 功能点 1
+- 功能点 2
 
 ### 🐛 修复
-- 修复点1
-- 修复点2
+
+- 修复点 1
+- 修复点 2
 
 ### 🔧 改进
-- 改进点1
+
+- 改进点 1
+
+---
+
+**Full Changelog**: https://github.com/BenedictKing/claude-proxy/compare/v2.3.5...v2.3.7
 ```
 
 **注意事项**：
+
 - 合并多个小版本的内容到一个公告
 - 保持简洁，每个点一行
-- 移除技术实现细节，保留用户可感知的变化
 - 标题中标注版本范围（如 v2.3.5 ~ v2.3.7）
+- **Full Changelog 链接必须从上次公开发布版本到最新版本**（不是从上一个 Draft 版本）
+
+**内容精简规则（重要）**：
+
+发布公告面向最终用户，必须移除技术实现细节，只保留用户可感知的变化：
+
+| 应移除的内容                              | 应保留的内容                  |
+| ----------------------------------------- | ----------------------------- |
+| 具体文件路径（`internal/types/types.go`） | 功能名称                      |
+| 代码结构（`ClaudeRequest` 结构体）        | 问题现象（返回 403）          |
+| 字段名称（`metadata` 字段）               | 用户操作（配置 modelMapping） |
+| 实现方式（JSON 反序列化）                 | 修复结果                      |
+
+**精简示例**：
+
+CHANGELOG 原文：
+
+```
+- **修复 ModelMapping 导致请求字段丢失** - 解决使用模型重定向时 Claude API 返回 403 的问题：
+  - 原因：`ClaudeRequest` 结构体缺少 `metadata` 字段，JSON 反序列化时该字段被丢弃
+  - 表现：配置 `modelMapping` 后请求被上游拒绝（如 `opus` → `claude-opus-4-5-20251101`）
+  - 修复：在 `ClaudeRequest` 中添加 `Metadata map[string]interface{}` 字段
+  - 涉及文件：`backend-go/internal/types/types.go`
+```
+
+发布公告精简后：
+
+```
+- **修复模型映射功能** - 解决配置 `modelMapping` 后请求被上游拒绝（返回 403）的问题
+```
 
 ### 5. 更新 Draft Release 并发布
 
