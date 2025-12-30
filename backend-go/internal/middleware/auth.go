@@ -87,6 +87,7 @@ func WebAuthMiddleware(envCfg *config.EnvConfig, cfgManager *config.ConfigManage
 }
 
 // isPollingEndpoint 判断是否为轮询端点（前缀匹配，兼容 query string 和尾部斜杠）
+// 复用 defaultSkipPrefixes 保持与 FilteredLogger 一致
 func isPollingEndpoint(path string) bool {
 	// 移除 query string
 	if idx := strings.Index(path, "?"); idx != -1 {
@@ -95,14 +96,8 @@ func isPollingEndpoint(path string) bool {
 	// 移除尾部斜杠
 	path = strings.TrimSuffix(path, "/")
 
-	// 使用前缀匹配，与 FilteredLogger 保持一致
-	pollingPrefixes := []string{
-		"/api/messages/channels",
-		"/api/responses/channels",
-		"/api/messages/global/stats",
-		"/api/responses/global/stats",
-	}
-	for _, prefix := range pollingPrefixes {
+	// 复用 logger.go 中的 defaultSkipPrefixes
+	for _, prefix := range defaultSkipPrefixes {
 		if strings.HasPrefix(path, prefix) {
 			return true
 		}
