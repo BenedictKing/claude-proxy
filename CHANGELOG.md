@@ -4,6 +4,17 @@
 
 ---
 
+## [Unreleased]
+
+### ✨ 新功能
+
+- **Gemini API 支持原生路径格式** - 同时支持两种 API 路径：
+  - `/v1/models/{model}:generateContent`（简化格式）
+  - `/v1beta/models/{model}:generateContent`（Gemini 原生格式）
+  - 涉及文件：`main.go`
+
+---
+
 ## [v2.4.15] - 2025-12-30
 
 ### 🐛 修复

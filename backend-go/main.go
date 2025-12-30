@@ -224,7 +224,12 @@ func main() {
 
 	// 代理端点 - Gemini API (原生协议)
 	// 使用通配符捕获 model:action 格式，如 gemini-pro:generateContent
-	r.POST("/v1/models/*modelAction", gemini.Handler(envCfg, cfgManager, channelScheduler))
+	// 支持两种路径格式：
+	// - /v1/models/{model}:generateContent (简化格式)
+	// - /v1beta/models/{model}:generateContent (Gemini 原生格式)
+	geminiHandler := gemini.Handler(envCfg, cfgManager, channelScheduler)
+	r.POST("/v1/models/*modelAction", geminiHandler)
+	r.POST("/v1beta/models/*modelAction", geminiHandler)
 
 	// 静态文件服务 (嵌入的前端)
 	if envCfg.EnableWebUI {
@@ -261,6 +266,7 @@ func main() {
 	fmt.Printf("[Server-Info] Claude Messages: POST /v1/messages\n")
 	fmt.Printf("[Server-Info] Codex Responses: POST /v1/responses\n")
 	fmt.Printf("[Server-Info] Gemini API: POST /v1/models/{model}:generateContent\n")
+	fmt.Printf("[Server-Info] Gemini API: POST /v1beta/models/{model}:generateContent (原生格式)\n")
 	fmt.Printf("[Server-Info] 健康检查: GET /health\n")
 	fmt.Printf("[Server-Info] 环境: %s\n", envCfg.Env)
 	// 检查是否使用默认密码，给予提示
