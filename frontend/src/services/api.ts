@@ -652,7 +652,14 @@ class ApiService {
   }
 
   async pingAllGeminiChannels(): Promise<Array<{ id: number; name: string; latency: number; status: string }>> {
-    return this.request('/gemini/ping')
+    const resp = await this.request('/gemini/ping')
+    // 后端返回 { channels: [...] }，需要提取并转换字段名
+    return (resp.channels || []).map((ch: { index: number; name: string; latency: number; success: boolean }) => ({
+      id: ch.index,
+      name: ch.name,
+      latency: ch.latency,
+      status: ch.success ? 'healthy' : 'error'
+    }))
   }
 
   // Gemini Dashboard（降级实现：组合 channels + metrics 调用）
