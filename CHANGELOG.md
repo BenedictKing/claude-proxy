@@ -6,7 +6,25 @@
 
 ## [Unreleased]
 
+---
+
+## [v2.4.18] - 2025-12-31
+
+### 🐛 修复
+
+- **Gemini 日志和 Header 透传改进** - 修复 Gemini 接口的日志显示和请求头处理：
+  - 修复 `contents`/`parts` 字段在日志中不显示的问题
+  - 修复原生 Gemini handler 未透传客户端 Header 的问题
+  - 新增 `compactGeminiContentsArray` 和 `compactGeminiPart` 函数
+  - 涉及文件：`backend-go/internal/utils/json.go`、`backend-go/internal/handlers/gemini/handler.go`
+
 ### 🔧 重构
+
+- **Gemini tools 日志简化支持** - 新增 `extractToolNames` 函数支持 Gemini 格式的工具提取：
+  - 支持 Gemini `functionDeclarations` 数组格式
+  - 兼容 Claude 和 OpenAI 格式
+  - 日志中 tools 字段现在统一显示为 `["tool1", "tool2", ...]` 格式
+  - 涉及文件：`backend-go/internal/utils/json.go`
 
 - **移除非标准 Gemini API 路由** - 简化 API 端点，仅保留官方格式：
   - 移除：`POST /v1/models/{model}:generateContent`（非标准简化格式）
