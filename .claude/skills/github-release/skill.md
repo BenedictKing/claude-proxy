@@ -1,7 +1,7 @@
 ---
 name: github-release
 description: 发布 GitHub Release，从 CHANGELOG 生成发布公告并更新 Draft Release (project)
-version: 1.1.1
+version: 1.2.0
 author: https://github.com/BenedictKing/claude-proxy/
 allowed-tools: Bash, Read
 ---
@@ -62,11 +62,17 @@ cat CHANGELOG.md
 
 ### 4. 生成发布公告
 
-根据 CHANGELOG 内容生成简洁的发布公告，格式：
+根据 CHANGELOG 内容生成简洁的发布公告。
+
+> ⚠️ **【必须】发布公告格式要求**：
+>
+> 1. 必须按类型分组（✨ 新功能 / 🐛 修复 / 🔧 改进）
+> 2. **必须在末尾包含 Full Changelog 链接**（从上次公开发布版本到最新版本）
+> 3. Full Changelog 链接前必须加 `---` 分隔线
+
+**标准格式**：
 
 ```markdown
-## 主要更新 (v2.3.5 ~ v2.3.7)
-
 ### ✨ 新功能
 
 - 功能点 1
@@ -90,8 +96,7 @@ cat CHANGELOG.md
 
 - 合并多个小版本的内容到一个公告
 - 保持简洁，每个点一行
-- 标题中标注版本范围（如 v2.3.5 ~ v2.3.7）
-- **Full Changelog 链接必须从上次公开发布版本到最新版本**（不是从上一个 Draft 版本）
+- **【必须】Full Changelog 链接必须从上次公开发布版本到最新版本**（不是从上一个 Draft 版本）
 
 **内容精简规则（重要）**：
 
@@ -151,6 +156,8 @@ gh release view <tag> --json url,publishedAt
 
 ## 输出格式
 
+> ⚠️ **【必须】严格按照以下格式输出，不可省略任何部分**
+
 ```
 📦 Release 发布完成！
 
@@ -162,7 +169,18 @@ gh release view <tag> --json url,publishedAt
 
 发布内容:
 ---
-[发布公告内容]
+### ✨ 新功能
+- 功能点
+
+### 🐛 修复
+- 修复点
+
+### 🔧 改进
+- 改进点
+
+---
+
+**Full Changelog**: https://github.com/BenedictKing/claude-proxy/compare/v2.3.5...v2.3.7
 ---
 ```
 
