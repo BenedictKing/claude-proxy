@@ -621,6 +621,10 @@ func patchUsageFieldsWithLog(usage map[string]interface{}, estimatedInput, estim
 			usage["input_tokens"] = estimatedInput
 			inputPatched = true
 		}
+	} else if usage["input_tokens"] == nil && estimatedInput > 0 && !hasCacheTokens {
+		// input_tokens 为 nil 时，用收集到的值修补（有缓存 token 时跳过）
+		usage["input_tokens"] = estimatedInput
+		inputPatched = true
 	}
 
 	if v, ok := usage["output_tokens"].(float64); ok {
