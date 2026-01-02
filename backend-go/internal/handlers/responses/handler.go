@@ -940,8 +940,8 @@ func checkResponsesEventUsage(event string, enableLog bool) (bool, bool, respons
 					}
 
 					if enableLog {
-						log.Printf("[Responses-Stream-Token] response.completed: InputTokens=%d, OutputTokens=%d, TotalTokens=%d, HasClaudeCache=%v, 需补全=%v",
-							usageData.InputTokens, usageData.OutputTokens, usageData.TotalTokens, usageData.HasClaudeCache, needPatch)
+						log.Printf("[Responses-Stream-Token] response.completed: InputTokens=%d, OutputTokens=%d, TotalTokens=%d, CacheCreation=%d, CacheRead=%d, HasClaudeCache=%v, 需补全=%v",
+							usageData.InputTokens, usageData.OutputTokens, usageData.TotalTokens, usageData.CacheCreationInputTokens, usageData.CacheReadInputTokens, usageData.HasClaudeCache, needPatch)
 					}
 					return true, needPatch, usageData
 				} else if enableLog {
