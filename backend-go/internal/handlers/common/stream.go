@@ -640,7 +640,7 @@ func patchUsageFieldsWithLog(usage map[string]interface{}, estimatedInput, estim
 
 	if enableLog {
 		if inputPatched || outputPatched {
-			log.Printf("[Messages-Stream-Token] %s: InputTokens=%v->%v, OutputTokens=%v->%v",
+			log.Printf("[Messages-Stream-Token-Patch] %s: InputTokens=%v -> %v, OutputTokens=%v -> %v",
 				location, originalInput, usage["input_tokens"], originalOutput, usage["output_tokens"])
 		}
 		log.Printf("[Messages-Stream-Token] %s: InputTokens=%v, OutputTokens=%v, CacheCreationInputTokens=%.0f, CacheReadInputTokens=%.0f, CacheCreation5m=%.0f, CacheCreation1h=%.0f, CacheTTL=%s",
