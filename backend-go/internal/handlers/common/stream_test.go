@@ -22,12 +22,12 @@ func TestPatchUsageFieldsWithLog_NilInputTokens(t *testing.T) {
 			wantValue:      10920,
 		},
 		{
-			name:           "nil input_tokens with cache - should not patch",
+			name:           "nil input_tokens with cache - should also patch",
 			usage:          map[string]interface{}{"input_tokens": nil, "output_tokens": float64(100)},
 			estimatedInput: 10920,
 			hasCacheTokens: true,
-			wantPatched:    false,
-			wantValue:      0, // remains nil
+			wantPatched:    true,
+			wantValue:      10920,
 		},
 		{
 			name:           "valid input_tokens - should not patch",
