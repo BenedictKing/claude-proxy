@@ -62,6 +62,14 @@ type TimeWindowStats struct {
 	SuccessCount int64   `json:"successCount"`
 	FailureCount int64   `json:"failureCount"`
 	SuccessRate  float64 `json:"successRate"`
+	// Token 统计（按时间窗口聚合）
+	InputTokens         int64 `json:"inputTokens,omitempty"`
+	OutputTokens        int64 `json:"outputTokens,omitempty"`
+	CacheCreationTokens int64 `json:"cacheCreationTokens,omitempty"`
+	CacheReadTokens     int64 `json:"cacheReadTokens,omitempty"`
+	// CacheHitRate 缓存命中率（Token口径），范围 0-100
+	// 定义：cacheReadTokens / (cacheReadTokens + inputTokens) * 100
+	CacheHitRate float64 `json:"cacheHitRate,omitempty"`
 }
 
 // MetricsManager 指标管理器
@@ -1031,6 +1039,7 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsInternal(baseURL string, 
 	for label, duration := range windows {
 		cutoff := now.Add(-duration)
 		var requestCount, successCount, failureCount int64
+		var inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64
 
 		for _, apiKey := range activeKeys {
 			metricsKey := generateMetricsKey(baseURL, apiKey)
@@ -1043,6 +1052,10 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsInternal(baseURL string, 
 						} else {
 							failureCount++
 						}
+						inputTokens += record.InputTokens
+						outputTokens += record.OutputTokens
+						cacheCreationTokens += record.CacheCreationInputTokens
+						cacheReadTokens += record.CacheReadInputTokens
 					}
 				}
 			}
@@ -1053,11 +1066,22 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsInternal(baseURL string, 
 			successRate = float64(successCount) / float64(requestCount) * 100
 		}
 
+		cacheHitRate := float64(0)
+		denom := cacheReadTokens + inputTokens
+		if denom > 0 {
+			cacheHitRate = float64(cacheReadTokens) / float64(denom) * 100
+		}
+
 		result[label] = TimeWindowStats{
-			RequestCount: requestCount,
-			SuccessCount: successCount,
-			FailureCount: failureCount,
-			SuccessRate:  successRate,
+			RequestCount:        requestCount,
+			SuccessCount:        successCount,
+			FailureCount:        failureCount,
+			SuccessRate:         successRate,
+			InputTokens:         inputTokens,
+			OutputTokens:        outputTokens,
+			CacheCreationTokens: cacheCreationTokens,
+			CacheReadTokens:     cacheReadTokens,
+			CacheHitRate:        cacheHitRate,
 		}
 	}
 
