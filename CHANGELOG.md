@@ -4,6 +4,29 @@
 
 ---
 
+## [v2.4.22] - 2026-01-02
+
+### ✨ 新功能
+
+- **低质量渠道处理机制** - 新增 `lowQuality` 渠道配置选项，用于处理返回不完整数据的上游渠道：
+  - Token 偏差检测：启用后对比上游返回值与本地估算值，偏差 > 5% 时使用本地估算值
+  - Model 一致性检查：验证响应中的 model 是否与请求一致，不一致则改写为请求的 model
+  - 空 ID 补全：自动补全上游返回的空 `message.id`（生成 `msg_<uuid>` 格式）
+  - 前端支持：渠道编辑 modal 新增"低质量渠道"开关
+
+### 🐛 修复
+
+- **暂停渠道时自动清除促销期** - 当用户暂停一个正在抢优先级的渠道时，自动清除其 `promotionUntil` 字段：
+  - 避免暂停后仍显示促销期标识
+  - 涉及三个渠道类型：Messages、Responses、Gemini
+  - 涉及文件：`config_messages.go`、`config_responses.go`、`config_gemini.go`
+
+- **修复 `lowQuality` 字段更新不持久化的问题** - 在 `UpdateUpstream` 系列函数中补充 `LowQuality` 字段处理：
+  - 之前前端切换"低质量渠道"开关后变更不会被保存
+  - 涉及文件：`config_messages.go`、`config_responses.go`、`config_gemini.go`
+
+---
+
 ## [v2.4.21] - 2026-01-02
 
 ### 🐛 修复

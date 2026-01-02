@@ -41,7 +41,7 @@ func TestPatchUsageFieldsWithLog_NilInputTokens(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			patchUsageFieldsWithLog(tt.usage, tt.estimatedInput, 100, tt.hasCacheTokens, false, "test")
+			patchUsageFieldsWithLog(tt.usage, tt.estimatedInput, 100, tt.hasCacheTokens, false, "test", false)
 
 			if tt.wantPatched {
 				if v, ok := tt.usage["input_tokens"].(int); !ok || v != tt.wantValue {

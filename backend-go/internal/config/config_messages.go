@@ -114,6 +114,9 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 	if updates.PromotionUntil != nil {
 		upstream.PromotionUntil = updates.PromotionUntil
 	}
+	if updates.LowQuality != nil {
+		upstream.LowQuality = *updates.LowQuality
+	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return false, err
@@ -330,6 +333,12 @@ func (cm *ConfigManager) SetChannelStatus(index int, status string) error {
 	}
 
 	cm.config.Upstream[index].Status = status
+
+	// 暂停时清除促销期
+	if status == "suspended" && cm.config.Upstream[index].PromotionUntil != nil {
+		cm.config.Upstream[index].PromotionUntil = nil
+		log.Printf("[Config-Status] 已清除渠道 [%d] %s 的促销期", index, cm.config.Upstream[index].Name)
+	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return err

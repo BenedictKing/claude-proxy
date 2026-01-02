@@ -454,6 +454,22 @@
                 <v-switch inset color="warning" hide-details v-model="form.insecureSkipVerify" />
               </div>
             </v-col>
+
+            <!-- 低质量渠道标记 -->
+            <v-col cols="12">
+              <div class="d-flex align-center justify-space-between">
+                <div class="d-flex align-center ga-2">
+                  <v-icon color="info">mdi-speedometer-slow</v-icon>
+                  <div>
+                    <div class="text-body-1 font-weight-medium">低质量渠道</div>
+                    <div class="text-caption text-medium-emphasis">
+                      启用后强制本地估算 token 数量，偏差超过 5% 时使用本地值
+                    </div>
+                  </div>
+                </div>
+                <v-switch inset color="info" hide-details v-model="form.lowQuality" />
+              </div>
+            </v-col>
           </v-row>
         </v-form>
       </v-card-text>
@@ -911,6 +927,7 @@ const form = reactive({
   baseUrls: [] as string[],
   website: '',
   insecureSkipVerify: false,
+  lowQuality: false,
   description: '',
   apiKeys: [] as string[],
   modelMapping: {} as Record<string, string>
@@ -1060,6 +1077,7 @@ const resetForm = () => {
   form.baseUrls = []
   form.website = ''
   form.insecureSkipVerify = false
+  form.lowQuality = false
   form.description = ''
   form.apiKeys = []
   form.modelMapping = {}
@@ -1097,6 +1115,7 @@ const loadChannelData = (channel: Channel) => {
   form.baseUrls = channel.baseUrls || []
   form.website = channel.website || ''
   form.insecureSkipVerify = !!channel.insecureSkipVerify
+  form.lowQuality = !!channel.lowQuality
   form.description = channel.description || ''
 
   // 同步 baseUrlsText（优先使用 baseUrls，否则使用 baseUrl）
@@ -1259,6 +1278,7 @@ const handleSubmit = async () => {
     baseUrl: deduplicatedUrls[0] || '',
     website: form.website.trim(), // 空字符串也需要传递，以便清除已有值
     insecureSkipVerify: form.insecureSkipVerify,
+    lowQuality: form.lowQuality,
     description: form.description.trim(),
     apiKeys: processedApiKeys,
     modelMapping: form.modelMapping

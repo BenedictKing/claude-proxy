@@ -83,6 +83,7 @@ export interface Channel {
   suspendReason?: string     // 熔断原因
   promotionUntil?: string    // 促销期截止时间（ISO 格式）
   latencyTestTime?: number   // 延迟测试时间戳（用于 5 分钟后自动清除显示）
+  lowQuality?: boolean       // 低质量渠道标记：启用后强制本地估算 token，偏差>5%时使用本地值
 }
 
 export interface ChannelsResponse {

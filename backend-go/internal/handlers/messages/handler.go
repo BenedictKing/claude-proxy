@@ -261,7 +261,7 @@ func tryChannelWithAllKeys(
 			channelScheduler.MarkURLSuccess(channelIndex, currentBaseURL)
 
 			if claudeReq.Stream {
-				common.HandleStreamResponse(c, resp, provider, envCfg, startTime, upstream, bodyBytes, channelScheduler, apiKey)
+				common.HandleStreamResponse(c, resp, provider, envCfg, startTime, upstream, bodyBytes, channelScheduler, apiKey, claudeReq.Model)
 			} else {
 				handleNormalResponse(c, resp, provider, envCfg, startTime, bodyBytes, channelScheduler, upstream, apiKey)
 			}
@@ -452,7 +452,7 @@ func handleSingleChannel(
 
 			channelScheduler.RecordSuccess(currentBaseURL, apiKey, false)
 			if claudeReq.Stream {
-				common.HandleStreamResponse(c, resp, provider, envCfg, startTime, upstream, bodyBytes, channelScheduler, apiKey)
+				common.HandleStreamResponse(c, resp, provider, envCfg, startTime, upstream, bodyBytes, channelScheduler, apiKey, claudeReq.Model)
 			} else {
 				handleNormalResponse(c, resp, provider, envCfg, startTime, bodyBytes, channelScheduler, upstream, apiKey)
 			}
