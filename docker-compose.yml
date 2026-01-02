@@ -24,7 +24,7 @@ services:
       # 是否启用Web管理界面 (true=一体化模式, false=纯API模式)
       - ENABLE_WEB_UI=true
       # 代理访问密钥 - 用于验证客户端对代理服务器的访问权限
-      - PROXY_ACCESS_KEY=your-super-strong-secret-key
+      - PROXY_ACCESS_KEY=flowerrealm
       # 日志级别 (error, warn, info, debug)
       - LOG_LEVEL=warn
       # 是否启用请求日志
