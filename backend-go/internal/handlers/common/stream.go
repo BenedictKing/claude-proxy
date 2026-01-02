@@ -642,11 +642,17 @@ func patchUsageFieldsWithLog(usage map[string]interface{}, estimatedInput, estim
 					usage["input_tokens"] = estimatedInput
 					inputPatched = true
 					if enableLog {
-						log.Printf("[Messages-Stream-Token-LowQuality] %s: input_tokens 偏差 %.1f%% > 5%%, 使用本地估算值",
-							location, deviation*100)
+						log.Printf("[Messages-Stream-Token-LowQuality] %s: input_tokens %d -> %d (偏差 %.1f%% > 5%%)",
+							location, currentInput, estimatedInput, deviation*100)
 					}
+				} else if enableLog {
+					log.Printf("[Messages-Stream-Token-LowQuality] %s: input_tokens %d ≈ %d (偏差 %.1f%% ≤ 5%%, 保留上游值)",
+						location, currentInput, estimatedInput, deviation*100)
 				}
 			}
+		} else if enableLog && estimatedInput > 0 {
+			log.Printf("[Messages-Stream-Token-LowQuality] %s: input_tokens=%v (上游无效值, 本地估算=%d)",
+				location, usage["input_tokens"], estimatedInput)
 		}
 		if v, ok := usage["output_tokens"].(float64); ok && estimatedOutput > 0 {
 			currentOutput := int(v)
@@ -656,11 +662,17 @@ func patchUsageFieldsWithLog(usage map[string]interface{}, estimatedInput, estim
 					usage["output_tokens"] = estimatedOutput
 					outputPatched = true
 					if enableLog {
-						log.Printf("[Messages-Stream-Token-LowQuality] %s: output_tokens 偏差 %.1f%% > 5%%, 使用本地估算值",
-							location, deviation*100)
+						log.Printf("[Messages-Stream-Token-LowQuality] %s: output_tokens %d -> %d (偏差 %.1f%% > 5%%)",
+							location, currentOutput, estimatedOutput, deviation*100)
 					}
+				} else if enableLog {
+					log.Printf("[Messages-Stream-Token-LowQuality] %s: output_tokens %d ≈ %d (偏差 %.1f%% ≤ 5%%, 保留上游值)",
+						location, currentOutput, estimatedOutput, deviation*100)
 				}
 			}
+		} else if enableLog && estimatedOutput > 0 {
+			log.Printf("[Messages-Stream-Token-LowQuality] %s: output_tokens=%v (上游无效值, 本地估算=%d)",
+				location, usage["output_tokens"], estimatedOutput)
 		}
 	}
 
