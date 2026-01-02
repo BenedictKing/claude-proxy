@@ -25,6 +25,10 @@
   - 之前前端切换"低质量渠道"开关后变更不会被保存
   - 涉及文件：`config_messages.go`、`config_responses.go`、`config_gemini.go`
 
+- **修复渠道列表 API 未返回 `lowQuality` 字段** - 在 `GetUpstreams` 和 `GetChannelDashboard` 函数返回的 JSON 中补充 `lowQuality` 字段：
+  - 之前前端编辑渠道时无法正确显示已保存的"低质量渠道"开关状态
+  - 涉及文件：`handlers/messages/channels.go`、`handlers/responses/channels.go`、`handlers/gemini/channels.go`、`handlers/channel_metrics_handler.go`
+
 ---
 
 ## [v2.4.21] - 2026-01-02
