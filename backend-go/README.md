@@ -1,6 +1,6 @@
-# Claude Proxy - Go 版本
+# Claude / Codex / Gemini API Proxy - Go 版本
 
-> 🚀 高性能的 Claude API 代理服务器 - Go 语言实现，支持多种上游AI服务提供商，内置前端管理界面
+> 🚀 高性能的 Claude / Codex / Gemini API Proxy - Go 语言实现，支持多种上游AI服务提供商，内置前端管理界面
 
 ## 特性
 
