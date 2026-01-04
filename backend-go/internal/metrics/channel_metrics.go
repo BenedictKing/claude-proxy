@@ -1223,8 +1223,8 @@ func (m *MetricsManager) GetHistoricalStats(baseURL string, activeKeys []string,
 		metricsKey := generateMetricsKey(baseURL, apiKey)
 		if metrics, exists := m.keyMetrics[metricsKey]; exists {
 			for _, record := range metrics.requestHistory {
-				// 使用 Before(endTime) 排除恰好落在 endTime 的记录，避免 offset 越界
-				if record.Timestamp.After(startTime) && record.Timestamp.Before(endTime) {
+				// 使用 [startTime, endTime) 的区间，避免 endTime 处 offset 越界
+				if !record.Timestamp.Before(startTime) && record.Timestamp.Before(endTime) {
 					// 计算记录应该属于哪个桶
 					offset := int64(record.Timestamp.Sub(startTime) / interval)
 					if offset >= 0 && offset < int64(numPoints) {
@@ -1251,7 +1251,7 @@ func (m *MetricsManager) GetHistoricalStats(baseURL string, activeKeys []string,
 			successRate = float64(b.successCount) / float64(b.requestCount) * 100
 		}
 		result[i] = HistoryDataPoint{
-			Timestamp:    startTime.Add(time.Duration(i+1) * interval),
+			Timestamp:    startTime.Add(time.Duration(i) * interval),
 			RequestCount: b.requestCount,
 			SuccessCount: b.successCount,
 			FailureCount: b.failureCount,
@@ -1269,7 +1269,6 @@ type bucketData struct {
 	failureCount int64
 }
 
-// GetAllKeysHistoricalStats 获取所有 Key 的历史统计（不区分渠道）
 func (m *MetricsManager) GetAllKeysHistoricalStats(duration, interval time.Duration) []HistoryDataPoint {
 	// 参数验证
 	if interval <= 0 || duration <= 0 {
@@ -1300,8 +1299,8 @@ func (m *MetricsManager) GetAllKeysHistoricalStats(duration, interval time.Durat
 	// 收集所有 Key 的请求历史并放入对应桶
 	for _, metrics := range m.keyMetrics {
 		for _, record := range metrics.requestHistory {
-			// 使用 Before(endTime) 排除恰好落在 endTime 的记录，避免 offset 越界
-			if record.Timestamp.After(startTime) && record.Timestamp.Before(endTime) {
+			// 使用 [startTime, endTime) 的区间，避免 endTime 处 offset 越界
+			if !record.Timestamp.Before(startTime) && record.Timestamp.Before(endTime) {
 				offset := int64(record.Timestamp.Sub(startTime) / interval)
 				if offset >= 0 && offset < int64(numPoints) {
 					b := buckets[offset]
@@ -1326,7 +1325,7 @@ func (m *MetricsManager) GetAllKeysHistoricalStats(duration, interval time.Durat
 			successRate = float64(b.successCount) / float64(b.requestCount) * 100
 		}
 		result[i] = HistoryDataPoint{
-			Timestamp:    startTime.Add(time.Duration(i+1) * interval),
+			Timestamp:    startTime.Add(time.Duration(i) * interval),
 			RequestCount: b.requestCount,
 			SuccessCount: b.successCount,
 			FailureCount: b.failureCount,

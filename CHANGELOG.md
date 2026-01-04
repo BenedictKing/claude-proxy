@@ -4,6 +4,29 @@
 
 ---
 
+## [Unreleased]
+
+### 🐛 修复
+
+- **修复历史分桶边界导致边界点漏算** - 历史统计 API 的时间过滤条件从开区间 `(startTime, endTime)` 改为半开区间 `[startTime, endTime)`，避免恰好落在 startTime 的记录被遗漏
+  - 涉及文件：`internal/metrics/channel_metrics.go`
+
+- **修复历史图表时间戳错位** - 将返回的 Timestamp 从"桶结束时间"改为"桶起始时间"，前端图表不再出现一格偏差
+  - 涉及文件：`internal/metrics/channel_metrics.go`
+
+- **修复成功计数可能重复记录** - 移除多渠道/单渠道成功路径上多余的 `RecordSuccess()` 调用，统一使用 `RecordSuccessWithUsage()` 作为唯一成功计数入口
+  - Messages 路径：移除重复调用，保留流式/非流式末尾的 `RecordSuccessWithUsage`
+  - Responses compact 路径：改用 `RecordSuccessWithUsage(nil)` 替代原 `RecordSuccess`，保持指标一致性
+  - 涉及文件：`internal/handlers/messages/handler.go`、`internal/handlers/responses/compact.go`
+
+- **修复多 BaseURL 故障转移时成功指标归属错误** - 当请求通过 fallback BaseURL 成功时，成功指标错误地记录到主 BaseURL 而非实际成功的 URL
+  - 根本原因：`handleNormalResponse` 和 `HandleStreamResponse` 接收的是原始 `upstream` 而非设置了 `currentBaseURL` 的 `upstreamCopy`
+  - 修复方式：将两处调用点的参数从 `upstream` 改为 `upstreamCopy`
+  - 影响范围：多渠道/单渠道的流式与非流式响应处理
+  - 涉及文件：`internal/handlers/messages/handler.go`
+
+---
+
 ## [v2.4.24] - 2026-01-04
 
 ### ✨ 新功能

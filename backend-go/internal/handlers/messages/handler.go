@@ -92,12 +92,9 @@ func handleMultiChannel(
 				channelIndex, upstream.Name, selection.Reason, channelAttempt+1, maxChannelAttempts)
 		}
 
-		success, successKey, successBaseURLIdx, failoverErr := tryChannelWithAllKeys(c, envCfg, cfgManager, channelScheduler, upstream, channelIndex, bodyBytes, claudeReq, startTime)
+		success, _, _, failoverErr := tryChannelWithAllKeys(c, envCfg, cfgManager, channelScheduler, upstream, channelIndex, bodyBytes, claudeReq, startTime)
 
 		if success {
-			if successKey != "" {
-				channelScheduler.RecordSuccess(upstream.GetAllBaseURLs()[successBaseURLIdx], successKey, false)
-			}
 			channelScheduler.SetTraceAffinity(userID, channelIndex)
 			return
 		}
@@ -261,9 +258,9 @@ func tryChannelWithAllKeys(
 			channelScheduler.MarkURLSuccess(channelIndex, currentBaseURL)
 
 			if claudeReq.Stream {
-				common.HandleStreamResponse(c, resp, provider, envCfg, startTime, upstream, bodyBytes, channelScheduler, apiKey, claudeReq.Model)
+				common.HandleStreamResponse(c, resp, provider, envCfg, startTime, upstreamCopy, bodyBytes, channelScheduler, apiKey, claudeReq.Model)
 			} else {
-				handleNormalResponse(c, resp, provider, envCfg, startTime, bodyBytes, channelScheduler, upstream, apiKey)
+				handleNormalResponse(c, resp, provider, envCfg, startTime, bodyBytes, channelScheduler, upstreamCopy, apiKey)
 			}
 			return true, apiKey, originalIdx, nil
 		}
@@ -450,11 +447,10 @@ func handleSingleChannel(
 				}
 			}
 
-			channelScheduler.RecordSuccess(currentBaseURL, apiKey, false)
 			if claudeReq.Stream {
-				common.HandleStreamResponse(c, resp, provider, envCfg, startTime, upstream, bodyBytes, channelScheduler, apiKey, claudeReq.Model)
+				common.HandleStreamResponse(c, resp, provider, envCfg, startTime, upstreamCopy, bodyBytes, channelScheduler, apiKey, claudeReq.Model)
 			} else {
-				handleNormalResponse(c, resp, provider, envCfg, startTime, bodyBytes, channelScheduler, upstream, apiKey)
+				handleNormalResponse(c, resp, provider, envCfg, startTime, bodyBytes, channelScheduler, upstreamCopy, apiKey)
 			}
 			return
 		}
