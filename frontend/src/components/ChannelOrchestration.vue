@@ -126,6 +126,15 @@
                         <span class="text-caption text-medium-emphasis ml-2">
                           {{ get15mStats(element.index)?.requestCount }} 请求
                         </span>
+                        <v-chip
+                          v-if="shouldShowCacheHitRate(get15mStats(element.index))"
+                          size="x-small"
+                          :color="getCacheHitRateColor(get15mStats(element.index)?.cacheHitRate)"
+                          variant="tonal"
+                          class="ml-2"
+                        >
+                          缓存 {{ get15mStats(element.index)?.cacheHitRate?.toFixed(0) }}%
+                        </v-chip>
                       </template>
                       <span v-else class="text-caption text-medium-emphasis">--</span>
                     </div>
@@ -147,6 +156,24 @@
                     <div class="metrics-tooltip-row">
                       <span>24小时:</span>
                       <span>{{ formatStats(get24hStats(element.index)) }}</span>
+                    </div>
+
+                    <div class="text-caption font-weight-bold mt-2 mb-1">缓存统计 (Token)</div>
+                    <div class="metrics-tooltip-row">
+                      <span>15分钟:</span>
+                      <span>{{ formatCacheStats(get15mStats(element.index)) }}</span>
+                    </div>
+                    <div class="metrics-tooltip-row">
+                      <span>1小时:</span>
+                      <span>{{ formatCacheStats(get1hStats(element.index)) }}</span>
+                    </div>
+                    <div class="metrics-tooltip-row">
+                      <span>6小时:</span>
+                      <span>{{ formatCacheStats(get6hStats(element.index)) }}</span>
+                    </div>
+                    <div class="metrics-tooltip-row">
+                      <span>24小时:</span>
+                      <span>{{ formatCacheStats(get24hStats(element.index)) }}</span>
                     </div>
                   </div>
                 </v-tooltip>
@@ -517,6 +544,20 @@ const getSuccessRateColor = (rate?: number): string => {
   return 'error'
 }
 
+const getCacheHitRateColor = (rate?: number): string => {
+  if (rate === undefined) return 'grey'
+  if (rate >= 30) return 'success'
+  if (rate >= 10) return 'info'
+  return 'grey'
+}
+
+const shouldShowCacheHitRate = (stats?: TimeWindowStats): boolean => {
+  if (!stats || !stats.requestCount) return false
+  const inputTokens = stats.inputTokens ?? 0
+  const cacheReadTokens = stats.cacheReadTokens ?? 0
+  return (inputTokens + cacheReadTokens) > 0
+}
+
 // 获取延迟颜色
 const getLatencyColor = (latency: number): string => {
   if (latency < 500) return 'success'
@@ -553,6 +594,27 @@ const formatPromotionRemaining = (until?: string): string => {
 const formatStats = (stats?: TimeWindowStats): string => {
   if (!stats || !stats.requestCount) return '--'
   return `${stats.requestCount} 请求 (${stats.successRate?.toFixed(0)}%)`
+}
+
+const formatTokens = (num?: number): string => {
+  const value = num ?? 0
+  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`
+  return Math.round(value).toString()
+}
+
+const formatCacheStats = (stats?: TimeWindowStats): string => {
+  if (!stats || !stats.requestCount) return '--'
+
+  const inputTokens = stats.inputTokens ?? 0
+  const cacheReadTokens = stats.cacheReadTokens ?? 0
+  const cacheCreationTokens = stats.cacheCreationTokens ?? 0
+  const denom = inputTokens + cacheReadTokens
+
+  if (denom <= 0) return '--'
+
+  const hitRate = stats.cacheHitRate ?? (cacheReadTokens / denom * 100)
+  return `命中 ${hitRate.toFixed(0)}% · 读 ${formatTokens(cacheReadTokens)} · 写 ${formatTokens(cacheCreationTokens)}`
 }
 
 // 获取官网 URL（优先使用 website，否则从 baseUrl 提取域名）

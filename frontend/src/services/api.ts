@@ -41,6 +41,11 @@ export interface TimeWindowStats {
   successCount: number
   failureCount: number
   successRate: number
+  inputTokens?: number
+  outputTokens?: number
+  cacheCreationTokens?: number
+  cacheReadTokens?: number
+  cacheHitRate?: number
 }
 
 export interface ChannelMetrics {
