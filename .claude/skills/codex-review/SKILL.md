@@ -1,7 +1,7 @@
 ---
 name: codex-review
 description: 调用 codex 命令行进行代码审核，自动收集当前文件修改和任务状态一并发送；工作区干净时自动审核最新提交 (user)
-version: 1.4.0
+version: 1.5.0
 author: https://github.com/BenedictKing/claude-proxy/
 allowed-tools: Bash, Read, Glob, Write, Edit
 ---
@@ -11,6 +11,7 @@ allowed-tools: Bash, Read, Glob, Write, Edit
 ## 触发条件
 
 当用户输入包含以下关键词时触发：
+
 - "代码审核"、"代码审查"、"审查代码"、"审核代码"
 - "review"、"code review"、"review code"
 - "帮我审核"、"检查代码"、"审一下"、"看看代码"
@@ -22,6 +23,57 @@ allowed-tools: Bash, Read, Glob, Write, Edit
 
 **"代码变更 + 意图描述"同时作为输入，是提升 AI 代码审查质量的最高效手段。**
 
+## Codex Review 命令完整用法
+
+### 基本语法
+
+```bash
+codex review [OPTIONS] [PROMPT]
+```
+
+**注意**: `[PROMPT]` 参数不能与 `--uncommitted`、`--base`、`--commit` 同时使用。
+
+### 常用选项
+
+| 选项                       | 说明                                                        | 示例                                                         |
+| -------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------ |
+| `--uncommitted`            | 审核工作区所有未提交的更改（staged + unstaged + untracked） | `codex review --uncommitted`                                 |
+| `--base <BRANCH>`          | 审核相对于指定基准分支的更改                                | `codex review --base main`                                   |
+| `--commit <SHA>`           | 审核指定提交引入的更改                                      | `codex review --commit HEAD`                                 |
+| `--title <TITLE>`          | 可选的提交标题，显示在审核摘要中                            | `codex review --uncommitted --title "feat: add JSON parser"` |
+| `-c, --config <key=value>` | 覆盖配置值                                                  | `codex review --uncommitted -c model="o3"`                   |
+
+### 使用场景示例
+
+```bash
+# 1. 审核所有未提交的更改（最常用）
+codex review --uncommitted
+
+# 2. 审核最新提交
+codex review --commit HEAD
+
+# 3. 审核指定提交
+codex review --commit abc1234
+
+# 4. 审核当前分支相对于 main 的所有更改
+codex review --base main
+
+# 5. 审核当前分支相对于 develop 的更改
+codex review --base develop
+
+# 6. 带标题的审核（标题会显示在审核摘要中）
+codex review --uncommitted --title "fix: resolve JSON parsing errors"
+
+# 7. 使用特定模型进行审核
+codex review --uncommitted -c model="o3"
+```
+
+### 重要限制
+
+- `--uncommitted`、`--base`、`--commit` 三者互斥，不能同时使用
+- `[PROMPT]` 参数与上述三个选项互斥
+- 必须在 git 仓库目录下执行
+
 ## 执行步骤
 
 ### 0. 【首先】检查工作区状态
@@ -31,6 +83,7 @@ git diff --name-only && git status --short
 ```
 
 **根据输出决定审核模式：**
+
 - **有未提交变更** → 继续执行步骤 1-4（常规流程）
 - **工作区干净** → 直接审核最新提交：`codex review --commit HEAD`
 
@@ -51,15 +104,18 @@ git diff --name-only | grep -E "(CHANGELOG|changelog)"
 4. **继续审核流程**：CHANGELOG 更新后立即继续执行后续步骤
 
 **自动生成的 CHANGELOG 条目格式：**
+
 ```markdown
 ## [Unreleased]
 
 ### Added（新功能）/ Changed（修改）/ Fixed（修复）
+
 - 功能描述：解决了什么问题或实现了什么功能
 - 涉及文件：主要修改的文件/模块
 ```
 
 **示例 - 自动生成流程：**
+
 ```
 1. 检测到 CHANGELOG 未更新
 2. 运行 git diff --stat 发现修改了 handlers/responses.go (+88 lines)
@@ -96,14 +152,10 @@ codex review --uncommitted
 # 超时时间设置为 15 分钟 (900000ms)
 ```
 
-**命令参数说明**：
-- `--uncommitted`: 审核工作区中所有未提交的更改
-- `--base <branch>`: 审核相对于指定分支的更改
-- `--commit <sha>`: 审核指定的提交
-
 ### 4. 自我修正
 
 如果 Codex 发现 Changelog 描述与代码逻辑不一致：
+
 - **代码错误** → 修复代码
 - **描述不准确** → 更新 Changelog
 
