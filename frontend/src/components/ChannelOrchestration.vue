@@ -123,7 +123,7 @@
                         >
                           {{ get15mStats(element.index)?.successRate?.toFixed(0) }}%
                         </v-chip>
-                        <span class="text-caption text-medium-emphasis ml-2">
+                        <span class="text-caption text-medium-emphasis ml-2 mr-1">
                           {{ get15mStats(element.index)?.requestCount }} 请求
                         </span>
                         <v-chip
@@ -131,7 +131,7 @@
                           size="x-small"
                           :color="getCacheHitRateColor(get15mStats(element.index)?.cacheHitRate)"
                           variant="tonal"
-                          class="ml-2"
+                          class="ml-1"
                         >
                           缓存 {{ get15mStats(element.index)?.cacheHitRate?.toFixed(0) }}%
                         </v-chip>
@@ -546,9 +546,10 @@ const getSuccessRateColor = (rate?: number): string => {
 
 const getCacheHitRateColor = (rate?: number): string => {
   if (rate === undefined) return 'grey'
-  if (rate >= 30) return 'success'
-  if (rate >= 10) return 'info'
-  return 'grey'
+  if (rate >= 50) return 'success'
+  if (rate >= 20) return 'info'
+  if (rate >= 5) return 'warning'
+  return 'orange'
 }
 
 const shouldShowCacheHitRate = (stats?: TimeWindowStats): boolean => {
@@ -978,7 +979,9 @@ defineExpose({
 .channel-metrics {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .channel-latency {

@@ -4,6 +4,22 @@
 
 ---
 
+## [v2.4.24] - 2026-01-04
+
+### ✨ 新功能
+
+- **缓存命中率统计** - 按 Token 口径展示各渠道缓存读/写与命中率：
+  - 后端：在 `timeWindows` 聚合统计中新增 `inputTokens`/`outputTokens`/`cacheCreationTokens`/`cacheReadTokens`/`cacheHitRate` 字段
+  - 命中率定义：`cacheReadTokens / (cacheReadTokens + inputTokens) * 100`
+  - 前端：渠道编排列表在 15 分钟有请求时额外显示缓存命中率，tooltip 中按 15m/1h/6h/24h 展示缓存统计
+  - 新字段均为 `omitempty`，向后兼容
+
+### 🎨 优化
+
+- **调整渠道指标显示间距** - 优化缓存命中率 chip 与请求数之间的间距，避免布局拥挤
+
+---
+
 ## [v2.4.23] - 2026-01-03
 
 ### ✨ 新功能
