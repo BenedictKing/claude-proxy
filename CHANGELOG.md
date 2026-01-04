@@ -4,7 +4,19 @@
 
 ---
 
-## [Unreleased]
+## [v2.4.25] - 2026-01-04
+
+### 🧪 测试
+
+- **新增 baseUrl/baseUrls 一致性测试套件** - 覆盖 URL 配置的完整场景，防止编辑渠道时数据不一致问题回归
+  - `TestUpdateUpstream_BaseURLConsistency`: 验证 Messages 渠道更新时 baseUrl/baseUrls 的一致性（4 场景）
+  - `TestUpdateResponsesUpstream_BaseURLConsistency`: 验证 Responses 渠道更新一致性
+  - `TestUpdateGeminiUpstream_BaseURLConsistency`: 验证 Gemini 渠道更新一致性
+  - `TestGetAllBaseURLs_Priority`: 验证 URL 获取优先级逻辑（4 场景）
+  - `TestGetEffectiveBaseURL_Priority`: 验证有效 URL 选择逻辑（3 场景）
+  - `TestDeduplicateBaseURLs`: 验证 URL 去重逻辑（7 场景，含末尾斜杠/井号差异）
+  - `TestAddUpstream_BaseURLDeduplication`: 验证添加渠道时的 URL 去重
+  - 涉及文件：`internal/config/config_baseurl_test.go`（新增 414 行）
 
 ### 🐛 修复
 
