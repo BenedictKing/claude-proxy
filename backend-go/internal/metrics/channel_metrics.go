@@ -300,7 +300,11 @@ func (m *MetricsManager) RecordSuccessWithUsage(baseURL, apiKey string, usage *t
 	if usage != nil {
 		inputTokens = int64(usage.InputTokens)
 		outputTokens = int64(usage.OutputTokens)
+		// cache_creation_input_tokens 有时不会返回（只返回 5m/1h 细分字段），这里做兜底汇总。
 		cacheCreationTokens = int64(usage.CacheCreationInputTokens)
+		if cacheCreationTokens <= 0 {
+			cacheCreationTokens = int64(usage.CacheCreation5mInputTokens + usage.CacheCreation1hInputTokens)
+		}
 		cacheReadTokens = int64(usage.CacheReadInputTokens)
 	}
 
