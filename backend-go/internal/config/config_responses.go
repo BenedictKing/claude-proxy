@@ -72,6 +72,11 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 	}
 	if updates.BaseURL != nil {
 		upstream.BaseURL = *updates.BaseURL
+		// 当 BaseURL 被更新且 BaseURLs 未被显式设置时，清空 BaseURLs 保持一致性
+		// 避免出现 baseUrl 和 baseUrls[0] 不一致的情况
+		if updates.BaseURLs == nil {
+			upstream.BaseURLs = nil
+		}
 	}
 	if updates.BaseURLs != nil {
 		upstream.BaseURLs = deduplicateBaseURLs(updates.BaseURLs)
