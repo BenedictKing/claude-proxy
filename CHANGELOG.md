@@ -4,6 +4,24 @@
 
 ---
 
+## [v2.4.26] - 2026-01-05
+
+### 🐛 修复
+
+- **修复 Key 趋势图切换时间范围后不刷新问题** - 持久化 view/duration 选择到 localStorage，使用 requestId 防止自动刷新旧响应覆盖新选择
+  - 涉及文件：`frontend/src/components/KeyTrendChart.vue`
+
+- **修复缓存创建统计缺失问题** - 当上游仅返回 TTL 细分字段（5m/1h）时，兜底汇总为 cacheCreationTokens
+  - 涉及文件：`backend-go/internal/metrics/channel_metrics.go`
+
+- **透传缓存 TTL 细分字段到指标层** - Responses 非流式/流式 usage 现在包含 CacheCreation5m/1h + CacheTTL
+  - 涉及文件：`backend-go/internal/handlers/responses/handler.go`
+
+### 🧪 测试
+
+- **新增 TTL 细分字段兜底测试** - 覆盖 cache_creation_input_tokens 为 0 时的汇总场景
+  - 涉及文件：`backend-go/internal/metrics/channel_metrics_cache_stats_test.go`
+
 ## [v2.4.25] - 2026-01-04
 
 ### 🧪 测试
