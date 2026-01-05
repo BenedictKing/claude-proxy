@@ -11,6 +11,13 @@
 - **修复 Key 趋势图切换时间范围后不刷新问题** - 持久化 view/duration 选择到 localStorage，使用 requestId 防止自动刷新旧响应覆盖新选择
   - 涉及文件：`frontend/src/components/KeyTrendChart.vue`
 
+- **修复 KeyTrendChart SSR 兼容性和健壮性问题**
+  - 添加 `isLocalStorageAvailable()` 检查，防止 SSR 环境下访问 localStorage 崩溃
+  - 为 localStorage 读写操作添加 try/catch 异常捕获（配额超限、隐私模式等场景）
+  - 添加 `channelType` prop 变化监听，切换渠道类型时自动重载偏好设置并刷新数据
+  - 优化 channelType watcher 逻辑，避免与 duration watcher 重复触发刷新
+  - 涉及文件：`frontend/src/components/KeyTrendChart.vue`
+
 - **修复缓存创建统计缺失问题** - 当上游仅返回 TTL 细分字段（5m/1h）时，兜底汇总为 cacheCreationTokens
   - 涉及文件：`backend-go/internal/metrics/channel_metrics.go`
 

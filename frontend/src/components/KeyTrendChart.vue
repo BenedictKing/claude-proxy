@@ -88,17 +88,38 @@ type Duration = '1h' | '6h' | '24h' | 'today'
 // LocalStorage keys for preferences (per channelType)
 const getStorageKey = (channelType: string, key: string) => `keyTrendChart:${channelType}:${key}`
 
-const loadSavedPreferences = (channelType: string) => {
-  const savedView = localStorage.getItem(getStorageKey(channelType, 'viewMode')) as ViewMode | null
-  const savedDuration = localStorage.getItem(getStorageKey(channelType, 'duration')) as Duration | null
-  return {
-    view: savedView && ['traffic', 'tokens', 'cache'].includes(savedView) ? savedView : 'traffic',
-    duration: savedDuration && ['1h', '6h', '24h', 'today'].includes(savedDuration) ? savedDuration : '1h'
+// Check if localStorage is available (SSR-safe)
+const isLocalStorageAvailable = (): boolean => {
+  try {
+    return typeof window !== 'undefined' && window.localStorage !== undefined
+  } catch {
+    return false
+  }
+}
+
+const loadSavedPreferences = (channelType: string): { view: ViewMode; duration: Duration } => {
+  if (!isLocalStorageAvailable()) {
+    return { view: 'traffic', duration: '1h' }
+  }
+  try {
+    const savedView = window.localStorage.getItem(getStorageKey(channelType, 'viewMode')) as ViewMode | null
+    const savedDuration = window.localStorage.getItem(getStorageKey(channelType, 'duration')) as Duration | null
+    return {
+      view: savedView && ['traffic', 'tokens', 'cache'].includes(savedView) ? savedView : 'traffic',
+      duration: savedDuration && ['1h', '6h', '24h', 'today'].includes(savedDuration) ? savedDuration : '1h'
+    }
+  } catch {
+    return { view: 'traffic', duration: '1h' }
   }
 }
 
 const savePreference = (channelType: string, key: string, value: string) => {
-  localStorage.setItem(getStorageKey(channelType, key), value)
+  if (!isLocalStorageAvailable()) return
+  try {
+    window.localStorage.setItem(getStorageKey(channelType, key), value)
+  } catch {
+    // Ignore storage errors (quota exceeded, private mode, etc.)
+  }
 }
 
 // Theme
@@ -720,6 +741,19 @@ watch(selectedView, () => {
   savePreference(props.channelType, 'viewMode', selectedView.value)
   // View change doesn't need to refetch, just re-render chart
 }, { flush: 'sync' })
+
+// Watch channelType changes to reload preferences and refresh data
+watch(() => props.channelType, (newChannelType) => {
+  const prefs = loadSavedPreferences(newChannelType)
+  const oldDuration = selectedDuration.value
+  selectedView.value = prefs.view
+  selectedDuration.value = prefs.duration
+  historyData.value = null
+  // Only explicitly refresh if duration didn't change (otherwise duration watcher handles it)
+  if (oldDuration === prefs.duration) {
+    refreshData()
+  }
+})
 
 // Initial load and start auto refresh
 onMounted(() => {
