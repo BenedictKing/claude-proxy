@@ -99,7 +99,14 @@
                   <div class="flex-grow-1">
                     <div class="text-body-2 font-weight-medium">渠道类型</div>
                     <div class="text-caption text-medium-emphasis">
-                      {{ props.channelType === 'gemini' ? 'Gemini' : props.channelType === 'responses' ? 'Responses (Codex)' : 'Claude (Messages)' }} -
+                      {{
+                        props.channelType === 'gemini'
+                          ? 'Gemini'
+                          : props.channelType === 'responses'
+                          ? 'Responses (Codex)'
+                          : 'Claude (Messages)'
+                      }}
+                      -
                       {{ getDefaultServiceType() }}
                     </div>
                   </div>
@@ -157,6 +164,64 @@
                 :error-messages="errors.baseUrl"
                 hide-details="auto"
               />
+
+              <!-- 链接加速选项 -->
+              <div class="mt-2">
+                <div class="d-flex align-center">
+                  <v-checkbox
+                    v-model="enableAcceleration"
+                    label="启用 CDN 加速 (betterclau.de)"
+                    density="comfortable"
+                    color="primary"
+                    hide-details
+                    class="flex-grow-0"
+                  />
+                  <v-chip v-if="enableAcceleration" size="x-small" color="info" variant="tonal" class="ml-2">
+                    {{ getAccelerationDomain() }}
+                  </v-chip>
+                </div>
+
+                <!-- 加速状态和测试按钮 -->
+                <div v-if="enableAcceleration && acceleratedUrl" class="mt-2 d-flex align-center ga-2">
+                  <div class="flex-grow-1">
+                    <div class="text-caption text-medium-emphasis mb-1">加速后 URL:</div>
+                    <code class="text-caption text-primary">{{ acceleratedUrl }}</code>
+                  </div>
+                  <v-btn
+                    size="small"
+                    color="info"
+                    variant="tonal"
+                    :loading="testingAcceleration"
+                    :disabled="testingAcceleration"
+                    @click="testAccelerationUrl"
+                  >
+                    <v-icon start size="14">mdi-speedometer</v-icon>
+                    测试连通性
+                  </v-btn>
+                </div>
+
+                <!-- 测试结果 -->
+                <v-alert
+                  v-if="accelerationTestResult"
+                  :type="accelerationTestResult.success ? 'success' : 'warning'"
+                  :variant="accelerationTestResult.success ? 'tonal' : 'outlined'"
+                  density="comfortable"
+                  class="mt-2"
+                  :closable="true"
+                  @click:close="accelerationTestResult = null"
+                >
+                  <div class="text-caption">
+                    <v-icon size="14" start>{{
+                      accelerationTestResult.success ? 'mdi-check-circle' : 'mdi-alert-circle'
+                    }}</v-icon>
+                    {{ accelerationTestResult.message }}
+                    <span v-if="accelerationTestResult.latency" class="ml-2 text-medium-emphasis">
+                      ({{ accelerationTestResult.latency }}ms)
+                    </span>
+                  </div>
+                </v-alert>
+              </div>
+
               <!-- 固定高度的提示区域，防止布局跳动；有错误时不显示 -->
               <div v-show="formExpectedRequestUrls.length > 0 && !baseUrlHasError" class="base-url-hint">
                 <div v-for="(item, index) in formExpectedRequestUrls" :key="index" class="expected-request-item">
@@ -165,6 +230,7 @@
               </div>
             </v-col>
 
+            <!-- 官网/控制台（可选） -->
             <!-- 官网/控制台（可选） -->
             <v-col cols="12">
               <v-text-field
@@ -528,9 +594,9 @@ const detectedApiKeys = ref<string[]>([])
 const detectedServiceType = ref<'openai' | 'gemini' | 'claude' | 'responses' | null>(null)
 
 // 详细表单预期请求 URL 预览（防止输入时抖动）
-const formBaseUrlPreview = ref('')
 let formBaseUrlPreviewTimer: number | null = null
 
+// 切换模式时，将快速模式检测到的值同步到详细表单，但不清空快速模式输入
 // 切换模式时，将快速模式检测到的值同步到详细表单，但不清空快速模式输入
 const toggleMode = () => {
   if (isQuickMode.value) {
@@ -822,9 +888,7 @@ const handleQuickSubmit = () => {
 // 服务类型选项 - 根据渠道类型动态显示
 const serviceTypeOptions = computed(() => {
   if (props.channelType === 'gemini') {
-    return [
-      { title: 'Gemini', value: 'gemini' }
-    ]
+    return [{ title: 'Gemini', value: 'gemini' }]
   }
   if (props.channelType === 'responses') {
     return [
@@ -936,6 +1000,110 @@ watch(baseUrlsText, val => {
     form.baseUrls = urls
   }
 })
+
+// 链接加速相关状态
+const enableAcceleration = ref(true) // 默认开启加速
+const acceleratedUrl = ref('')
+const testingAcceleration = ref(false)
+const accelerationTestResult = ref<{ success: boolean; message: string; latency?: number } | null>(null)
+
+// 获取 CDN 加速域名
+const getAccelerationDomain = (): string => {
+  const serviceType = form.serviceType || detectedServiceType.value || getDefaultServiceTypeValue()
+  const subdomainMap: Record<string, string> = {
+    claude: 'claude',
+    openai: 'openai',
+    gemini: 'gemini',
+    responses: 'openai' // responses API 使用 openai 加速
+  }
+  const subdomain = subdomainMap[serviceType] || 'openai'
+  return `betterclau.de/${subdomain}`
+}
+
+// 计算加速后的 URL
+const calculateAcceleratedUrl = (baseUrl: string): string => {
+  if (!baseUrl || !enableAcceleration.value) return ''
+
+  // 如果 URL 已经包含 betterclau.de，直接返回
+  if (baseUrl.includes('betterclau.de') || baseUrl.includes('betterclaud.e')) {
+    return baseUrl
+  }
+
+  try {
+    const url = new URL(baseUrl)
+    const accelerationDomain = getAccelerationDomain()
+
+    // 修改为 https://betterclau.de/<service-type>/<original-hostname>/<original-path>
+    // 例如: https://api.anthropic.com/v1 -> https://betterclau.de/claude/api.anthropic.com/v1
+    const originalHost = url.hostname
+    const originalPath = url.pathname + url.search
+
+    return `https://${accelerationDomain}/${originalHost}${originalPath}`
+  } catch {
+    return ''
+  }
+}
+
+// 监听 baseUrlsText 和服务类型变化，自动更新加速 URL
+watch(
+  [baseUrlsText, () => form.serviceType, enableAcceleration],
+  () => {
+    if (!enableAcceleration.value) {
+      acceleratedUrl.value = ''
+      return
+    }
+
+    // 获取第一个 URL 进行加速预览
+    const urls = baseUrlsText.value
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean)
+    if (urls.length > 0) {
+      acceleratedUrl.value = calculateAcceleratedUrl(urls[0])
+    } else {
+      acceleratedUrl.value = ''
+    }
+  },
+  { immediate: true }
+)
+
+// 测试加速 URL 的连通性（简化版 - 通过后端 API）
+const testAccelerationUrl = async () => {
+  if (!acceleratedUrl.value) return
+
+  testingAcceleration.value = true
+  accelerationTestResult.value = null
+
+  const startTime = performance.now()
+
+  try {
+    // 由于浏览器 CORS 限制，我们无法直接使用代理
+    // 这里只做基础的 DNS 解析测试
+    // 实际的连通性测试建议用户通过后端 API 进行
+
+    // 简单的 fetch 测试（不带代理，可能会有 CORS 限制）
+    const response = await fetch(acceleratedUrl.value, {
+      method: 'HEAD',
+      mode: 'no-cors'
+    })
+
+    const latency = Math.round(performance.now() - startTime)
+
+    // 如果 fetch 没有抛出网络错误，认为连接可能可用
+    accelerationTestResult.value = {
+      success: true,
+      message: 'DNS 解析成功（CORS 限制无法完整测试，建议通过实际 API 调用验证）',
+      latency
+    }
+  } catch (error) {
+    accelerationTestResult.value = {
+      success: false,
+      message: '连接失败，请检查 URL 或网络设置（如需代理请配置后端环境变量）'
+    }
+  } finally {
+    testingAcceleration.value = false
+  }
+}
 
 // 原始密钥映射 (掩码密钥 -> 原始密钥)
 const originalKeyMap = ref<Map<string, string>>(new Map())
@@ -1069,6 +1237,11 @@ const resetForm = () => {
 
   // 重置 baseUrlsText
   baseUrlsText.value = ''
+
+  // 重置加速相关状态
+  enableAcceleration.value = false
+  acceleratedUrl.value = ''
+  accelerationTestResult.value = null
 
   // 清空原始密钥映射
   originalKeyMap.value.clear()
@@ -1239,18 +1412,22 @@ const handleSubmit = async () => {
 
   // 处理 BaseURL：去重（忽略末尾 / 和 # 差异），并移除 UI 专用的尾部 #
   const seenUrls = new Set<string>()
-  const deduplicatedUrls =
-    form.baseUrls.length > 0
-      ? form.baseUrls
-          .map(url => url.trim().replace(/[#/]+$/, ''))
-          .filter(Boolean)
-          .filter(url => {
-            const normalized = url.replace(/[#/]+$/, '')
-            if (seenUrls.has(normalized)) return false
-            seenUrls.add(normalized)
-            return true
-          })
-      : [form.baseUrl.trim().replace(/[#/]+$/, '')].filter(Boolean)
+  let urlsToProcess = form.baseUrls.length > 0 ? form.baseUrls : [form.baseUrl]
+
+  // 如果启用了加速且测试成功，对第一个 URL 应用加速
+  if (enableAcceleration.value && acceleratedUrl.value && accelerationTestResult.value?.success) {
+    urlsToProcess = [acceleratedUrl.value, ...urlsToProcess.slice(1)]
+  }
+
+  const deduplicatedUrls = urlsToProcess
+    .map(url => url.trim().replace(/[#/]+$/, ''))
+    .filter(Boolean)
+    .filter(url => {
+      const normalized = url.replace(/[#/]+$/, '')
+      if (seenUrls.has(normalized)) return false
+      seenUrls.add(normalized)
+      return true
+    })
 
   // 构建渠道数据
   const channelData: Omit<Channel, 'index' | 'latency' | 'status'> = {
