@@ -60,7 +60,9 @@
      ├─ / → 前端界面（需要密钥）
      ├─ /api/* → 管理API（需要密钥）
      ├─ /v1/messages → Claude Messages API 代理（需要密钥）
-     └─ /v1/responses → Codex Responses API 代理（需要密钥）
+     ├─ /v1/responses → Codex Responses API 代理（需要密钥）
+     ├─ /v1/models → Models API（需要密钥）
+     └─ /v1beta/models/* → Gemini API 代理（需要密钥）
 ```
 
 **核心优势**: 单端口、统一认证、无跨域问题、资源占用低
@@ -154,6 +156,7 @@ docker-compose up -d
 - **Web 管理界面**: http://localhost:3000
 - **Messages API 端点**: http://localhost:3000/v1/messages
 - **Responses API 端点**: http://localhost:3000/v1/responses
+- **Gemini API 端点**: http://localhost:3000/v1beta/models/{model}:generateContent
 - **健康检查**: http://localhost:3000/health
 
 ---
@@ -344,12 +347,14 @@ docker-compose restart claude-proxy
 
 ## 📖 API 使用
 
-本服务支持两种 API 格式：
+本服务支持以下 API 格式：
 
 1. **Messages API** (`/v1/messages`) - 标准的 Claude API 格式
 2. **Messages Token 计数** (`/v1/messages/count_tokens`) - Token 计数
 3. **Responses API** (`/v1/responses`) - Codex 格式，支持会话管理
 4. **Responses Compact** (`/v1/responses/compact`) - 精简版 Responses API
+5. **Models API** (`/v1/models`) - 模型列表查询
+6. **Gemini API** (`/v1beta/models/{model}:generateContent`) - Gemini 原生协议
 
 ### Messages API - 标准 Claude API 调用
 
@@ -477,6 +482,36 @@ curl -X POST http://localhost:3000/v1/responses \
   - `previous_id`: 上一轮响应 ID
   - `output`: 模型输出内容
   - `usage`: Token 使用统计
+
+### Gemini API - 原生协议调用
+
+Gemini API 使用 Google 原生协议格式，支持 `generateContent` 和 `streamGenerateContent`：
+
+#### 基础调用
+
+```bash
+curl -X POST "http://localhost:3000/v1beta/models/gemini-2.0-flash:generateContent" \
+  -H "x-api-key: your-proxy-access-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"role": "user", "parts": [{"text": "Hello!"}]}
+    ]
+  }'
+```
+
+#### 流式响应
+
+```bash
+curl -X POST "http://localhost:3000/v1beta/models/gemini-2.0-flash:streamGenerateContent" \
+  -H "x-api-key: your-proxy-access-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"role": "user", "parts": [{"text": "从1数到10"}]}
+    ]
+  }'
+```
 
 ### 管理 API
 
@@ -748,27 +783,6 @@ cd backend-go && make help
 - **🤝 贡献规范**: [CONTRIBUTING.md](CONTRIBUTING.md) - 提交规范、代码质量标准
 - **📝 版本历史**: [CHANGELOG.md](CHANGELOG.md) - 完整变更记录和升级指南
 - **🚀 发布流程**: [RELEASE.md](RELEASE.md) - 维护者发布流程
-
-## 🖥️ 相关项目
-
-### ProxyCast - 桌面版凭证代理工具
-
-如果你需要把 **AI 客户端的免费额度**（如 Kiro、Gemini CLI、通义千问）转换成标准 OpenAI API 供其他工具使用，可以试试我们的桌面应用 **ProxyCast**。
-
-**适用场景**：
-- 🔄 把 Kiro 的免费 Claude Sonnet 4.5 额度用在 Claude Code 或 Cursor 上
-- 💰 把 Claude Code 剩余额度转给 Cherry Studio 或自己的 AI Agent 项目
-- 🎯 统一管理多个 AI 账号，哪个有额度就用哪个
-
-**核心特性**：
-- 支持 Kiro、Gemini CLI、通义千问、OpenAI Codex、Vertex AI 等多种 Provider
-- 友好的图形界面，一键加载凭证、启动服务
-- 自动检测凭证变化、Token 过期自动刷新
-- 配额超限自动切换到下一个可用凭证
-
-📦 **下载地址**: [ProxyCast Releases](https://github.com/aiclientproxy/proxycast/releases)
-
-📚 **项目文档**: [refs/proxycast](refs/proxycast/) | [在线文档](https://proxycast.pages.dev/)
 
 ## 📄 许可证
 
