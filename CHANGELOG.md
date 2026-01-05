@@ -4,6 +4,17 @@
 
 ---
 
+## [v2.4.27] - 2026-01-05
+
+### 🐛 修复
+
+- **修复多端点 failover 渠道统计丢失问题** - 当渠道配置多个 `baseUrls` 时，请求路由到非主 URL 后指标无法正确聚合到渠道统计
+  - 根因：指标存储使用 `hash(baseURL + apiKey)` 作为键，但查询方法只使用主 BaseURL
+  - 新增 4 个多 URL 聚合方法：`GetHistoricalStatsMultiURL`、`GetChannelKeyUsageInfoMultiURL`、`GetKeyHistoricalStatsMultiURL`、`calculateAggregatedTimeWindowsMultiURL`
+  - `ToResponseMultiURL` 按 API Key 去重聚合，避免同一 Key 在多 URL 场景下产生重复条目
+  - Handler 层全部改用 `upstream.GetAllBaseURLs()` 获取所有 URL 进行聚合
+  - 涉及文件：`backend-go/internal/metrics/channel_metrics.go`、`backend-go/internal/handlers/channel_metrics_handler.go`
+
 ## [v2.4.26] - 2026-01-05
 
 ### 🐛 修复
