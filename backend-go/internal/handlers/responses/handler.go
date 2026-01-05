@@ -540,10 +540,13 @@ func handleSuccess(
 
 	// 返回 usage 数据用于指标记录
 	return &types.Usage{
-		InputTokens:              responsesResp.Usage.InputTokens,
-		OutputTokens:             responsesResp.Usage.OutputTokens,
-		CacheCreationInputTokens: responsesResp.Usage.CacheCreationInputTokens,
-		CacheReadInputTokens:     responsesResp.Usage.CacheReadInputTokens,
+		InputTokens:                responsesResp.Usage.InputTokens,
+		OutputTokens:               responsesResp.Usage.OutputTokens,
+		CacheCreationInputTokens:   responsesResp.Usage.CacheCreationInputTokens,
+		CacheReadInputTokens:       responsesResp.Usage.CacheReadInputTokens,
+		CacheCreation5mInputTokens: responsesResp.Usage.CacheCreation5mInputTokens,
+		CacheCreation1hInputTokens: responsesResp.Usage.CacheCreation1hInputTokens,
+		CacheTTL:                   responsesResp.Usage.CacheTTL,
 	}
 }
 
@@ -831,10 +834,13 @@ func handleStreamSuccess(
 
 	// 返回收集到的 usage 数据
 	return &types.Usage{
-		InputTokens:              collectedUsage.InputTokens,
-		OutputTokens:             collectedUsage.OutputTokens,
-		CacheCreationInputTokens: collectedUsage.CacheCreationInputTokens,
-		CacheReadInputTokens:     collectedUsage.CacheReadInputTokens,
+		InputTokens:                collectedUsage.InputTokens,
+		OutputTokens:               collectedUsage.OutputTokens,
+		CacheCreationInputTokens:   collectedUsage.CacheCreationInputTokens,
+		CacheReadInputTokens:       collectedUsage.CacheReadInputTokens,
+		CacheCreation5mInputTokens: collectedUsage.CacheCreation5mInputTokens,
+		CacheCreation1hInputTokens: collectedUsage.CacheCreation1hInputTokens,
+		CacheTTL:                   collectedUsage.CacheTTL,
 	}
 }
 
