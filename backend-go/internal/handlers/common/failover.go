@@ -39,10 +39,19 @@ func ShouldRetryWithNextKey(statusCode int, bodyBytes []byte, fuzzyMode bool) (b
 
 // shouldRetryWithNextKeyFuzzy Fuzzy 模式：所有非 2xx 错误都尝试 failover
 // 同时检查消息体中的配额相关关键词，确保 403 + "预扣费额度" 等情况能正确识别
+// 但对于内容审核等不可重试错误，即使在 Fuzzy 模式下也不应重试
 func shouldRetryWithNextKeyFuzzy(statusCode int, bodyBytes []byte) (bool, bool) {
 	log.Printf("[Failover-Fuzzy] 进入 Fuzzy 模式处理: statusCode=%d, bodyLen=%d", statusCode, len(bodyBytes))
 	if statusCode >= 200 && statusCode < 300 {
 		return false, false
+	}
+
+	// 检查是否为不可重试错误（内容审核等）
+	if len(bodyBytes) > 0 {
+		if isNonRetryableError(bodyBytes) {
+			log.Printf("[Failover-Fuzzy] 检测到不可重试错误，不进行 failover")
+			return false, false
+		}
 	}
 
 	// 状态码直接标记为配额相关
@@ -67,6 +76,12 @@ func shouldRetryWithNextKeyFuzzy(statusCode int, bodyBytes []byte) (bool, bool) 
 
 // shouldRetryWithNextKeyNormal 原有的精确错误分类逻辑
 func shouldRetryWithNextKeyNormal(statusCode int, bodyBytes []byte) (bool, bool) {
+	// 先检查是否为不可重试错误（内容审核等），这类错误无论状态码如何都不应重试
+	if len(bodyBytes) > 0 && isNonRetryableError(bodyBytes) {
+		log.Printf("[Failover-Debug] 检测到不可重试错误，不进行 failover")
+		return false, false
+	}
+
 	shouldFailover, isQuotaRelated := classifyByStatusCode(statusCode)
 
 	log.Printf("[Failover-Debug] shouldRetryWithNextKeyNormal: statusCode=%d, bodyLen=%d, shouldFailover=%v, isQuotaRelated=%v",
@@ -151,6 +166,14 @@ func classifyByErrorMessage(bodyBytes []byte) (bool, bool) {
 	if !ok {
 		log.Printf("[Failover-Debug] 未找到error对象, keys=%v", getMapKeys(errResp))
 		return false, false
+	}
+
+	// 检查 error.code 字段，某些错误码不应重试（内容审核、无效请求等）
+	if errCode, ok := errObj["code"].(string); ok {
+		if isNonRetryableErrorCode(errCode) {
+			log.Printf("[Failover-Debug] 检测到不可重试错误码: %s", errCode)
+			return false, false
+		}
 	}
 
 	// 尝试多个可能的消息字段: message, upstream_error, detail
@@ -360,4 +383,44 @@ func getMapKeys(m map[string]interface{}) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// isNonRetryableErrorCode 判断错误码是否不应重试
+// 这些错误与请求内容相关，换 Key 重试不会改变结果
+func isNonRetryableErrorCode(code string) bool {
+	nonRetryableCodes := []string{
+		// 内容审核相关
+		"sensitive_words_detected",
+		"content_policy_violation",
+		"content_filter",
+		"content_blocked",
+		"moderation_blocked",
+		// 请求内容无效
+		"invalid_request",
+		"invalid_request_error",
+		"bad_request",
+	}
+	codeLower := strings.ToLower(code)
+	for _, c := range nonRetryableCodes {
+		if codeLower == c {
+			return true
+		}
+	}
+	return false
+}
+
+// isNonRetryableError 检查响应体是否包含不可重试的错误码
+func isNonRetryableError(bodyBytes []byte) bool {
+	var errResp map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &errResp); err != nil {
+		return false
+	}
+	errObj, ok := errResp["error"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	if errCode, ok := errObj["code"].(string); ok {
+		return isNonRetryableErrorCode(errCode)
+	}
+	return false
 }

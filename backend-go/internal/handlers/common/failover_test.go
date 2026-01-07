@@ -644,3 +644,95 @@ func TestShouldRetryWithNextKey_FuzzyMode_403WithQuotaMessage(t *testing.T) {
 		})
 	}
 }
+
+// TestIsNonRetryableErrorCode 测试不可重试错误码判断
+func TestIsNonRetryableErrorCode(t *testing.T) {
+	tests := []struct {
+		code string
+		want bool
+	}{
+		// 内容审核相关 - 不应重试
+		{"sensitive_words_detected", true},
+		{"content_policy_violation", true},
+		{"content_filter", true},
+		{"content_blocked", true},
+		{"moderation_blocked", true},
+		// 请求内容无效 - 不应重试
+		{"invalid_request", true},
+		{"invalid_request_error", true},
+		{"bad_request", true},
+		// 大小写不敏感
+		{"SENSITIVE_WORDS_DETECTED", true},
+		{"Content_Policy_Violation", true},
+		// 其他错误码 - 应该重试
+		{"server_error", false},
+		{"rate_limit", false},
+		{"authentication_error", false},
+		{"unknown_error", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		name := tt.code
+		if name == "" {
+			name = "empty"
+		}
+		t.Run(name, func(t *testing.T) {
+			got := isNonRetryableErrorCode(tt.code)
+			if got != tt.want {
+				t.Errorf("isNonRetryableErrorCode(%q) = %v, want %v", tt.code, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestShouldRetryWithNextKey_SensitiveWordsDetected 测试敏感词检测错误不应重试
+// 这是修复的核心场景：500 + sensitive_words_detected 不应触发无限重试
+func TestShouldRetryWithNextKey_SensitiveWordsDetected(t *testing.T) {
+	// 模拟生产环境的敏感词检测错误
+	body := []byte(`{"error":{"message":"sensitive words detected","type":"new_api_error","param":"","code":"sensitive_words_detected"}}`)
+
+	tests := []struct {
+		name         string
+		statusCode   int
+		fuzzyMode    bool
+		wantFailover bool
+		wantQuota    bool
+	}{
+		{
+			name:         "500 with sensitive_words_detected - normal mode",
+			statusCode:   500,
+			fuzzyMode:    false,
+			wantFailover: false, // 不应重试
+			wantQuota:    false,
+		},
+		{
+			name:         "500 with sensitive_words_detected - fuzzy mode",
+			statusCode:   500,
+			fuzzyMode:    true,
+			wantFailover: false, // 即使在 fuzzy 模式下也不应重试
+			wantQuota:    false,
+		},
+		{
+			name:         "400 with sensitive_words_detected - normal mode",
+			statusCode:   400,
+			fuzzyMode:    false,
+			wantFailover: false,
+			wantQuota:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, body, tt.fuzzyMode)
+			if gotFailover != tt.wantFailover {
+				t.Errorf("ShouldRetryWithNextKey(%d, sensitive_words_body, %v) failover = %v, want %v",
+					tt.statusCode, tt.fuzzyMode, gotFailover, tt.wantFailover)
+			}
+			if gotQuota != tt.wantQuota {
+				t.Errorf("ShouldRetryWithNextKey(%d, sensitive_words_body, %v) quota = %v, want %v",
+					tt.statusCode, tt.fuzzyMode, gotQuota, tt.wantQuota)
+			}
+		})
+	}
+}

@@ -4,6 +4,23 @@
 
 ---
 
+## [v2.4.28] - 2026-01-07
+
+### 🐛 修复
+
+- **修复内容审核错误导致无限重试问题** - 当上游返回 `sensitive_words_detected` 等内容审核错误时，单渠道场景下会无限重试
+  - 根因：`classifyByStatusCode(500)` 触发 failover，但未检查 `error.code` 字段中的不可重试错误码
+  - 新增 `isNonRetryableErrorCode()` 函数，检测内容审核和无效请求错误码
+  - 新增 `isNonRetryableError()` 函数，从响应体提取并检测不可重试错误
+  - 在 `shouldRetryWithNextKeyNormal()` 和 `shouldRetryWithNextKeyFuzzy()` 入口处优先检测
+  - 不可重试错误码：`sensitive_words_detected`、`content_policy_violation`、`content_filter`、`content_blocked`、`moderation_blocked`、`invalid_request`、`invalid_request_error`、`bad_request`
+  - 涉及文件：`backend-go/internal/handlers/common/failover.go`
+
+### 🧪 测试
+
+- **新增不可重试错误码测试** - 覆盖 `sensitive_words_detected` 等错误码在 Normal/Fuzzy 模式下的行为
+  - 涉及文件：`backend-go/internal/handlers/common/failover_test.go`
+
 ## [v2.4.27] - 2026-01-05
 
 ### 🐛 修复
