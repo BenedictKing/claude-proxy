@@ -4,6 +4,19 @@
 
 ---
 
+## [Unreleased]
+
+### ✨ 改进
+
+- **增强 Trace 亲和性日志记录** - 在关键操作点添加详细日志，方便排查亲和性相关问题
+  - `[Affinity-Set]` 记录新建/变更用户亲和
+  - `[Affinity-Remove]` 记录手动移除用户亲和
+  - `[Affinity-RemoveByChannel]` 记录渠道移除时批量清理
+  - `[Affinity-Cleanup]` 记录定时清理过期记录
+  - 日志在锁外执行，避免高负载下的尾延迟
+  - 用户 ID 分级脱敏：短 ID 也保留部分字符便于关联
+  - 涉及文件：`backend-go/internal/session/trace_affinity.go`
+
 ## [v2.4.28] - 2026-01-07
 
 ### 🐛 修复

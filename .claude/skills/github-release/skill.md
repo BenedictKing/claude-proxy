@@ -4,6 +4,7 @@ description: 发布 GitHub Release，从 CHANGELOG 生成发布公告并更新 D
 version: 1.2.0
 author: https://github.com/BenedictKing/claude-proxy/
 allowed-tools: Bash, Read
+context: fork
 ---
 
 # GitHub Release 发布技能

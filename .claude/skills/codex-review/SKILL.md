@@ -4,6 +4,7 @@ description: 调用 codex 命令行进行代码审核，自动收集当前文件
 version: 1.5.0
 author: https://github.com/BenedictKing/claude-proxy/
 allowed-tools: Bash, Read, Glob, Write, Edit
+context: fork
 ---
 
 # Codex 代码审核技能
