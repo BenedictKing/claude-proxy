@@ -4,6 +4,18 @@
 
 ---
 
+## [v2.4.30] - 2026-01-10
+
+### 🐛 修复
+
+- **修复流式响应工具调用分裂问题** - 当上游返回的工具调用被意外分成两个 content_block 时自动合并
+  - 问题场景：第一个 block 有 name 和 id 但参数为空 "{}"，第二个 block 没有 name 但有完整参数
+  - 新增 `mergeSplitToolCalls()` 方法检测并合并分裂的工具调用
+  - 在 `GetSynthesizedContent()` 中调用，确保日志输出正确的工具调用信息
+  - 涉及文件：`backend-go/internal/utils/stream_synthesizer.go`
+
+---
+
 ## [v2.4.29] - 2026-01-10
 
 ### 🐛 修复

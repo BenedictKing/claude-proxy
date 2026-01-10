@@ -427,6 +427,9 @@ func (s *StreamSynthesizer) GetSynthesizedContent() string {
 
 	// 添加工具调用信息
 	if len(s.toolCallAccumulator) > 0 {
+		// 修复分裂的工具调用：检测并合并元数据和参数分离的情况
+		s.mergeSplitToolCalls()
+
 		var toolCallsBuilder strings.Builder
 		for index, tool := range s.toolCallAccumulator {
 			args := tool.Arguments
@@ -466,6 +469,55 @@ func (s *StreamSynthesizer) GetSynthesizedContent() string {
 	}
 
 	return result
+}
+
+// mergeSplitToolCalls 修复分裂的工具调用
+// 问题场景：上游返回的工具调用被意外分成两个 content_block：
+// - 第一个 block 有 name 和 id，但参数为空 "{}"
+// - 第二个 block 没有 name（显示为 unknown_function），但有完整参数
+// 此方法检测并合并这种情况
+func (s *StreamSynthesizer) mergeSplitToolCalls() {
+	if len(s.toolCallAccumulator) < 2 {
+		return
+	}
+
+	// 收集所有索引并排序
+	indices := make([]int, 0, len(s.toolCallAccumulator))
+	for idx := range s.toolCallAccumulator {
+		indices = append(indices, idx)
+	}
+	sort.Ints(indices)
+
+	// 检测分裂模式：有 name 但参数为空/"{}" 的 block，后面紧跟无 name 但有参数的 block
+	toDelete := make(map[int]bool)
+
+	for i := 0; i < len(indices)-1; i++ {
+		currIdx := indices[i]
+		nextIdx := indices[i+1]
+
+		curr := s.toolCallAccumulator[currIdx]
+		next := s.toolCallAccumulator[nextIdx]
+
+		// 检测分裂条件：
+		// 1. 当前 block 有 name 和 id，但参数为空或只有 "{}"
+		// 2. 下一个 block 没有 name，但有实际参数
+		currArgsEmpty := curr.Arguments == "" || curr.Arguments == "{}"
+		nextHasNoName := next.Name == ""
+		nextHasArgs := next.Arguments != "" && next.Arguments != "{}"
+
+		if curr.Name != "" && currArgsEmpty && nextHasNoName && nextHasArgs {
+			// 合并：将 next 的参数移到 curr
+			curr.Arguments = next.Arguments
+			toDelete[nextIdx] = true
+			// 跳过下一个，因为已经处理了
+			i++
+		}
+	}
+
+	// 删除已合并的 block
+	for idx := range toDelete {
+		delete(s.toolCallAccumulator, idx)
+	}
 }
 
 // IsParseFailed 检查解析是否失败
