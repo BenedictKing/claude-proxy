@@ -4,7 +4,16 @@
 
 ---
 
-## [Unreleased]
+## [v2.4.29] - 2026-01-10
+
+### 🐛 修复
+
+- **修复空 signature 字段导致 Claude API 400 错误** - 客户端可能发送带空 `signature` 字段（空字符串或 null）的请求，Claude API 会拒绝并返回 400 错误
+  - 新增 `RemoveEmptySignatures()` 函数，定向移除 `messages[*].content[*].signature` 路径下的空值
+  - 使用 `json.Decoder` 保留数字精度，`SetEscapeHTML(false)` 保持原始格式
+  - **注意**：当请求体被修改时，JSON 字段顺序可能发生变化（不影响 API 语义）
+  - 在 Messages Handler 入口处调用预处理，确保请求发送前清理无效字段
+  - 涉及文件：`backend-go/internal/handlers/common/request.go`、`backend-go/internal/handlers/messages/handler.go`
 
 ### ✨ 改进
 

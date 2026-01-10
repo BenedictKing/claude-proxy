@@ -18,36 +18,49 @@ import (
 // ClaudeProvider Claude 提供商（直接透传）
 type ClaudeProvider struct{}
 
+// redirectModelInBody 仅修改请求体中的 model 字段，保持其他内容不变
+// 使用 map[string]interface{} 避免结构体字段丢失问题
+func redirectModelInBody(bodyBytes []byte, upstream *config.UpstreamConfig) []byte {
+	decoder := json.NewDecoder(bytes.NewReader(bodyBytes))
+	decoder.UseNumber() // 保留数字精度
+
+	var data map[string]interface{}
+	if err := decoder.Decode(&data); err != nil {
+		return bodyBytes // 解析失败，返回原始数据
+	}
+
+	model, ok := data["model"].(string)
+	if !ok {
+		return bodyBytes // 没有 model 字段或类型不对
+	}
+
+	newModel := config.RedirectModel(model, upstream)
+	if newModel == model {
+		return bodyBytes // 模型未变，无需重编码
+	}
+
+	data["model"] = newModel
+
+	// 使用 Encoder 并禁用 HTML 转义，保持原始格式
+	newBytes, err := utils.MarshalJSONNoEscape(data)
+	if err != nil {
+		return bodyBytes // 编码失败，返回原始数据
+	}
+	return newBytes
+}
+
 // ConvertToProviderRequest 转换为 Claude 请求（实现真正的透传）
 func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *config.UpstreamConfig, apiKey string) (*http.Request, []byte, error) {
-	var bodyBytes []byte
-	var err error
+	// 读取原始请求体
+	bodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return nil, nil, err
+	}
+	c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes)) // 恢复body
 
-	// 仅在需要模型重定向时才解析和重构请求体
+	// 模型重定向：仅修改 model 字段，保持其他内容不变
 	if upstream.ModelMapping != nil && len(upstream.ModelMapping) > 0 {
-		bodyBytes, err = io.ReadAll(c.Request.Body)
-		if err != nil {
-			return nil, nil, err
-		}
-		c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes)) // 恢复body
-
-		var claudeReq types.ClaudeRequest
-		if err := json.Unmarshal(bodyBytes, &claudeReq); err != nil {
-			return nil, bodyBytes, err
-		}
-		claudeReq.Model = config.RedirectModel(claudeReq.Model, upstream)
-
-		bodyBytes, err = json.Marshal(claudeReq)
-		if err != nil {
-			return nil, nil, err
-		}
-	} else {
-		// 如果不需要模型重定向，则直接从原始请求中读取body用于日志和请求转发
-		bodyBytes, err = io.ReadAll(c.Request.Body)
-		if err != nil {
-			return nil, nil, err
-		}
-		c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes)) // 恢复body
+		bodyBytes = redirectModelInBody(bodyBytes, upstream)
 	}
 
 	// 构建目标URL

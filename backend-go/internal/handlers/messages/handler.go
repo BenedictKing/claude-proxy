@@ -37,6 +37,11 @@ func Handler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager, channel
 			return
 		}
 
+		// 预处理：移除空 signature 字段，预防 400 错误
+		// modified 表示请求体是否被修改，详细日志由 RemoveEmptySignatures 内部记录
+		bodyBytes, modified := common.RemoveEmptySignatures(bodyBytes, envCfg.EnableRequestLogs)
+		_ = modified // 保留以便未来扩展（如需在 handler 层面做额外处理）
+
 		// 解析请求
 		var claudeReq types.ClaudeRequest
 		if len(bodyBytes) > 0 {
