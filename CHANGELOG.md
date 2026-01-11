@@ -4,6 +4,20 @@
 
 ---
 
+## [Unreleased]
+
+### 🐛 修复
+
+- **修复流式工具调用输出稳定性和合并逻辑** - 增强 `stream_synthesizer.go` 的工具调用处理
+  - 工具调用输出按 index 排序，避免 map 遍历顺序不稳定导致日志顺序随机
+  - 修复 ID 生成错误：`string(rune(index))` 改为 `strconv.Itoa(index)`，避免非 ASCII 字符
+  - 合并逻辑增强：仅合并连续 index 的工具调用，防止误合并不相关调用
+  - 新增 ID 匹配检查：合并时验证两个 block 的 ID 一致（或其中一个为空）
+  - 支持 ID 补全：合并时若 curr 无 ID 但 next 有，自动补全
+  - 涉及文件：`backend-go/internal/utils/stream_synthesizer.go`
+
+---
+
 ## [v2.4.30] - 2026-01-10
 
 ### 🐛 修复

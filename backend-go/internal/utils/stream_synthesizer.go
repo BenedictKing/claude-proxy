@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -430,8 +431,16 @@ func (s *StreamSynthesizer) GetSynthesizedContent() string {
 		// 修复分裂的工具调用：检测并合并元数据和参数分离的情况
 		s.mergeSplitToolCalls()
 
+		// 按 index 排序输出，避免 map 遍历顺序不稳定
+		indices := make([]int, 0, len(s.toolCallAccumulator))
+		for idx := range s.toolCallAccumulator {
+			indices = append(indices, idx)
+		}
+		sort.Ints(indices)
+
 		var toolCallsBuilder strings.Builder
-		for index, tool := range s.toolCallAccumulator {
+		for _, index := range indices {
+			tool := s.toolCallAccumulator[index]
 			args := tool.Arguments
 			if args == "" {
 				args = "{}"
@@ -444,7 +453,7 @@ func (s *StreamSynthesizer) GetSynthesizedContent() string {
 
 			id := tool.ID
 			if id == "" {
-				id = "tool_" + string(rune(index))
+				id = "tool_" + strconv.Itoa(index)
 			}
 
 			toolCallsBuilder.WriteString("\nTool Call: ")
@@ -495,19 +504,29 @@ func (s *StreamSynthesizer) mergeSplitToolCalls() {
 		currIdx := indices[i]
 		nextIdx := indices[i+1]
 
+		// 约束：只合并连续的 index（防止误合并不相关的调用）
+		if nextIdx != currIdx+1 {
+			continue
+		}
+
 		curr := s.toolCallAccumulator[currIdx]
 		next := s.toolCallAccumulator[nextIdx]
 
 		// 检测分裂条件：
 		// 1. 当前 block 有 name 和 id，但参数为空或只有 "{}"
 		// 2. 下一个 block 没有 name，但有实际参数
+		// 3. 如果 next 有 ID，必须与 curr 相同（或 curr 无 ID）
 		currArgsEmpty := curr.Arguments == "" || curr.Arguments == "{}"
 		nextHasNoName := next.Name == ""
 		nextHasArgs := next.Arguments != "" && next.Arguments != "{}"
+		idMatch := next.ID == "" || curr.ID == "" || next.ID == curr.ID
 
-		if curr.Name != "" && currArgsEmpty && nextHasNoName && nextHasArgs {
-			// 合并：将 next 的参数移到 curr
+		if curr.Name != "" && currArgsEmpty && nextHasNoName && nextHasArgs && idMatch {
+			// 合并：将 next 的参数移到 curr，补全缺失字段
 			curr.Arguments = next.Arguments
+			if curr.ID == "" && next.ID != "" {
+				curr.ID = next.ID
+			}
 			toDelete[nextIdx] = true
 			// 跳过下一个，因为已经处理了
 			i++
