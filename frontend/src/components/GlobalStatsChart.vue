@@ -97,6 +97,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useTheme } from 'vuetify'
 import VueApexCharts from 'vue3-apexcharts'
+import type { ApexOptions } from 'apexcharts'
 import { api, type GlobalStatsHistoryResponse, type GlobalHistoryDataPoint, type GlobalStatsSummary } from '../services/api'
 
 // Register apexchart component
@@ -204,7 +205,7 @@ const formatNumber = (num: number): string => {
 }
 
 // Chart options
-const chartOptions = computed(() => {
+const chartOptions = computed<ApexOptions>(() => {
   const mode = selectedView.value
 
   return {
@@ -227,7 +228,7 @@ const chartOptions = computed(() => {
       ? [chartColors.traffic.primary, chartColors.traffic.success]
       : [chartColors.tokens.input, chartColors.tokens.output],
     fill: {
-      type: 'gradient',
+      type: 'gradient' as const,
       gradient: {
         shadeIntensity: 1,
         opacityFrom: 0.4,
@@ -239,7 +240,7 @@ const chartOptions = computed(() => {
       enabled: false
     },
     stroke: {
-      curve: 'smooth',
+      curve: 'smooth' as const,
       width: 2,
       dashArray: mode === 'tokens' ? [0, 5] : [0, 0]
     },
@@ -294,10 +295,10 @@ const chartOptions = computed(() => {
     },
     legend: {
       show: true,
-      position: 'top',
-      horizontalAlign: 'right',
+      position: 'top' as const,
+      horizontalAlign: 'right' as const,
       fontSize: '11px',
-      markers: { width: 8, height: 8 }
+      markers: { size: 4 }
     }
   }
 })
@@ -371,7 +372,7 @@ const refreshData = async (isAutoRefresh = false) => {
     if (canUpdateInPlace) {
       historyData.value = newData
       const series = chartSeries.value
-      chartRef.value.updateSeries(series, false)
+      chartRef.value?.updateSeries(series, false)
     } else {
       historyData.value = newData
     }

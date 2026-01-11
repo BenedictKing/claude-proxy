@@ -79,7 +79,7 @@ export interface Channel {
   insecureSkipVerify?: boolean
   modelMapping?: Record<string, string>
   latency?: number
-  status?: ChannelStatus | 'healthy' | 'error' | 'unknown'
+  status?: ChannelStatus | 'healthy' | 'error' | 'unknown' | ''
   index: number
   pinned?: boolean
   // 多渠道调度相关字段
