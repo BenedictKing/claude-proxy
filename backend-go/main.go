@@ -273,8 +273,10 @@ func main() {
 
 	// 创建 HTTP 服务器
 	srv := &http.Server{
-		Addr:    addr,
-		Handler: r,
+		Addr:              addr,
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	// 用于传递关闭结果
