@@ -24,6 +24,9 @@ func setupRouterWithAuth(envCfg *config.EnvConfig) *gin.Engine {
 	r.POST("/admin/config/save", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
+	r.GET("/admin/dev/info", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
 
 	// SPA routes should pass through without access key
 	r.GET("/", func(c *gin.Context) {
@@ -125,4 +128,60 @@ func TestWebAuthMiddleware_AdminRequiresKey(t *testing.T) {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 		}
 	})
+}
+
+func TestWebAuthMiddleware_DevInfoRequiresKeyInDevelopment(t *testing.T) {
+	envCfg := &config.EnvConfig{
+		Env:            "development",
+		ProxyAccessKey: "secret-key",
+		EnableWebUI:    true,
+	}
+	router := setupRouterWithAuth(envCfg)
+
+	t.Run("missing key returns 401", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/admin/dev/info", nil)
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+		}
+	})
+
+	t.Run("correct key allows access", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/admin/dev/info", nil)
+		req.Header.Set("x-api-key", envCfg.ProxyAccessKey)
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+	})
+}
+
+func TestWebAuthMiddleware_AllowsV1BetaRoutesWhenWebUIDisabled(t *testing.T) {
+	envCfg := &config.EnvConfig{
+		ProxyAccessKey: "secret-key",
+		EnableWebUI:    false,
+	}
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(WebAuthMiddleware(envCfg, nil))
+
+	r.POST("/v1beta/models/*modelAction", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.0-flash:generateContent", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
 }

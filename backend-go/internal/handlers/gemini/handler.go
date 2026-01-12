@@ -29,14 +29,10 @@ func Handler(
 	channelScheduler *scheduler.ChannelScheduler,
 ) gin.HandlerFunc {
 	return gin.HandlerFunc(func(c *gin.Context) {
-		// 支持两种认证方式：x-goog-api-key（Gemini 原生）和 x-api-key（通用）
-		apiKey := extractGeminiAPIKey(c)
-		if apiKey == "" {
-			// 使用标准认证中间件
-			middleware.ProxyAuthMiddleware(envCfg)(c)
-			if c.IsAborted() {
-				return
-			}
+		// Gemini 代理端点统一使用代理访问密钥鉴权（x-api-key / Authorization: Bearer）
+		middleware.ProxyAuthMiddleware(envCfg)(c)
+		if c.IsAborted() {
+			return
 		}
 
 		startTime := time.Now()
@@ -99,19 +95,6 @@ func Handler(
 			handleSingleChannel(c, envCfg, cfgManager, channelScheduler, bodyBytes, &geminiReq, model, isStream, startTime)
 		}
 	})
-}
-
-// extractGeminiAPIKey 从请求中提取 Gemini 风格的 API Key
-func extractGeminiAPIKey(c *gin.Context) string {
-	// 1. x-goog-api-key header（Gemini 原生）
-	if key := c.GetHeader("x-goog-api-key"); key != "" {
-		return key
-	}
-	// 2. ?key= query parameter
-	if key := c.Query("key"); key != "" {
-		return key
-	}
-	return ""
 }
 
 // extractModelName 从 URL 参数提取模型名称

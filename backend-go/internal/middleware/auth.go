@@ -15,8 +15,7 @@ func WebAuthMiddleware(envCfg *config.EnvConfig, cfgManager *config.ConfigManage
 		path := c.Request.URL.Path
 
 		// 公开端点直接放行（健康检查固定为 /health）
-		if path == "/health" ||
-			(envCfg.IsDevelopment() && path == "/admin/dev/info") {
+		if path == "/health" {
 			c.Next()
 			return
 		}
@@ -28,7 +27,7 @@ func WebAuthMiddleware(envCfg *config.EnvConfig, cfgManager *config.ConfigManage
 		}
 
 		// API 代理端点后续处理
-		if strings.HasPrefix(path, "/v1/") {
+		if strings.HasPrefix(path, "/v1/") || strings.HasPrefix(path, "/v1beta/") {
 			c.Next()
 			return
 		}
