@@ -83,7 +83,7 @@ func (p *OpenAIProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	}
 	url := baseURL + endpoint
 
-	req, err := http.NewRequest("POST", url, bytes.NewReader(reqBodyBytes))
+	req, err := http.NewRequestWithContext(c.Request.Context(), "POST", url, bytes.NewReader(reqBodyBytes))
 	if err != nil {
 		return nil, originalBodyBytes, fmt.Errorf("创建OpenAI请求失败: %w", err)
 	}

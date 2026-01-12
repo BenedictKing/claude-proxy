@@ -95,10 +95,10 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	// 创建请求
 	var req *http.Request
 	if len(bodyBytes) > 0 {
-		req, err = http.NewRequest(c.Request.Method, targetURL, bytes.NewReader(bodyBytes))
+		req, err = http.NewRequestWithContext(c.Request.Context(), c.Request.Method, targetURL, bytes.NewReader(bodyBytes))
 	} else {
 		// 如果 bodyBytes 为空（例如 GET 请求或原始请求体为空），则直接使用 nil Body
-		req, err = http.NewRequest(c.Request.Method, targetURL, nil)
+		req, err = http.NewRequestWithContext(c.Request.Context(), c.Request.Method, targetURL, nil)
 	}
 	if err != nil {
 		return nil, nil, err

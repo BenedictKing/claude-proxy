@@ -50,7 +50,7 @@ func (p *GeminiProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 
 	url := fmt.Sprintf("%s/models/%s:%s", strings.TrimSuffix(upstream.GetEffectiveBaseURL(), "/"), model, action)
 
-	req, err := http.NewRequest("POST", url, bytes.NewReader(reqBodyBytes))
+	req, err := http.NewRequestWithContext(c.Request.Context(), "POST", url, bytes.NewReader(reqBodyBytes))
 	if err != nil {
 		return nil, originalBodyBytes, fmt.Errorf("创建Gemini请求失败: %w", err)
 	}

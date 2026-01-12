@@ -86,7 +86,7 @@ func (p *ResponsesProvider) ConvertToProviderRequest(
 
 	// 7. 构建 HTTP 请求
 	targetURL := p.buildTargetURL(upstream)
-	req, err := http.NewRequest("POST", targetURL, bytes.NewReader(reqBody))
+	req, err := http.NewRequestWithContext(c.Request.Context(), "POST", targetURL, bytes.NewReader(reqBody))
 	if err != nil {
 		return nil, bodyBytes, err
 	}
