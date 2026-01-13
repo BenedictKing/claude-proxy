@@ -141,12 +141,12 @@ export const isValidUrl = (token: string): boolean => {
 
 /**
  * 从输入中提取所有 token
- * 按空白/逗号/分号/换行/引号（中英文）/等号/%20 分割
+ * 按空白/逗号/分号/中文冒号/换行/引号（中英文）/等号/%20 分割
  */
 const extractTokens = (input: string): string[] => {
   return input
     .replace(/%20/g, ' ')
-    .split(/[\n\s,;="\u201c\u201d'\u2018\u2019]+/)
+    .split(/[\n\s,;，；：="\u201c\u201d'\u2018\u2019]+/)
     .filter(t => t.length > 0)
 }
 
