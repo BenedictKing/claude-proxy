@@ -839,7 +839,9 @@ const handleQuickSubmit = () => {
 const serviceTypeOptions = computed(() => {
   if (props.channelType === 'gemini') {
     return [
-      { title: 'Gemini', value: 'gemini' }
+      { title: 'Gemini', value: 'gemini' },
+      { title: 'OpenAI', value: 'openai' },
+      { title: 'Claude', value: 'claude' }
     ]
   }
   if (props.channelType === 'responses') {
@@ -862,10 +864,17 @@ const allSourceModelOptions = computed(() => {
   if (props.channelType === 'gemini') {
     // Gemini API 常用模型别名
     return [
-      { title: 'gemini-2.0-flash', value: 'gemini-2.0-flash' },
-      { title: 'gemini-2.0-flash-lite', value: 'gemini-2.0-flash-lite' },
+      { title: 'gemini-2', value: 'gemini-2' },
+      { title: 'gemini-2.5-flash', value: 'gemini-2.5-flash' },
+      { title: 'gemini-2.5-flash-lite', value: 'gemini-2.5-flash-lite' },
+      { title: 'gemini-2.5-flash-image', value: 'gemini-2.5-flash-image' },
+      { title: 'gemini-2.5-flash-preview-tts', value: 'gemini-2.5-flash-preview-tts' },
+      { title: 'gemini-2.5-flash-native-audio-preview-12-2025', value: 'gemini-2.5-flash-native-audio-preview-12-2025' },
       { title: 'gemini-2.5-pro', value: 'gemini-2.5-pro' },
-      { title: 'gemini-2.5-flash', value: 'gemini-2.5-flash' }
+      { title: 'gemini-2.5-pro-preview-tts', value: 'gemini-2.5-pro-preview-tts' },
+      { title: 'gemini-3-pro-preview', value: 'gemini-3-pro-preview' },
+      { title: 'gemini-3-flash-preview', value: 'gemini-3-flash-preview' },
+      { title: 'gemini-3-pro-image-preview', value: 'gemini-3-pro-image-preview' }
     ]
   }
   if (props.channelType === 'responses') {

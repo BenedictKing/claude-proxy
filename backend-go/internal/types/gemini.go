@@ -43,8 +43,9 @@ type GeminiFileData struct {
 
 // GeminiFunctionCall 函数调用
 type GeminiFunctionCall struct {
-	Name string                 `json:"name"`
-	Args map[string]interface{} `json:"args"`
+	Name             string                 `json:"name"`
+	Args             map[string]interface{} `json:"args"`
+	ThoughtSignature string                 `json:"thought_signature,omitempty"` // thinking 模式下的签名，需原样传回
 }
 
 // GeminiFunctionResponse 函数响应
