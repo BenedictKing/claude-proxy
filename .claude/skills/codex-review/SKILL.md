@@ -1,7 +1,7 @@
 ---
 name: codex-review
 description: 调用 codex 命令行进行代码审核，自动收集当前文件修改和任务状态一并发送；工作区干净时自动审核最新提交 (user)
-version: 1.5.0
+version: 1.6.0
 author: https://github.com/BenedictKing/claude-proxy/
 allowed-tools: Bash, Read, Glob, Write, Edit
 context: fork
@@ -14,7 +14,7 @@ context: fork
 当用户输入包含以下关键词时触发：
 
 - "代码审核"、"代码审查"、"审查代码"、"审核代码"
-- "review"、"code review"、"review code"
+- "review"、"code review"、"review code"、"codex 审核"
 - "帮我审核"、"检查代码"、"审一下"、"看看代码"
 
 ## 核心理念：意图 vs 实现
@@ -144,13 +144,50 @@ npm run lint:fix
 black . && ruff check --fix .
 ```
 
-### 3. 调用 codex review
+### 3. 调用 codex review（根据难度自适应配置）
+
+**首先评估任务难度：**
 
 ```bash
-# 审核所有未提交的更改（推荐）
-codex review --uncommitted
+# 统计变更文件数量和代码行数
+git diff --stat | tail -1
+```
 
-# 超时时间设置为 15 分钟 (900000ms)
+**难度评估标准：**
+
+| 难度级别 | 判断条件                                                                                               | 配置参数                       | 超时时间            |
+| -------- | ------------------------------------------------------------------------------------------------------ | ------------------------------ | ------------------- |
+| **困难** | 满足任一条件：<br>• 修改文件 ≥ 10 个<br>• 代码变更 ≥ 500 行<br>• 涉及核心架构/算法修改<br>• 跨模块重构 | `model_reasoning_effort=xhigh` | 30 分钟 (1800000ms) |
+| **一般** | 其他情况                                                                                               | `model_reasoning_effort=high`  | 10 分钟 (600000ms)  |
+
+**执行命令：**
+
+```bash
+# 困难任务（深度推理）
+codex review --uncommitted --config model_reasoning_effort=xhigh
+# 超时时间：30 分钟
+
+# 一般任务（标准推理）
+codex review --uncommitted --config model_reasoning_effort=high
+# 超时时间：10 分钟
+```
+
+**自动判断逻辑示例：**
+
+```bash
+# 1. 获取变更统计
+STATS=$(git diff --stat | tail -1)
+FILES_CHANGED=$(echo "$STATS" | grep -oE '[0-9]+ files? changed' | grep -oE '[0-9]+')
+LINES_CHANGED=$(echo "$STATS" | grep -oE '[0-9]+ insertions?|[0-9]+ deletions?' | grep -oE '[0-9]+' | awk '{s+=$1} END {print s}')
+
+# 2. 判断难度
+if [ "$FILES_CHANGED" -ge 10 ] || [ "$LINES_CHANGED" -ge 500 ]; then
+    echo "检测到困难任务：$FILES_CHANGED 个文件，约 $LINES_CHANGED 行变更"
+    codex review --uncommitted --config model_reasoning_effort=xhigh
+else
+    echo "检测到一般任务：$FILES_CHANGED 个文件，约 $LINES_CHANGED 行变更"
+    codex review --uncommitted --config model_reasoning_effort=high
+fi
 ```
 
 ### 4. 自我修正
@@ -170,7 +207,9 @@ codex review --uncommitted
 ## 注意事项
 
 - 确保在 git 仓库目录下执行
-- 超时时间设置为 15 分钟 (`timeout: 900000`)
+- **超时时间根据任务难度自动调整：**
+  - 困难任务：30 分钟 (`timeout: 1800000`)
+  - 一般任务：10 分钟 (`timeout: 600000`)
 - codex 命令需要已正确配置并登录
 - 大量修改时 codex 会自动分批处理
 - **CHANGELOG.md 必须在未提交变更中，否则 Codex 无法看到意图描述**
