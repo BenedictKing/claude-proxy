@@ -1,4 +1,5 @@
 // API服务模块
+import { useAuthStore } from '@/stores/auth'
 
 // 从环境变量读取配置
 const getApiBase = () => {
@@ -218,34 +219,10 @@ export interface ChannelRecentActivity {
 }
 
 class ApiService {
-  private apiKey: string | null = null
-
-  // 设置API密钥
-  setApiKey(key: string | null) {
-    this.apiKey = key
-  }
-
-  // 获取当前API密钥
-  getApiKey(): string | null {
-    return this.apiKey
-  }
-
-  // 初始化密钥（从localStorage）
-  initializeAuth() {
-    // 从localStorage获取保存的密钥
-    const savedKey = localStorage.getItem('proxyAccessKey')
-    if (savedKey) {
-      this.setApiKey(savedKey)
-      return savedKey
-    }
-
-    return null
-  }
-
-  // 清除认证信息
-  clearAuth() {
-    this.apiKey = null
-    localStorage.removeItem('proxyAccessKey')
+  // 获取当前 API Key（从 AuthStore）
+  private getApiKey(): string | null {
+    const authStore = useAuthStore()
+    return authStore.apiKey
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -255,9 +232,10 @@ class ApiService {
       ...(options.headers as Record<string, string>)
     }
 
-    // 添加API密钥到请求头
-    if (this.apiKey) {
-      headers['x-api-key'] = this.apiKey
+    // 从 AuthStore 获取 API 密钥并添加到请求头
+    const apiKey = this.getApiKey()
+    if (apiKey) {
+      headers['x-api-key'] = apiKey
     }
 
     const response = await fetch(`${API_BASE}${url}`, {
@@ -268,9 +246,10 @@ class ApiService {
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Unknown error' }))
 
-      // 如果是401错误，清除本地认证信息并提示用户重新登录
+      // 如果是401错误，清除认证信息并提示用户重新登录
       if (response.status === 401) {
-        this.clearAuth()
+        const authStore = useAuthStore()
+        authStore.clearAuth()
         // 记录认证失败(前端日志)
         console.warn('🔒 认证失败 - 时间:', new Date().toISOString())
         throw new Error('认证失败，请重新输入访问密钥')

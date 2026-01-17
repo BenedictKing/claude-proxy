@@ -4,6 +4,22 @@
 
 ---
 
+## [Unreleased]
+
+### 重构
+
+- **前端状态管理架构升级** - 引入 Pinia 状态管理库，替代原有的本地状态管理
+  - 新增 `pinia` 和 `pinia-plugin-persistedstate` 依赖，实现响应式状态管理和自动持久化
+  - 新增 `src/stores/auth.ts` 认证状态 Store，统一管理 API Key 和认证状态
+  - 重构 `src/services/api.ts`，从 AuthStore 获取 API Key，移除本地状态管理逻辑
+  - 重构 `src/App.vue`，使用 AuthStore 替代 `isAuthenticated` 本地状态，简化认证流程
+  - 更新 `src/main.ts`，初始化 Pinia 和持久化插件
+  - 配置 `tsconfig.json` 路径别名 `@/*`，支持模块化导入
+  - 优势：响应式状态管理、自动持久化、更好的类型推断、代码解耦
+  - 涉及文件：`frontend/package.json`、`frontend/src/stores/auth.ts`、`frontend/src/services/api.ts`、`frontend/src/App.vue`、`frontend/src/main.ts`、`frontend/tsconfig.json`
+
+---
+
 ## [v2.4.34] - 2026-01-17
 
 ### 新增

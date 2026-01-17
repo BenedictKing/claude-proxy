@@ -367,6 +367,7 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useTheme } from 'vuetify'
 import { api, fetchHealth, type Channel, type ChannelsResponse, type ChannelMetrics, type ChannelDashboardResponse } from './services/api'
 import { versionService, type VersionInfo } from './services/version'
+import { useAuthStore } from './stores/auth'
 import AddChannelModal from './components/AddChannelModal.vue'
 import ChannelOrchestration from './components/ChannelOrchestration.vue'
 import GlobalStatsChart from './components/GlobalStatsChart.vue'
@@ -377,6 +378,9 @@ const theme = useTheme()
 
 // 应用主题系统
 const { init: initTheme } = useAppTheme()
+
+// 认证 Store
+const authStore = useAuthStore()
 
 // 渠道编排组件引用
 const channelOrchestrationRef = ref<InstanceType<typeof ChannelOrchestration> | null>(null)
@@ -855,8 +859,8 @@ const setDarkMode = (themeName: 'light' | 'dark' | 'auto') => {
   localStorage.setItem('theme', themeName)
 }
 
-// 认证状态管理
-const isAuthenticated = ref(false)
+// 认证状态管理（使用 AuthStore）
+const isAuthenticated = computed(() => authStore.isAuthenticated)
 const authError = ref('')
 const authKeyInput = ref('')
 const authLoading = ref(false)
@@ -877,16 +881,10 @@ const showAuthDialog = computed({
   set: () => {} // 防止外部修改，认证状态只能通过内部逻辑控制
 })
 
-// 初始化认证 - 只负责从存储获取密钥
-const initializeAuth = () => {
-  const key = api.initializeAuth()
-  return key
-}
-
 // 自动验证保存的密钥
 const autoAuthenticate = async () => {
-  const savedKey = initializeAuth()
-  if (!savedKey) {
+  // 检查 AuthStore 中是否有保存的密钥
+  if (!authStore.apiKey) {
     // 没有保存的密钥，显示登录对话框
     authError.value = '请输入访问密钥以继续'
     isAutoAuthenticating.value = false
@@ -899,22 +897,18 @@ const autoAuthenticate = async () => {
     // 尝试调用API验证密钥是否有效
     await api.getChannels()
 
-    // 密钥有效，设置认证状态
-    isAuthenticated.value = true
+    // 密钥有效，认证成功
     authError.value = ''
-
     return true
   } catch (error: any) {
     // 密钥无效或过期
     console.warn('自动认证失败:', error.message)
 
     // 清除无效的密钥
-    api.clearAuth()
+    authStore.clearAuth()
 
     // 显示登录对话框，提示用户重新输入
-    isAuthenticated.value = false
     authError.value = '保存的访问密钥已失效，请重新输入'
-
     return false
   } finally {
     isAutoAuthenticating.value = false
@@ -924,9 +918,7 @@ const autoAuthenticate = async () => {
 
 // 手动设置密钥（用于重新认证）
 const setAuthKey = (key: string) => {
-  api.setApiKey(key)
-  localStorage.setItem('proxyAccessKey', key)
-  isAuthenticated.value = true
+  authStore.setApiKey(key)
   authError.value = ''
   // 重新加载数据
   refreshChannels()
@@ -984,8 +976,7 @@ const handleAuthSubmit = async () => {
       authError.value = `访问密钥验证失败 (剩余尝试次数: ${MAX_AUTH_ATTEMPTS - authAttempts.value})`
     }
 
-    isAuthenticated.value = false
-    api.clearAuth()
+    authStore.clearAuth()
   } finally {
     authLoading.value = false
   }
@@ -993,8 +984,7 @@ const handleAuthSubmit = async () => {
 
 // 处理注销
 const handleLogout = () => {
-  api.clearAuth()
-  isAuthenticated.value = false
+  authStore.clearAuth()
   authError.value = '请输入访问密钥以继续'
   channelsData.value = { channels: [], current: 0, loadBalance: 'failover' }
   showToast('已安全注销', 'info')
@@ -1003,7 +993,6 @@ const handleLogout = () => {
 // 处理认证失败
 const handleAuthError = (error: any) => {
   if (error.message && error.message.includes('认证失败')) {
-    isAuthenticated.value = false
     authError.value = '访问密钥无效或已过期，请重新输入'
   } else {
     showToast(`操作失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error')
@@ -1068,10 +1057,8 @@ onMounted(async () => {
   // 版本检查（独立于认证，静默执行）
   checkVersion()
 
-  // 检查是否有保存的密钥
-  const savedKey = localStorage.getItem('proxyAccessKey')
-
-  if (savedKey) {
+  // 检查 AuthStore 中是否有保存的密钥
+  if (authStore.apiKey) {
     // 有保存的密钥，开始自动认证
     isAutoAuthenticating.value = true
     isInitialized.value = false
