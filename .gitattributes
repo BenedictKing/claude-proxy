@@ -1,0 +1,31 @@
+# Bun lockfile - 配置 Git 以显示可读的差异
+# bun.lockb (二进制格式) - 需要 textconv 转换
+*.lockb binary diff=lockb
+# bun.lock (文本格式) - 直接作为文本处理
+bun.lock text diff
+
+# 确保跨平台行尾符一致性
+* text=auto eol=lf
+
+# 明确标记文本文件
+*.go text diff=golang
+*.js text
+*.ts text
+*.vue text
+*.json text
+*.md text
+*.yaml text
+*.yml text
+*.toml text
+*.sh text eol=lf
+
+# 明确标记二进制文件
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
