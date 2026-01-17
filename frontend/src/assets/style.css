@@ -1,8 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* 复古像素主题 - 全局基础样式 */
+/* 全局基础样式 */
 html {
   font-family: 'Courier New', Consolas, 'Liberation Mono', monospace;
 }
