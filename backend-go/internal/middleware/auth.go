@@ -132,6 +132,11 @@ func getAPIKey(c *gin.Context) string {
 		return strings.TrimPrefix(auth, "Bearer ")
 	}
 
+	// 支持 Gemini SDK 的 x-goog-api-key 头部
+	if key := c.GetHeader("x-goog-api-key"); key != "" {
+		return key
+	}
+
 	return ""
 }
 

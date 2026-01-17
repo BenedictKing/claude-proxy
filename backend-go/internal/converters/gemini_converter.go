@@ -8,6 +8,10 @@ import (
 	"github.com/BenedictKing/claude-proxy/internal/types"
 )
 
+// dummyThoughtSignature 用于跳过 Gemini 3 thought_signature 验证
+// 参考: https://ai.google.dev/gemini-api/docs/thought-signatures
+const dummyThoughtSignature = "skip_thought_signature_validator"
+
 // ============== Gemini -> Claude/OpenAI 转换器 ==============
 
 // GeminiToClaudeRequest 将 Gemini 请求转换为 Claude Messages API 格式
@@ -191,11 +195,23 @@ func ClaudeResponseToGemini(claudeResp map[string]interface{}) (*types.GeminiRes
 		case "tool_use":
 			name, _ := contentBlock["name"].(string)
 			args, _ := contentBlock["input"].(map[string]interface{})
+
+			functionCall := &types.GeminiFunctionCall{
+				Name: name,
+				Args: args,
+			}
+
+			// 处理 thought_signature:
+			// 1. 如果 Claude 响应中包含 signature，保留原值
+			// 2. 否则使用 dummy signature 跳过 Gemini 验证
+			if signature, ok := contentBlock["signature"].(string); ok && signature != "" {
+				functionCall.ThoughtSignature = signature
+			} else {
+				functionCall.ThoughtSignature = dummyThoughtSignature
+			}
+
 			parts = append(parts, types.GeminiPart{
-				FunctionCall: &types.GeminiFunctionCall{
-					Name: name,
-					Args: args,
-				},
+				FunctionCall: functionCall,
 			})
 		}
 	}
@@ -279,10 +295,13 @@ func OpenAIResponseToGemini(openaiResp map[string]interface{}) (*types.GeminiRes
 				if argsStr != "" {
 					_ = JSONUnmarshal([]byte(argsStr), &args)
 				}
+
+				// OpenAI 响应不包含 signature，统一使用 dummy signature
 				parts = append(parts, types.GeminiPart{
 					FunctionCall: &types.GeminiFunctionCall{
-						Name: name,
-						Args: args,
+						Name:             name,
+						Args:             args,
+						ThoughtSignature: dummyThoughtSignature,
 					},
 				})
 			}
