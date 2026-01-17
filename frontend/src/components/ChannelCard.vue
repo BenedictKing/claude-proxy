@@ -107,7 +107,6 @@
             <code class="text-caption bg-surface pa-1 rounded">{{ channel.baseUrl }}</code>
           </div>
         </div>
-
         
       </div>
 
@@ -243,8 +242,8 @@
           variant="outlined"
           rounded="lg"
           class="action-btn"
-          @click="$emit('ping', channel.index)"
           prepend-icon="mdi-speedometer"
+          @click="$emit('ping', channel.index)"
         >
           测试延迟
         </v-btn>
@@ -255,8 +254,8 @@
           variant="outlined"
           rounded="lg"
           class="action-btn"
-          @click="$emit('edit', channel)"
           prepend-icon="mdi-pencil"
+          @click="$emit('edit', channel)"
         >
           编辑
         </v-btn>
@@ -267,8 +266,8 @@
           variant="text"
           rounded="lg"
           class="action-btn danger-action"
-          @click="$emit('delete', channel.index)"
           prepend-icon="mdi-delete"
+          @click="$emit('delete', channel.index)"
         >
           删除
         </v-btn>

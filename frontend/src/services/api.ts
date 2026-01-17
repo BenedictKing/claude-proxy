@@ -688,31 +688,9 @@ class ApiService {
     }))
   }
 
-  // Gemini Dashboard（降级实现：组合 channels + metrics 调用）
+  // Gemini Dashboard（使用后端统一接口）
   async getGeminiChannelDashboard(): Promise<ChannelDashboardResponse> {
-    const [channelsResp, metrics] = await Promise.all([
-      this.getGeminiChannels(),
-      this.getGeminiChannelMetrics()
-    ])
-
-    const activeCount = channelsResp.channels.filter(
-      ch => ch.status === 'active' || !ch.status
-    ).length
-
-    return {
-      channels: channelsResp.channels,
-      loadBalance: channelsResp.loadBalance,
-      metrics: metrics,
-      stats: {
-        multiChannelMode: activeCount > 1,
-        activeChannelCount: channelsResp.channels.filter(ch => ch.status !== 'disabled').length,
-        traceAffinityCount: 0,
-        traceAffinityTTL: '0s',
-        failureThreshold: 3,
-        windowSize: 100,
-        circuitRecoveryTime: '30s'
-      }
-    }
+    return this.request('/gemini/channels/dashboard')
   }
 }
 

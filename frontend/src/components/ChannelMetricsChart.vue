@@ -16,11 +16,11 @@
           <v-btn value="6h" size="x-small">6小时</v-btn>
           <v-btn value="24h" size="x-small">24小时</v-btn>
         </v-btn-toggle>
-        <v-btn icon size="x-small" variant="text" @click="refreshData" :loading="isLoading" :disabled="isLoading">
+        <v-btn icon size="x-small" variant="text" :loading="isLoading" :disabled="isLoading" @click="refreshData">
           <v-icon size="small">mdi-refresh</v-icon>
         </v-btn>
       </div>
-      <v-btn icon size="x-small" variant="text" @click="$emit('close')" title="收起">
+      <v-btn icon size="x-small" variant="text" title="收起" @click="$emit('close')">
         <v-icon size="small">mdi-chevron-up</v-icon>
       </v-btn>
     </div>

@@ -37,8 +37,8 @@
         item-key="index"
         handle=".drag-handle"
         ghost-class="ghost"
-        @change="onDragChange"
         class="channel-list"
+        @change="onDragChange"
       >
         <template #item="{ element, index }">
           <div class="channel-item-wrapper">
@@ -250,8 +250,8 @@
                 size="x-small"
                 variant="text"
                 color="warning"
-                @click="resumeChannel(element.index)"
                 title="恢复"
+                @click="resumeChannel(element.index)"
               >
                 <v-icon size="small">mdi-refresh</v-icon>
               </v-btn>
@@ -303,7 +303,7 @@
                     </template>
                     <v-list-item-title>移至备用池</v-list-item-title>
                   </v-list-item>
-                  <v-list-item @click="handleDeleteChannel(element)" :disabled="!canDeleteChannel(element)">
+                  <v-list-item :disabled="!canDeleteChannel(element)" @click="handleDeleteChannel(element)">
                     <template #prepend>
                       <v-icon size="small" :color="canDeleteChannel(element) ? 'error' : 'grey'">mdi-delete</v-icon>
                     </template>

@@ -1,5 +1,5 @@
 <template>
-  <v-dialog :model-value="show" @update:model-value="$emit('update:show', $event)" max-width="800" persistent>
+  <v-dialog :model-value="show" max-width="800" persistent @update:model-value="$emit('update:show', $event)">
     <v-card rounded="lg">
       <v-card-title class="d-flex align-center ga-3 pa-6" :class="headerClasses">
         <v-avatar :color="avatarColor" variant="flat" size="40">
@@ -14,7 +14,7 @@
           </div>
         </div>
         <!-- 模式切换按钮（仅在添加模式显示） -->
-        <v-btn v-if="!isEditing" variant="outlined" size="small" @click="toggleMode" class="mode-toggle-btn">
+        <v-btn v-if="!isEditing" variant="outlined" size="small" class="mode-toggle-btn" @click="toggleMode">
           <v-icon start size="16">{{ isQuickMode ? 'mdi-form-textbox' : 'mdi-lightning-bolt' }}</v-icon>
           {{ isQuickMode ? '详细配置' : '快速添加' }}
         </v-btn>
@@ -181,7 +181,7 @@
             </v-col>
 
             <!-- 模型重定向配置 -->
-            <v-col cols="12" v-if="form.serviceType">
+            <v-col v-if="form.serviceType" cols="12">
               <v-card variant="outlined" rounded="lg">
                 <v-card-title class="d-flex align-center justify-space-between pa-4 pb-2">
                   <div class="d-flex align-center ga-2">
@@ -207,7 +207,7 @@
                         variant="tonal"
                         color="surface-variant"
                       >
-                        <template v-slot:prepend>
+                        <template #prepend>
                           <v-icon size="small" color="primary">mdi-arrow-right</v-icon>
                         </template>
 
@@ -219,7 +219,7 @@
                           </div>
                         </v-list-item-title>
 
-                        <template v-slot:append>
+                        <template #append>
                           <v-btn size="small" color="error" icon variant="text" @click="removeModelMapping(source)">
                             <v-icon size="small" color="error">mdi-close</v-icon>
                           </v-btn>
@@ -254,8 +254,8 @@
                     <v-btn
                       color="secondary"
                       variant="elevated"
-                      @click="addModelMapping"
                       :disabled="!newMapping.source.trim() || !newMapping.target.trim()"
+                      @click="addModelMapping"
                     >
                       添加
                     </v-btn>
@@ -291,7 +291,7 @@
                         :color="duplicateKeyIndex === index ? 'error' : 'surface-variant'"
                         :class="{ 'animate-pulse': duplicateKeyIndex === index }"
                       >
-                        <template v-slot:prepend>
+                        <template #prepend>
                           <v-icon size="small" :color="duplicateKeyIndex === index ? 'error' : 'primary'">
                             {{ duplicateKeyIndex === index ? 'mdi-alert' : 'mdi-key' }}
                           </v-icon>
@@ -306,7 +306,7 @@
                           </div>
                         </v-list-item-title>
 
-                        <template v-slot:append>
+                        <template #append>
                           <div class="d-flex align-center ga-1">
                             <!-- 置顶/置底：仅首尾密钥显示 -->
                             <v-tooltip
@@ -402,20 +402,20 @@
                       variant="outlined"
                       density="comfortable"
                       type="password"
-                      @keyup.enter="addApiKey"
                       :error="!!apiKeyError"
                       :error-messages="apiKeyError"
-                      @input="handleApiKeyInput"
                       class="flex-grow-1"
+                      @keyup.enter="addApiKey"
+                      @input="handleApiKeyInput"
                     />
                     <v-btn
                       color="primary"
                       variant="elevated"
                       size="large"
                       height="40"
-                      @click="addApiKey"
                       :disabled="!newApiKey.trim()"
                       class="mt-1"
+                      @click="addApiKey"
                     >
                       添加
                     </v-btn>
@@ -451,7 +451,7 @@
                     </div>
                   </div>
                 </div>
-                <v-switch inset color="warning" hide-details v-model="form.insecureSkipVerify" />
+                <v-switch v-model="form.insecureSkipVerify" inset color="warning" hide-details />
               </div>
             </v-col>
 
@@ -467,7 +467,7 @@
                     </div>
                   </div>
                 </div>
-                <v-switch inset color="info" hide-details v-model="form.lowQuality" />
+                <v-switch v-model="form.lowQuality" inset color="info" hide-details />
               </div>
             </v-col>
           </v-row>
@@ -481,9 +481,9 @@
           v-if="!isEditing && isQuickMode"
           color="primary"
           variant="elevated"
-          @click="handleQuickSubmit"
           :disabled="!isQuickFormValid"
           prepend-icon="mdi-check"
+          @click="handleQuickSubmit"
         >
           创建渠道
         </v-btn>
@@ -491,9 +491,9 @@
           v-else
           color="primary"
           variant="elevated"
-          @click="handleSubmit"
           :disabled="!isFormValid"
           prepend-icon="mdi-check"
+          @click="handleSubmit"
         >
           {{ isEditing ? '更新渠道' : '创建渠道' }}
         </v-btn>

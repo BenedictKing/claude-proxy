@@ -86,7 +86,7 @@
         </div>
       </div>
 
-      <v-spacer></v-spacer>
+      <v-spacer/>
 
       <!-- 版本信息 -->
       <div
@@ -133,13 +133,13 @@
 
       <!-- 注销按钮 -->
       <v-btn
+        v-if="isAuthenticated"
         icon
         variant="text"
         size="small"
         class="header-btn"
-        @click="handleLogout"
-        v-if="isAuthenticated"
         title="注销"
+        @click="handleLogout"
       >
         <v-icon size="20">mdi-logout</v-icon>
       </v-btn>
@@ -149,11 +149,11 @@
     <v-main>
       <v-container fluid class="pa-4 pa-md-6">
         <!-- 全局统计顶部可折叠卡片（根据当前 Tab 显示对应统计） -->
-        <v-card class="mb-4 global-stats-panel" v-if="isAuthenticated">
+        <v-card v-if="isAuthenticated" class="mb-4 global-stats-panel">
           <div
             class="global-stats-header d-flex align-center justify-space-between px-4 py-2"
-            @click="showGlobalStats = !showGlobalStats"
             style="cursor: pointer;"
+            @click="showGlobalStats = !showGlobalStats"
           >
             <div class="d-flex align-center">
               <v-icon size="20" class="mr-2">mdi-chart-areaspline</v-icon>
@@ -226,9 +226,9 @@
             <v-btn
               color="primary"
               size="large"
-              @click="openAddChannelModal"
               prepend-icon="mdi-plus"
               class="action-btn action-btn-primary"
+              @click="openAddChannelModal"
             >
               添加渠道
             </v-btn>
@@ -236,16 +236,16 @@
             <v-btn
               color="info"
               size="large"
-              @click="pingAllChannels"
               prepend-icon="mdi-speedometer"
               variant="tonal"
               :loading="isPingingAll"
               class="action-btn"
+              @click="pingAllChannels"
             >
               测试延迟
             </v-btn>
 
-            <v-btn size="large" @click="refreshChannels" prepend-icon="mdi-refresh" variant="text" class="action-btn">
+            <v-btn size="large" prepend-icon="mdi-refresh" variant="text" class="action-btn" @click="refreshChannels">
               刷新
             </v-btn>
           </div>
@@ -253,16 +253,16 @@
           <div class="action-bar-right">
             <!-- Fuzzy 模式切换按钮 -->
             <v-tooltip location="bottom" content-class="fuzzy-tooltip">
-              <template v-slot:activator="{ props }">
+              <template #activator="{ props }">
                 <v-btn
                   v-bind="props"
                   variant="tonal"
                   size="large"
-                  @click="toggleFuzzyMode"
                   :loading="fuzzyModeLoading"
                   :disabled="fuzzyModeLoadError"
                   :color="fuzzyModeLoadError ? 'error' : (fuzzyModeEnabled ? 'warning' : 'default')"
                   class="action-btn"
+                  @click="toggleFuzzyMode"
                 >
                   <v-icon start size="20">
                     {{ fuzzyModeLoadError ? 'mdi-alert-circle-outline' : (fuzzyModeEnabled ? 'mdi-shield-refresh' : 'mdi-shield-off-outline') }}
@@ -285,13 +285,13 @@
           :dashboard-metrics="dashboardMetrics"
           :dashboard-stats="dashboardStats"
           :dashboard-recent-activity="dashboardRecentActivity"
+          class="mb-6"
           @edit="editChannel"
           @delete="deleteChannel"
           @ping="pingChannel"
           @refresh="refreshChannels"
           @error="showErrorToast"
           @success="showSuccessToast"
-          class="mb-6"
         />
 
         <!-- 空状态 -->
@@ -303,7 +303,7 @@
           <div class="text-subtitle-1 text-medium-emphasis mb-8">
             还没有配置任何API渠道，请添加第一个渠道来开始使用代理服务
           </div>
-          <v-btn color="primary" size="x-large" @click="openAddChannelModal" prepend-icon="mdi-plus" variant="elevated">
+          <v-btn color="primary" size="x-large" prepend-icon="mdi-plus" variant="elevated" @click="openAddChannelModal">
             添加第一个渠道
           </v-btn>
         </v-card>
@@ -332,14 +332,14 @@
             type="password"
             variant="outlined"
             density="comfortable"
-            @keyup.enter="addApiKey"
             placeholder="输入API密钥"
-          ></v-text-field>
+            @keyup.enter="addApiKey"
+          />
         </v-card-text>
         <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn @click="showAddKeyModalRef = false" variant="text">取消</v-btn>
-          <v-btn @click="addApiKey" :disabled="!newApiKey.trim()" color="primary" variant="elevated">添加</v-btn>
+          <v-spacer/>
+          <v-btn variant="text" @click="showAddKeyModalRef = false">取消</v-btn>
+          <v-btn :disabled="!newApiKey.trim()" color="primary" variant="elevated" @click="addApiKey">添加</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

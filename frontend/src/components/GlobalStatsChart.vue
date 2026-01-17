@@ -19,7 +19,7 @@
           <v-btn value="today" size="x-small">今日</v-btn>
         </v-btn-toggle>
 
-        <v-btn icon size="x-small" variant="text" @click="refreshData" :loading="isLoading" :disabled="isLoading">
+        <v-btn icon size="x-small" variant="text" :loading="isLoading" :disabled="isLoading" @click="refreshData">
           <v-icon size="small">mdi-refresh</v-icon>
         </v-btn>
       </div>
