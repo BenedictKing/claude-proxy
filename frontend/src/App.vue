@@ -2,7 +2,7 @@
   <v-app>
     <!-- 自动认证加载提示 - 只在真正进行自动认证时显示 -->
     <v-overlay
-      :model-value="isAutoAuthenticating && !isInitialized"
+      :model-value="authStore.isAutoAuthenticating && !authStore.isInitialized"
       persistent
       class="align-center justify-center"
       scrim="black"
@@ -20,13 +20,13 @@
         <v-card-title class="text-h5 text-center mb-4"> 🔐 Claude Proxy 管理界面 </v-card-title>
 
         <v-card-text>
-          <v-alert v-if="authError" type="error" variant="tonal" class="mb-4">
-            {{ authError }}
+          <v-alert v-if="authStore.authError" type="error" variant="tonal" class="mb-4">
+            {{ authStore.authError }}
           </v-alert>
 
           <v-form @submit.prevent="handleAuthSubmit">
             <v-text-field
-              v-model="authKeyInput"
+              v-model="authStore.authKeyInput"
               label="访问密钥 (PROXY_ACCESS_KEY)"
               type="password"
               variant="outlined"
@@ -37,7 +37,7 @@
               @keyup.enter="handleAuthSubmit"
             />
 
-            <v-btn type="submit" color="primary" block size="large" class="mt-4" :loading="authLoading">
+            <v-btn type="submit" color="primary" block size="large" class="mt-4" :loading="authStore.authLoading">
               访问管理界面
             </v-btn>
           </v-form>
@@ -668,22 +668,16 @@ const setDarkMode = (themeName: 'light' | 'dark' | 'auto') => {
 
 // 认证状态管理（使用 AuthStore）
 const isAuthenticated = computed(() => authStore.isAuthenticated)
-const authError = ref('')
-const authKeyInput = ref('')
-const authLoading = ref(false)
-const isAutoAuthenticating = ref(true) // 初始化为true，防止登录框闪现
-const isInitialized = ref(false) // 添加初始化完成标志
+// 认证相关状态已迁移到 AuthStore
 
 // 认证尝试限制
-const authAttempts = ref(0)
 const MAX_AUTH_ATTEMPTS = 5
-const authLockoutTime = ref<Date | null>(null)
 
 // 控制认证对话框显示
 const showAuthDialog = computed({
   get: () => {
     // 只有在初始化完成后，且未认证，且不在自动认证中时，才显示对话框
-    return isInitialized.value && !isAuthenticated.value && !isAutoAuthenticating.value
+    return authStore.isInitialized && !isAuthenticated.value && !authStore.isAutoAuthenticating
   },
   set: () => {} // 防止外部修改，认证状态只能通过内部逻辑控制
 })
@@ -693,9 +687,9 @@ const autoAuthenticate = async () => {
   // 检查 AuthStore 中是否有保存的密钥
   if (!authStore.apiKey) {
     // 没有保存的密钥，显示登录对话框
-    authError.value = '请输入访问密钥以继续'
-    isAutoAuthenticating.value = false
-    isInitialized.value = true
+    authStore.setAuthError('请输入访问密钥以继续')
+    authStore.setAutoAuthenticating(false)
+    authStore.setInitialized(true)
     return false
   }
 
@@ -705,7 +699,7 @@ const autoAuthenticate = async () => {
     await api.getChannels()
 
     // 密钥有效，认证成功
-    authError.value = ''
+    authStore.setAuthError('')
     return true
   } catch (error: any) {
     // 密钥无效或过期
@@ -715,54 +709,54 @@ const autoAuthenticate = async () => {
     authStore.clearAuth()
 
     // 显示登录对话框，提示用户重新输入
-    authError.value = '保存的访问密钥已失效，请重新输入'
+    authStore.setAuthError('保存的访问密钥已失效，请重新输入')
     return false
   } finally {
-    isAutoAuthenticating.value = false
-    isInitialized.value = true
+    authStore.setAutoAuthenticating(false)
+    authStore.setInitialized(true)
   }
 }
 
 // 手动设置密钥（用于重新认证）
 const setAuthKey = (key: string) => {
   authStore.setApiKey(key)
-  authError.value = ''
+  authStore.setAuthError('')
   // 重新加载数据
   refreshChannels()
 }
 
 // 处理认证提交
 const handleAuthSubmit = async () => {
-  if (!authKeyInput.value.trim()) {
-    authError.value = '请输入访问密钥'
+  if (!authStore.authKeyInput.trim()) {
+    authStore.setAuthError('请输入访问密钥')
     return
   }
 
   // 检查是否被锁定
-  if (authLockoutTime.value && new Date() < authLockoutTime.value) {
-    const remainingSeconds = Math.ceil((authLockoutTime.value.getTime() - Date.now()) / 1000)
-    authError.value = `认证尝试次数过多，请在 ${remainingSeconds} 秒后重试`
+  if (authStore.isAuthLocked) {
+    const remainingSeconds = Math.ceil((authStore.authLockoutTime! - Date.now()) / 1000)
+    authStore.setAuthError(`认证尝试次数过多，请在 ${remainingSeconds} 秒后重试`)
     return
   }
 
-  authLoading.value = true
-  authError.value = ''
+  authStore.setAuthLoading(true)
+  authStore.setAuthError('')
 
   try {
     // 设置密钥
-    setAuthKey(authKeyInput.value.trim())
+    setAuthKey(authStore.authKeyInput.trim())
 
     // 测试API调用以验证密钥
     await api.getChannels()
 
     // 认证成功，重置计数器
-    authAttempts.value = 0
-    authLockoutTime.value = null
+    authStore.resetAuthAttempts()
+    authStore.setAuthLockout(null)
 
     // 如果成功，加载数据
     await refreshChannels()
 
-    authKeyInput.value = ''
+    authStore.setAuthKeyInput('')
 
     // 记录认证成功(前端日志)
     if (import.meta.env.DEV) {
@@ -770,22 +764,22 @@ const handleAuthSubmit = async () => {
     }
   } catch {
     // 认证失败
-    authAttempts.value++
+    authStore.incrementAuthAttempts()
 
     // 记录认证失败(前端日志)
-    console.warn('🔒 认证失败 - 尝试次数:', authAttempts.value, '时间:', new Date().toISOString())
+    console.warn('🔒 认证失败 - 尝试次数:', authStore.authAttempts, '时间:', new Date().toISOString())
 
     // 如果尝试次数过多，锁定5分钟
-    if (authAttempts.value >= MAX_AUTH_ATTEMPTS) {
-      authLockoutTime.value = new Date(Date.now() + 5 * 60 * 1000)
-      authError.value = '认证尝试次数过多，请在5分钟后重试'
+    if (authStore.authAttempts >= MAX_AUTH_ATTEMPTS) {
+      authStore.setAuthLockout(new Date(Date.now() + 5 * 60 * 1000))
+      authStore.setAuthError('认证尝试次数过多，请在5分钟后重试')
     } else {
-      authError.value = `访问密钥验证失败 (剩余尝试次数: ${MAX_AUTH_ATTEMPTS - authAttempts.value})`
+      authStore.setAuthError(`访问密钥验证失败 (剩余尝试次数: ${MAX_AUTH_ATTEMPTS - authStore.authAttempts})`)
     }
 
     authStore.clearAuth()
   } finally {
-    authLoading.value = false
+    authStore.setAuthLoading(false)
   }
 }
 
@@ -793,14 +787,14 @@ const handleAuthSubmit = async () => {
 const handleLogout = () => {
   authStore.clearAuth()
   channelStore.clearChannels()
-  authError.value = '请输入访问密钥以继续'
+  authStore.setAuthError('请输入访问密钥以继续')
   showToast('已安全注销', 'info')
 }
 
 // 处理认证失败
 const handleAuthError = (error: any) => {
   if (error.message && error.message.includes('认证失败')) {
-    authError.value = '访问密钥无效或已过期，请重新输入'
+    authStore.setAuthError('访问密钥无效或已过期，请重新输入')
   } else {
     showToast(`操作失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error')
   }
@@ -867,12 +861,12 @@ onMounted(async () => {
   // 检查 AuthStore 中是否有保存的密钥
   if (authStore.apiKey) {
     // 有保存的密钥，开始自动认证
-    isAutoAuthenticating.value = true
-    isInitialized.value = false
+    authStore.setAutoAuthenticating(true)
+    authStore.setInitialized(false)
   } else {
     // 没有保存的密钥，直接显示登录对话框
-    isAutoAuthenticating.value = false
-    isInitialized.value = true
+    authStore.setAutoAuthenticating(false)
+    authStore.setInitialized(true)
   }
 
   // 尝试自动认证

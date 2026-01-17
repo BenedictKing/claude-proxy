@@ -8,6 +8,18 @@
 
 ### 重构
 
+- **前端认证状态管理重构** - 将 App.vue 中的认证相关状态迁移到 AuthStore
+  - 扩展 `src/stores/auth.ts`，新增认证 UI 状态管理（authError、authAttempts、authLockoutTime、isAutoAuthenticating、isInitialized、authLoading、authKeyInput）
+  - 重构 `src/App.vue`，移除本地认证状态变量，改用 AuthStore 统一管理
+  - 新增 `isAuthLocked` 计算属性，自动判断认证锁定状态
+  - 新增 8 个状态管理方法：setAuthError、incrementAuthAttempts、resetAuthAttempts、setAuthLockout、setAutoAuthenticating、setInitialized、setAuthLoading、setAuthKeyInput
+  - 优势：
+    - 状态集中：所有认证相关状态统一管理，避免分散在组件中
+    - 代码简化：App.vue 认证逻辑更清晰，减少本地状态管理
+    - 可复用性：其他组件可直接使用 AuthStore 的认证状态
+    - 安全性增强：认证失败次数和锁定时间集中管理，便于扩展
+  - 涉及文件：`frontend/src/stores/auth.ts`、`frontend/src/App.vue`
+
 - **前端渠道管理逻辑重构** - 将 App.vue 中的渠道管理逻辑提取到 Pinia Store
   - 新增 `src/stores/channel.ts` 渠道状态 Store，统一管理三种 API 类型（Messages/Responses/Gemini）的渠道数据
   - 重构 `src/App.vue`，移除 300+ 行本地状态和业务逻辑，改用 ChannelStore 统一管理
