@@ -1364,6 +1364,7 @@ defineExpose({
   flex-direction: column;
   align-items: center;
   min-width: 60px;
+  margin-left: 8px;
 }
 
 .rpm-tpm-values {
