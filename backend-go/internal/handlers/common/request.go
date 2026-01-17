@@ -244,7 +244,7 @@ func ExtractUserID(bodyBytes []byte) string {
 }
 
 // ExtractConversationID 从请求中提取对话标识（用于 Responses API）
-// 优先级: Conversation_id Header > Session_id Header > prompt_cache_key > metadata.user_id
+// 优先级: Conversation_id Header > Session_id Header > X-Gemini-Api-Privileged-User-Id > prompt_cache_key > metadata.user_id
 func ExtractConversationID(c *gin.Context, bodyBytes []byte) string {
 	// 1. HTTP Header: Conversation_id
 	if convID := c.GetHeader("Conversation_id"); convID != "" {
@@ -256,7 +256,12 @@ func ExtractConversationID(c *gin.Context, bodyBytes []byte) string {
 		return sessID
 	}
 
-	// 3. Request Body: prompt_cache_key 或 metadata.user_id
+	// 3. HTTP Header: X-Gemini-Api-Privileged-User-Id (Gemini 专用)
+	if geminiUserID := c.GetHeader("X-Gemini-Api-Privileged-User-Id"); geminiUserID != "" {
+		return geminiUserID
+	}
+
+	// 4. Request Body: prompt_cache_key 或 metadata.user_id
 	var req struct {
 		PromptCacheKey string `json:"prompt_cache_key"`
 		Metadata       struct {
