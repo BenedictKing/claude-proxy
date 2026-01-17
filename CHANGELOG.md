@@ -4,6 +4,33 @@
 
 ---
 
+## [Unreleased]
+
+### 新增
+
+- **会话管理增强** - 支持 Gemini API 的 `X-Gemini-Api-Privileged-User-Id` 请求头
+  - 在 `ExtractConversationID()` 函数中新增对该请求头的支持，用于会话亲和性管理
+  - 优先级顺序：Conversation_id > Session_id > X-Gemini-Api-Privileged-User-Id > prompt_cache_key > metadata.user_id
+  - 涉及文件：`backend-go/internal/handlers/common/request.go`
+
+### 优化
+
+- **Gemini Dashboard API 性能优化** - 将前端 3 个独立请求合并为 1 个后端统一接口
+  - 新增 `/api/gemini/channels/dashboard` 端点，一次性返回 channels、metrics、stats、recentActivity 数据
+  - 后端新增 `internal/handlers/gemini/dashboard.go` 处理器，减少网络往返次数
+  - 涉及文件：`backend-go/main.go`、`backend-go/internal/handlers/gemini/dashboard.go`
+
+### 重构
+
+- **前端 UI 框架统一** - 移除 Tailwind CSS 和 DaisyUI，完全使用 Vuetify
+  - 从 package.json 移除 tailwindcss、daisyui、autoprefixer、postcss 依赖
+  - 删除 tailwind.config.js 和 postcss.config.js 配置文件
+  - 更新 src/assets/style.css，移除 @tailwind 指令，保留自定义样式
+  - 优势：消除多框架样式冲突、减少打包体积、统一设计语言（Material Design）
+  - 涉及文件：`frontend/package.json`、`frontend/src/assets/style.css`、`frontend/src/main.ts`
+
+---
+
 ## [v2.4.33] - 2026-01-17
 
 ### 新增
