@@ -223,6 +223,7 @@ test-*.sh
 test-*.js
 test-*.ts
 .gocache/
+.gomodcache/
 
 .snow/
 refs/

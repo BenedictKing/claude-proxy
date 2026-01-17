@@ -8,6 +8,17 @@
 
 ### 重构
 
+- **前端渠道管理逻辑重构** - 将 App.vue 中的渠道管理逻辑提取到 Pinia Store
+  - 新增 `src/stores/channel.ts` 渠道状态 Store，统一管理三种 API 类型（Messages/Responses/Gemini）的渠道数据
+  - 重构 `src/App.vue`，移除 300+ 行本地状态和业务逻辑，改用 ChannelStore 统一管理
+  - 更新 `src/stores/index.ts`，导出 ChannelStore
+  - 优势：
+    - 代码解耦：App.vue 从 1000+ 行减少到 700+ 行，职责更清晰
+    - 状态集中：渠道数据、指标、自动刷新定时器统一管理
+    - 可复用性：其他组件可直接使用 ChannelStore，无需通过 props 传递
+    - 可测试性：业务逻辑独立于组件，便于单元测试
+  - 涉及文件：`frontend/src/stores/channel.ts`、`frontend/src/stores/index.ts`、`frontend/src/App.vue`
+
 - **前端状态管理架构升级** - 引入 Pinia 状态管理库，替代原有的本地状态管理
   - 新增 `pinia` 和 `pinia-plugin-persistedstate` 依赖，实现响应式状态管理和自动持久化
   - 新增 `src/stores/auth.ts` 认证状态 Store，统一管理 API Key 和认证状态

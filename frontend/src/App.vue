@@ -71,15 +71,15 @@
       <!-- 自定义标题容器 - 替代 v-app-bar-title -->
       <div class="header-title">
         <div :class="$vuetify.display.mobile ? 'text-body-2' : 'text-h6'" class="font-weight-bold d-flex align-center">
-          <span class="api-type-text" :class="{ active: activeTab === 'messages' }" @click="activeTab = 'messages'">
+          <span class="api-type-text" :class="{ active: channelStore.activeTab === 'messages' }" @click="channelStore.activeTab = 'messages'">
             Claude
           </span>
           <span class="api-type-text separator">/</span>
-          <span class="api-type-text" :class="{ active: activeTab === 'responses' }" @click="activeTab = 'responses'">
+          <span class="api-type-text" :class="{ active: channelStore.activeTab === 'responses' }" @click="channelStore.activeTab = 'responses'">
             Codex
           </span>
           <span class="api-type-text separator">/</span>
-          <span class="api-type-text" :class="{ active: activeTab === 'gemini' }" @click="activeTab = 'gemini'">
+          <span class="api-type-text" :class="{ active: channelStore.activeTab === 'gemini' }" @click="channelStore.activeTab = 'gemini'">
             Gemini
           </span>
           <span class="brand-text d-none d-sm-inline">API Proxy</span>
@@ -158,7 +158,7 @@
             <div class="d-flex align-center">
               <v-icon size="20" class="mr-2">mdi-chart-areaspline</v-icon>
               <span class="text-subtitle-1 font-weight-bold">
-                {{ activeTab === 'messages' ? 'Claude Messages' : (activeTab === 'responses' ? 'Codex Responses' : 'Gemini') }} 流量统计
+                {{ channelStore.activeTab === 'messages' ? 'Claude Messages' : (channelStore.activeTab === 'responses' ? 'Codex Responses' : 'Gemini') }} 流量统计
               </span>
             </div>
             <v-btn icon size="small" variant="text">
@@ -168,7 +168,7 @@
           <v-expand-transition>
             <div v-if="showGlobalStats">
               <v-divider />
-              <GlobalStatsChart :api-type="activeTab" />
+              <GlobalStatsChart :api-type="channelStore.activeTab" />
             </div>
           </v-expand-transition>
         </v-card>
@@ -181,7 +181,7 @@
                 <v-icon size="28">mdi-server-network</v-icon>
               </div>
               <div class="stat-card-content">
-                <div class="stat-card-value">{{ currentChannelsData.channels?.length || 0 }}</div>
+                <div class="stat-card-value">{{ channelStore.currentChannelsData.channels?.length || 0 }}</div>
                 <div class="stat-card-label">总渠道数</div>
                 <div class="stat-card-desc">已配置的API渠道</div>
               </div>
@@ -196,7 +196,7 @@
               </div>
               <div class="stat-card-content">
                 <div class="stat-card-value">
-                  {{ activeChannelCount }}<span class="stat-card-total">/{{ failoverChannelCount }}</span>
+                  {{ channelStore.activeChannelCount }}<span class="stat-card-total">/{{ channelStore.failoverChannelCount }}</span>
                 </div>
                 <div class="stat-card-label">活跃渠道</div>
                 <div class="stat-card-desc">参与故障转移调度</div>
@@ -238,7 +238,7 @@
               size="large"
               prepend-icon="mdi-speedometer"
               variant="tonal"
-              :loading="isPingingAll"
+              :loading="channelStore.isPingingAll"
               class="action-btn"
               @click="pingAllChannels"
             >
@@ -277,14 +277,14 @@
 
         <!-- 渠道编排（高密度列表模式） -->
         <ChannelOrchestration
-          v-if="currentChannelsData.channels?.length"
+          v-if="channelStore.currentChannelsData.channels?.length"
           ref="channelOrchestrationRef"
-          :channels="currentChannelsData.channels"
-          :current-channel-index="currentChannelsData.current ?? 0"
-          :channel-type="activeTab"
-          :dashboard-metrics="dashboardMetrics"
-          :dashboard-stats="dashboardStats"
-          :dashboard-recent-activity="dashboardRecentActivity"
+          :channels="channelStore.currentChannelsData.channels"
+          :current-channel-index="channelStore.currentChannelsData.current ?? 0"
+          :channel-type="channelStore.activeTab"
+          :dashboard-metrics="channelStore.dashboardMetrics"
+          :dashboard-stats="channelStore.dashboardStats"
+          :dashboard-recent-activity="channelStore.dashboardRecentActivity"
           class="mb-6"
           @edit="editChannel"
           @delete="deleteChannel"
@@ -295,7 +295,7 @@
         />
 
         <!-- 空状态 -->
-        <v-card v-if="!currentChannelsData.channels?.length" elevation="2" class="text-center pa-12" rounded="lg">
+        <v-card v-if="!channelStore.currentChannelsData.channels?.length" elevation="2" class="text-center pa-12" rounded="lg">
           <v-avatar size="120" color="primary" class="mb-6">
             <v-icon size="60" color="white">mdi-rocket-launch</v-icon>
           </v-avatar>
@@ -314,7 +314,7 @@
     <AddChannelModal
       v-model:show="showAddChannelModal"
       :channel="editingChannel"
-      :channel-type="activeTab"
+      :channel-type="channelStore.activeTab"
       @save="saveChannel"
     />
 
@@ -365,9 +365,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useTheme } from 'vuetify'
-import { api, fetchHealth, type Channel, type ChannelsResponse, type ChannelMetrics, type ChannelDashboardResponse } from './services/api'
+import { api, fetchHealth, type Channel } from './services/api'
 import { versionService, type VersionInfo } from './services/version'
 import { useAuthStore } from './stores/auth'
+import { useChannelStore } from './stores/channel'
 import AddChannelModal from './components/AddChannelModal.vue'
 import ChannelOrchestration from './components/ChannelOrchestration.vue'
 import GlobalStatsChart from './components/GlobalStatsChart.vue'
@@ -382,28 +383,20 @@ const { init: initTheme } = useAppTheme()
 // 认证 Store
 const authStore = useAuthStore()
 
+// 渠道 Store
+const channelStore = useChannelStore()
+
 // 渠道编排组件引用
 const channelOrchestrationRef = ref<InstanceType<typeof ChannelOrchestration> | null>(null)
 
-// 自动刷新定时器
-let autoRefreshTimer: ReturnType<typeof setInterval> | null = null
-const AUTO_REFRESH_INTERVAL = 2000 // 2秒
-
-// 响应式数据
-const activeTab = ref<'messages' | 'responses' | 'gemini'>('messages') // Tab 切换状态
-const channelsData = ref<ChannelsResponse>({ channels: [], current: -1, loadBalance: 'round-robin' })
-const responsesChannelsData = ref<ChannelsResponse>({ channels: [], current: -1, loadBalance: 'round-robin' }) // Responses渠道数据
-const geminiChannelsData = ref<ChannelsResponse>({ channels: [], current: -1, loadBalance: 'round-robin' }) // Gemini渠道数据
-// Dashboard 数据（合并的 metrics 和 stats）
-const dashboardMetrics = ref<ChannelMetrics[]>([])
-const dashboardStats = ref<ChannelDashboardResponse['stats'] | undefined>(undefined)
-const dashboardRecentActivity = ref<ChannelDashboardResponse['recentActivity']>(undefined)
+// 对话框状态
 const showAddChannelModal = ref(false)
 const showAddKeyModalRef = ref(false)
 const editingChannel = ref<Channel | null>(null)
 const selectedChannelForKey = ref<number>(-1)
 const newApiKey = ref('')
-const isPingingAll = ref(false)
+
+// 主题和偏好设置
 const darkModePreference = ref<'light' | 'dark' | 'auto'>('auto')
 
 // 全局统计面板状态
@@ -412,6 +405,7 @@ const showGlobalStats = ref(false) // 顶部可折叠卡片（默认收起）
 // Fuzzy 模式状态
 const fuzzyModeEnabled = ref(true)
 const fuzzyModeLoading = ref(false)
+const fuzzyModeLoadError = ref(false) // 加载失败标记
 
 // 系统连接状态
 type SystemStatus = 'running' | 'error' | 'connecting'
@@ -454,30 +448,6 @@ interface Toast {
 }
 const toasts = ref<Toast[]>([])
 let toastId = 0
-
-// 计算属性 - 根据当前Tab动态返回数据
-const currentChannelsData = computed(() => {
-  switch (activeTab.value) {
-    case 'messages': return channelsData.value
-    case 'responses': return responsesChannelsData.value
-    case 'gemini': return geminiChannelsData.value
-    default: return channelsData.value
-  }
-})
-
-// 计算属性：活跃渠道数（仅 active 状态）
-const activeChannelCount = computed(() => {
-  const data = currentChannelsData.value
-  if (!data.channels) return 0
-  return data.channels.filter(ch => ch.status === 'active').length
-})
-
-// 计算属性：参与故障转移的渠道数（active + suspended）
-const failoverChannelCount = computed(() => {
-  const data = currentChannelsData.value
-  if (!data.channels) return 0
-  return data.channels.filter(ch => ch.status !== 'disabled').length
-})
 
 // Toast工具函数
 const getToastColor = (type: string) => {
@@ -526,65 +496,10 @@ const showSuccessToast = (message: string) => {
   showToast(message, 'info')
 }
 
-// 合并渠道数据，保留本地的延迟测试结果
-const LATENCY_VALID_DURATION = 5 * 60 * 1000 // 5 分钟有效期
-
-const mergeChannelsWithLocalData = (newChannels: Channel[], existingChannels: Channel[] | undefined): Channel[] => {
-  if (!existingChannels) return newChannels
-
-  const now = Date.now()
-  return newChannels.map(newCh => {
-    const existingCh = existingChannels.find(ch => ch.index === newCh.index)
-    // 只有在 5 分钟有效期内才保留本地延迟测试结果
-    if (existingCh?.latencyTestTime && (now - existingCh.latencyTestTime) < LATENCY_VALID_DURATION) {
-      return {
-        ...newCh,
-        latency: existingCh.latency,
-        latencyTestTime: existingCh.latencyTestTime
-      }
-    }
-    return newCh
-  })
-}
-
-// 主要功能函数
+// 主要功能函数 - 使用 ChannelStore
 const refreshChannels = async () => {
   try {
-    // Gemini 使用专用的 dashboard API（降级实现）
-    if (activeTab.value === 'gemini') {
-      const dashboard = await api.getGeminiChannelDashboard()
-      geminiChannelsData.value = {
-        channels: mergeChannelsWithLocalData(dashboard.channels, geminiChannelsData.value.channels),
-        current: geminiChannelsData.value.current,
-        loadBalance: dashboard.loadBalance
-      }
-      dashboardMetrics.value = dashboard.metrics
-      dashboardStats.value = dashboard.stats
-      dashboardRecentActivity.value = dashboard.recentActivity
-      return
-    }
-
-    // Messages / Responses 使用合并的 dashboard 接口
-    const dashboard = await api.getChannelDashboard(activeTab.value)
-
-    if (activeTab.value === 'messages') {
-      channelsData.value = {
-        channels: mergeChannelsWithLocalData(dashboard.channels, channelsData.value.channels),
-        current: channelsData.value.current, // 保留当前选中状态
-        loadBalance: dashboard.loadBalance
-      }
-    } else {
-      responsesChannelsData.value = {
-        channels: mergeChannelsWithLocalData(dashboard.channels, responsesChannelsData.value.channels),
-        current: responsesChannelsData.value.current, // 保留当前选中状态
-        loadBalance: dashboard.loadBalance
-      }
-    }
-
-    // 同时更新 metrics 和 stats
-    dashboardMetrics.value = dashboard.metrics
-    dashboardStats.value = dashboard.stats
-    dashboardRecentActivity.value = dashboard.recentActivity
+    await channelStore.refreshChannels()
   } catch (error) {
     handleAuthError(error)
   }
@@ -592,70 +507,10 @@ const refreshChannels = async () => {
 
 const saveChannel = async (channel: Omit<Channel, 'index' | 'latency' | 'status'>, options?: { isQuickAdd?: boolean }) => {
   try {
-    const isResponses = activeTab.value === 'responses'
-    const isGemini = activeTab.value === 'gemini'
-    if (editingChannel.value) {
-      if (isGemini) {
-        await api.updateGeminiChannel(editingChannel.value.index, channel)
-      } else if (isResponses) {
-        await api.updateResponsesChannel(editingChannel.value.index, channel)
-      } else {
-        await api.updateChannel(editingChannel.value.index, channel)
-      }
-      showToast('渠道更新成功', 'success')
-    } else {
-      if (isGemini) {
-        await api.addGeminiChannel(channel)
-      } else if (isResponses) {
-        await api.addResponsesChannel(channel)
-      } else {
-        await api.addChannel(channel)
-      }
-      showToast('渠道添加成功', 'success')
-
-      // 快速添加模式：将新渠道设为第一优先级并设置5分钟促销期
-      if (options?.isQuickAdd) {
-        await refreshChannels() // 先刷新获取新渠道的 index
-        const data = isGemini ? geminiChannelsData.value : (isResponses ? responsesChannelsData.value : channelsData.value)
-
-        // 找到新添加的渠道（应该是列表中 index 最大的 active 状态渠道）
-        const activeChannels = data.channels?.filter(ch => ch.status !== 'disabled') || []
-        if (activeChannels.length > 0) {
-          // 新添加的渠道会分配到最大的 index
-          const newChannel = activeChannels.reduce((max, ch) => ch.index > max.index ? ch : max, activeChannels[0])
-
-          try {
-            // 1. 重新排序：将新渠道放到第一位
-            const otherIndexes = activeChannels
-              .filter(ch => ch.index !== newChannel.index)
-              .sort((a, b) => (a.priority ?? a.index) - (b.priority ?? b.index))
-              .map(ch => ch.index)
-            const newOrder = [newChannel.index, ...otherIndexes]
-
-            if (isGemini) {
-              await api.reorderGeminiChannels(newOrder)
-            } else if (isResponses) {
-              await api.reorderResponsesChannels(newOrder)
-            } else {
-              await api.reorderChannels(newOrder)
-            }
-
-            // 2. 设置5分钟促销期（300秒）
-            if (isGemini) {
-              await api.setGeminiChannelPromotion(newChannel.index, 300)
-            } else if (isResponses) {
-              await api.setResponsesChannelPromotion(newChannel.index, 300)
-            } else {
-              await api.setChannelPromotion(newChannel.index, 300)
-            }
-
-            showToast(`渠道 ${channel.name} 已设为最高优先级，5分钟内优先使用`, 'info')
-          } catch (err) {
-            console.warn('设置快速添加优先级失败:', err)
-            // 不影响主流程，只是提示
-          }
-        }
-      }
+    const result = await channelStore.saveChannel(channel, editingChannel.value?.index ?? null, options)
+    showToast(result.message, 'success')
+    if (result.quickAddMessage) {
+      showToast(result.quickAddMessage, 'info')
     }
     showAddChannelModal.value = false
     editingChannel.value = null
@@ -674,15 +529,8 @@ const deleteChannel = async (channelId: number) => {
   if (!confirm('确定要删除这个渠道吗？')) return
 
   try {
-    if (activeTab.value === 'gemini') {
-      await api.deleteGeminiChannel(channelId)
-    } else if (activeTab.value === 'responses') {
-      await api.deleteResponsesChannel(channelId)
-    } else {
-      await api.deleteChannel(channelId)
-    }
-    showToast('渠道删除成功', 'success')
-    await refreshChannels()
+    const result = await channelStore.deleteChannel(channelId)
+    showToast(result.message, 'success')
   } catch (error) {
     handleAuthError(error)
   }
@@ -703,9 +551,9 @@ const addApiKey = async () => {
   if (!newApiKey.value.trim()) return
 
   try {
-    if (activeTab.value === 'gemini') {
+    if (channelStore.activeTab === 'gemini') {
       await api.addGeminiApiKey(selectedChannelForKey.value, newApiKey.value.trim())
-    } else if (activeTab.value === 'responses') {
+    } else if (channelStore.activeTab === 'responses') {
       await api.addResponsesApiKey(selectedChannelForKey.value, newApiKey.value.trim())
     } else {
       await api.addApiKey(selectedChannelForKey.value, newApiKey.value.trim())
@@ -723,9 +571,9 @@ const _removeApiKey = async (channelId: number, apiKey: string) => {
   if (!confirm('确定要删除这个API密钥吗？')) return
 
   try {
-    if (activeTab.value === 'gemini') {
+    if (channelStore.activeTab === 'gemini') {
       await api.removeGeminiApiKey(channelId, apiKey)
-    } else if (activeTab.value === 'responses') {
+    } else if (channelStore.activeTab === 'responses') {
       await api.removeResponsesApiKey(channelId, apiKey)
     } else {
       await api.removeApiKey(channelId, apiKey)
@@ -739,18 +587,7 @@ const _removeApiKey = async (channelId: number, apiKey: string) => {
 
 const pingChannel = async (channelId: number) => {
   try {
-    const result = activeTab.value === 'gemini'
-      ? await api.pingGeminiChannel(channelId)
-      : await api.pingChannel(channelId)
-    const data = activeTab.value === 'gemini'
-      ? geminiChannelsData.value
-      : (activeTab.value === 'messages' ? channelsData.value : responsesChannelsData.value)
-    const channel = data.channels?.find(c => c.index === channelId)
-    if (channel) {
-      channel.latency = result.latency
-      channel.latencyTestTime = Date.now()  // 记录测试时间，用于 5 分钟后清除
-      channel.status = result.success ? 'healthy' : 'error'
-    }
+    await channelStore.pingChannel(channelId)
     // 不再使用 Toast，延迟结果直接显示在渠道列表中
   } catch (error) {
     showToast(`延迟测试失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error')
@@ -758,54 +595,24 @@ const pingChannel = async (channelId: number) => {
 }
 
 const pingAllChannels = async () => {
-  if (isPingingAll.value) return
-
-  isPingingAll.value = true
   try {
-    const results = activeTab.value === 'gemini'
-      ? await api.pingAllGeminiChannels()
-      : await api.pingAllChannels()
-    const data = activeTab.value === 'gemini'
-      ? geminiChannelsData.value
-      : (activeTab.value === 'messages' ? channelsData.value : responsesChannelsData.value)
-    const now = Date.now()
-    results.forEach(result => {
-      const channel = data.channels?.find(c => c.index === result.id)
-      if (channel) {
-        channel.latency = result.latency
-        channel.latencyTestTime = now  // 记录测试时间，用于 5 分钟后清除
-        channel.status = result.status as 'healthy' | 'error'
-      }
-    })
+    await channelStore.pingAllChannels()
     // 不再使用 Toast，延迟结果直接显示在渠道列表中
   } catch (error) {
     showToast(`批量延迟测试失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error')
-  } finally {
-    isPingingAll.value = false
   }
 }
 
 const _updateLoadBalance = async (strategy: string) => {
   try {
-    if (activeTab.value === 'gemini') {
-      await api.updateGeminiLoadBalance(strategy)
-      geminiChannelsData.value.loadBalance = strategy
-    } else if (activeTab.value === 'messages') {
-      await api.updateLoadBalance(strategy)
-      channelsData.value.loadBalance = strategy
-    } else {
-      await api.updateResponsesLoadBalance(strategy)
-      responsesChannelsData.value.loadBalance = strategy
-    }
-    showToast(`负载均衡策略已更新为: ${strategy}`, 'success')
+    const result = await channelStore.updateLoadBalance(strategy)
+    showToast(result.message, 'success')
   } catch (error) {
     showToast(`更新负载均衡策略失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error')
   }
 }
 
 // Fuzzy 模式管理
-const fuzzyModeLoadError = ref(false) // 加载失败标记
-
 const loadFuzzyModeStatus = async () => {
   fuzzyModeLoadError.value = false
   try {
@@ -985,8 +792,8 @@ const handleAuthSubmit = async () => {
 // 处理注销
 const handleLogout = () => {
   authStore.clearAuth()
+  channelStore.clearChannels()
   authError.value = '请输入访问密钥以继续'
-  channelsData.value = { channels: [], current: 0, loadBalance: 'failover' }
   showToast('已安全注销', 'info')
 }
 
@@ -1085,88 +892,19 @@ onMounted(async () => {
 
 // 启动自动刷新定时器
 const startAutoRefresh = () => {
-  if (autoRefreshTimer) {
-    clearInterval(autoRefreshTimer)
-  }
-  autoRefreshTimer = setInterval(async () => {
-    if (isAuthenticated.value) {
-      try {
-        // 使用合并的 dashboard 接口，减少网络请求
-        const dashboard = await api.getChannelDashboard(activeTab.value)
-
-        // 更新渠道数据，保留当前选中状态和本地延迟测试结果
-        if (activeTab.value === 'messages') {
-          channelsData.value = {
-            channels: mergeChannelsWithLocalData(dashboard.channels, channelsData.value.channels),
-            current: channelsData.value.current, // 保留当前选中状态
-            loadBalance: dashboard.loadBalance
-          }
-        } else if (activeTab.value === 'responses') {
-          responsesChannelsData.value = {
-            channels: mergeChannelsWithLocalData(dashboard.channels, responsesChannelsData.value.channels),
-            current: responsesChannelsData.value.current, // 保留当前选中状态
-            loadBalance: dashboard.loadBalance
-          }
-        } else {
-          geminiChannelsData.value = {
-            channels: mergeChannelsWithLocalData(dashboard.channels, geminiChannelsData.value.channels),
-            current: geminiChannelsData.value.current, // 保留当前选中状态
-            loadBalance: dashboard.loadBalance
-          }
-        }
-
-        // 更新 metrics 和 stats
-        dashboardMetrics.value = dashboard.metrics
-        dashboardStats.value = dashboard.stats
-        dashboardRecentActivity.value = dashboard.recentActivity
-
-        // 请求成功，更新系统状态为运行中
-        systemStatus.value = 'running'
-      } catch (error) {
-        // 请求失败，更新系统状态为错误
-        systemStatus.value = 'error'
-        console.warn('自动刷新失败:', error)
-      }
-    }
-  }, AUTO_REFRESH_INTERVAL)
+  channelStore.startAutoRefresh()
 }
 
 // 停止自动刷新定时器
 const stopAutoRefresh = () => {
-  if (autoRefreshTimer) {
-    clearInterval(autoRefreshTimer)
-    autoRefreshTimer = null
-  }
+  channelStore.stopAutoRefresh()
 }
 
 // 监听 Tab 切换，刷新对应数据
-watch(activeTab, async () => {
+watch(() => channelStore.activeTab, async () => {
   if (isAuthenticated.value) {
-    // 使用 dashboard 接口刷新所有数据
     try {
-      const dashboard = await api.getChannelDashboard(activeTab.value)
-      if (activeTab.value === 'messages') {
-        channelsData.value = {
-          channels: mergeChannelsWithLocalData(dashboard.channels, channelsData.value.channels),
-          current: channelsData.value.current, // 保留当前选中状态
-          loadBalance: dashboard.loadBalance
-        }
-      } else if (activeTab.value === 'responses') {
-        responsesChannelsData.value = {
-          channels: mergeChannelsWithLocalData(dashboard.channels, responsesChannelsData.value.channels),
-          current: responsesChannelsData.value.current, // 保留当前选中状态
-          loadBalance: dashboard.loadBalance
-        }
-      } else {
-        geminiChannelsData.value = {
-          channels: mergeChannelsWithLocalData(dashboard.channels, geminiChannelsData.value.channels),
-          current: geminiChannelsData.value.current, // 保留当前选中状态
-          loadBalance: dashboard.loadBalance
-        }
-      }
-      dashboardMetrics.value = dashboard.metrics
-      dashboardStats.value = dashboard.stats
-      dashboardRecentActivity.value = dashboard.recentActivity
+      await channelStore.refreshChannels()
     } catch (error) {
       console.error('切换 Tab 刷新失败:', error)
     }
@@ -1182,12 +920,16 @@ watch(isAuthenticated, newValue => {
   }
 })
 
+// 监听自动刷新状态，更新 systemStatus
+watch(() => channelStore.lastRefreshSuccess, (success) => {
+  if (isAuthenticated.value) {
+    systemStatus.value = success ? 'running' : 'error'
+  }
+})
+
 // 在组件卸载时清除定时器
 onUnmounted(() => {
-  if (autoRefreshTimer) {
-    clearInterval(autoRefreshTimer)
-    autoRefreshTimer = null
-  }
+  channelStore.stopAutoRefresh()
 })
 </script>
 
