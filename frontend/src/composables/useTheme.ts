@@ -7,7 +7,7 @@ export const RETRO_THEME = {
 }
 
 export function useAppTheme() {
-  const vuetifyTheme = useVuetifyTheme()
+  const _vuetifyTheme = useVuetifyTheme()
 
   // 应用复古像素主题
   function applyRetroTheme() {

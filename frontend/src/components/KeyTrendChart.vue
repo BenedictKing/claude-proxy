@@ -304,7 +304,7 @@ const failureAnnotations = computed(() => {
 })
 
 // Computed: get all data points flattened
-const allDataPoints = computed(() => {
+const _allDataPoints = computed(() => {
   if (!historyData.value?.keys) return []
   return historyData.value.keys.flatMap(k => k.dataPoints || [])
 })
@@ -434,7 +434,7 @@ const buildChartSeries = (data: ChannelKeyMetricsHistoryResponse | null) => {
   const result: { name: string; data: { x: number; y: number }[] }[] = []
 
   data.keys.forEach((keyData, keyIndex) => {
-    const color = keyColors[keyIndex % keyColors.length]
+    const _color = keyColors[keyIndex % keyColors.length]
 
     if (mode === 'traffic') {
       // 单向模式：只显示请求数
@@ -520,7 +520,7 @@ const formatTooltipValue = (val: number, mode: ViewMode): string => {
 }
 
 // Helper: build custom tooltip for traffic mode (shows success/failure breakdown)
-const buildTrafficTooltip = ({ series, seriesIndex, dataPointIndex, w }: any): string => {
+const buildTrafficTooltip = ({ seriesIndex, dataPointIndex, w }: any): string => {
   if (!historyData.value?.keys) return ''
 
   const timestamp = w.globals.seriesX[seriesIndex][dataPointIndex]
@@ -621,7 +621,7 @@ const buildTrafficTooltip = ({ series, seriesIndex, dataPointIndex, w }: any): s
 }
 
 // Helper: get duration in milliseconds
-const getDurationMs = (duration: Duration): number => {
+const _getDurationMs = (duration: Duration): number => {
   switch (duration) {
     case '1h': return 60 * 60 * 1000
     case '6h': return 6 * 60 * 60 * 1000

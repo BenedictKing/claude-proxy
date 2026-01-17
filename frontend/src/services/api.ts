@@ -248,6 +248,7 @@ class ApiService {
     localStorage.removeItem('proxyAccessKey')
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async request(url: string, options: RequestInit = {}): Promise<any> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',

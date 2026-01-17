@@ -98,7 +98,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useTheme } from 'vuetify'
 import VueApexCharts from 'vue3-apexcharts'
 import type { ApexOptions } from 'apexcharts'
-import { api, type GlobalStatsHistoryResponse, type GlobalHistoryDataPoint, type GlobalStatsSummary } from '../services/api'
+import { api, type GlobalStatsHistoryResponse, type GlobalHistoryDataPoint as _GlobalHistoryDataPoint, type GlobalStatsSummary } from '../services/api'
 
 // Register apexchart component
 const apexchart = VueApexCharts

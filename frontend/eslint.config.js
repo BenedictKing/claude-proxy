@@ -48,6 +48,9 @@ export default [
         FormData: 'readonly',
         Blob: 'readonly',
         File: 'readonly',
+        Event: 'readonly',
+        KeyboardEvent: 'readonly',
+        MouseEvent: 'readonly',
         // Node.js 环境
         process: 'readonly',
         __dirname: 'readonly',

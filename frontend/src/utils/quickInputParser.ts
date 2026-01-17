@@ -182,7 +182,9 @@ const detectServiceTypeAndCleanUrl = (
         return { serviceType, cleanedUrl: result }
       }
     }
-  } catch {}
+  } catch {
+    // 忽略解析错误
+  }
   return { serviceType: null, cleanedUrl: url }
 }
 

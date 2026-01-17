@@ -417,6 +417,7 @@ const systemStatusText = computed(() => {
     case 'running': return '运行中'
     case 'error': return '连接失败'
     case 'connecting': return '连接中...'
+    default: return '未知状态'
   }
 })
 const systemStatusDesc = computed(() => {
@@ -424,6 +425,7 @@ const systemStatusDesc = computed(() => {
     case 'running': return '服务正常运行'
     case 'error': return '无法连接后端'
     case 'connecting': return '正在检测服务...'
+    default: return '状态未知'
   }
 })
 
@@ -455,6 +457,7 @@ const currentChannelsData = computed(() => {
     case 'messages': return channelsData.value
     case 'responses': return responsesChannelsData.value
     case 'gemini': return geminiChannelsData.value
+    default: return channelsData.value
   }
 })
 
@@ -503,7 +506,7 @@ const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'inf
   }, 3000)
 }
 
-const handleError = (error: unknown, defaultMessage: string) => {
+const _handleError = (error: unknown, defaultMessage: string) => {
   const message = error instanceof Error ? error.message : defaultMessage
   showToast(message, 'error')
   console.error(error)
@@ -686,7 +689,7 @@ const openAddChannelModal = () => {
   showAddChannelModal.value = true
 }
 
-const openAddKeyModal = (channelId: number) => {
+const _openAddKeyModal = (channelId: number) => {
   selectedChannelForKey.value = channelId
   newApiKey.value = ''
   showAddKeyModalRef.value = true
@@ -712,7 +715,7 @@ const addApiKey = async () => {
   }
 }
 
-const removeApiKey = async (channelId: number, apiKey: string) => {
+const _removeApiKey = async (channelId: number, apiKey: string) => {
   if (!confirm('确定要删除这个API密钥吗？')) return
 
   try {
@@ -778,7 +781,7 @@ const pingAllChannels = async () => {
   }
 }
 
-const updateLoadBalance = async (strategy: string) => {
+const _updateLoadBalance = async (strategy: string) => {
   try {
     if (activeTab.value === 'gemini') {
       await api.updateGeminiLoadBalance(strategy)
@@ -966,7 +969,7 @@ const handleAuthSubmit = async () => {
     if (import.meta.env.DEV) {
       console.info('✅ 认证成功 - 时间:', new Date().toISOString())
     }
-  } catch (error: any) {
+  } catch {
     // 认证失败
     authAttempts.value++
 

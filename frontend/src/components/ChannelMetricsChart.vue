@@ -81,8 +81,8 @@ const props = defineProps<{
   channelName: string   // 渠道名称（用于图例）
 }>()
 
-const emit = defineEmits<{
-  (e: 'close'): void
+const _emit = defineEmits<{
+  (_e: 'close'): void
 }>()
 
 const theme = useTheme()

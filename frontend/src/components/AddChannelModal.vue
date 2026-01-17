@@ -50,7 +50,7 @@
                       请输入一个有效的 URL (https://...)
                     </div>
                     <div v-else class="d-flex flex-column ga-2 mt-1">
-                      <div v-for="(url, index) in detectedBaseUrls" :key="url" class="base-url-item">
+                      <div v-for="url in detectedBaseUrls" :key="url" class="base-url-item">
                         <div class="text-caption text-success">{{ url }}</div>
                         <div class="text-caption text-medium-emphasis">预期请求: {{ getExpectedRequestUrl(url) }}</div>
                       </div>
@@ -507,8 +507,8 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useTheme } from 'vuetify'
 import type { Channel } from '../services/api'
 import {
-  isValidApiKey,
-  isValidUrl as isValidQuickInputUrl,
+  isValidApiKey as _isValidApiKey,
+  isValidUrl as _isValidQuickInputUrl,
   parseQuickInput as parseQuickInputUtil
 } from '../utils/quickInputParser'
 
@@ -606,7 +606,7 @@ const getDefaultServiceTypeValue = (): 'openai' | 'gemini' | 'claude' | 'respons
 }
 
 // 获取默认 Base URL
-const getDefaultBaseUrl = (): string => {
+const _getDefaultBaseUrl = (): string => {
   if (props.channelType === 'gemini') {
     return 'https://generativelanguage.googleapis.com'
   }
@@ -667,7 +667,7 @@ const generatedChannelName = computed(() => {
 })
 
 // 预期请求 URL（模拟后端逻辑）
-const expectedRequestUrl = computed(() => {
+const _expectedRequestUrl = computed(() => {
   if (!detectedBaseUrl.value) return ''
 
   let baseUrl = detectedBaseUrl.value
@@ -1351,8 +1351,9 @@ watch(
 )
 
 // ESC键监听
-const handleKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Escape' && props.show) {
+const handleKeydown = (event: Event) => {
+  const keyboardEvent = event as KeyboardEvent
+  if (keyboardEvent.key === 'Escape' && props.show) {
     handleCancel()
   }
 }

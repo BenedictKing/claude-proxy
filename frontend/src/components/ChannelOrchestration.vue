@@ -257,8 +257,8 @@
               </v-btn>
 
               <v-menu>
-                <template #activator="{ props }">
-                  <v-btn icon size="x-small" variant="text" v-bind="props">
+                <template #activator="{ props: menuProps }">
+                  <v-btn icon size="x-small" variant="text" v-bind="menuProps">
                     <v-icon size="small">mdi-dots-vertical</v-icon>
                   </v-btn>
                 </template>
@@ -392,8 +392,8 @@
             </v-btn>
 
             <v-menu>
-              <template #activator="{ props }">
-                <v-btn icon size="x-small" variant="text" v-bind="props">
+              <template #activator="{ props: menuProps }">
+                <v-btn icon size="x-small" variant="text" v-bind="menuProps">
                   <v-icon size="small">mdi-dots-vertical</v-icon>
                 </v-btn>
               </template>
@@ -455,12 +455,12 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'edit', channel: Channel): void
-  (e: 'delete', channelId: number): void
-  (e: 'ping', channelId: number): void
-  (e: 'refresh'): void
-  (e: 'error', message: string): void
-  (e: 'success', message: string): void
+  (_e: 'edit', _channel: Channel): void
+  (_e: 'delete', _channelId: number): void
+  (_e: 'ping', _channelId: number): void
+  (_e: 'refresh'): void
+  (_e: 'error', _message: string): void
+  (_e: 'success', _message: string): void
 }>()
 
 // 状态
@@ -753,7 +753,7 @@ const getActivityBars = (channelIndex: number): Array<{ x: number; y: number; wi
   if (!activity || !activity.segments || activity.segments.length === 0) return []
 
   // 使用 activityUpdateTick 触发响应式更新
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const _ = activityUpdateTick.value
 
   const segments = activity.segments
@@ -795,7 +795,7 @@ const getActivityPath = (channelIndex: number): string => {
   if (!activity || !activity.segments || activity.segments.length === 0) return ''
 
   // 使用 activityUpdateTick 触发响应式更新
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const _ = activityUpdateTick.value
 
   const segments = activity.segments
@@ -865,7 +865,7 @@ function catmullRomToPath(points: { x: number; y: number }[]): string {
 }
 
 // 生成平滑曲线填充区域路径
-const getActivityAreaPath = (channelIndex: number): string => {
+const _getActivityAreaPath = (channelIndex: number): string => {
   const linePath = getActivityPath(channelIndex)
   if (!linePath) return ''
 
@@ -879,7 +879,7 @@ const getActivityAreaPath = (channelIndex: number): string => {
 }
 
 // 获取渠道的活跃度渐变背景（已废弃，改用 SVG 曲线）
-const getActivityGradient = (channelIndex: number): string => {
+const _getActivityGradient = (channelIndex: number): string => {
   const activity = getChannelActivity(channelIndex)
   if (!activity || !activity.segments || activity.segments.length === 0) return 'transparent'
 
@@ -888,7 +888,7 @@ const getActivityGradient = (channelIndex: number): string => {
   if (!hasActivity) return 'transparent'
 
   // 使用 activityUpdateTick 触发响应式更新
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const _ = activityUpdateTick.value
 
   // 后端返回 150 段（每段 6 秒）
