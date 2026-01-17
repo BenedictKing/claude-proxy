@@ -284,6 +284,7 @@
           :channel-type="activeTab"
           :dashboard-metrics="dashboardMetrics"
           :dashboard-stats="dashboardStats"
+          :dashboard-recent-activity="dashboardRecentActivity"
           @edit="editChannel"
           @delete="deleteChannel"
           @ping="pingChannel"
@@ -392,6 +393,7 @@ const geminiChannelsData = ref<ChannelsResponse>({ channels: [], current: -1, lo
 // Dashboard 数据（合并的 metrics 和 stats）
 const dashboardMetrics = ref<ChannelMetrics[]>([])
 const dashboardStats = ref<ChannelDashboardResponse['stats'] | undefined>(undefined)
+const dashboardRecentActivity = ref<ChannelDashboardResponse['recentActivity']>(undefined)
 const showAddChannelModal = ref(false)
 const showAddKeyModalRef = ref(false)
 const editingChannel = ref<Channel | null>(null)
@@ -551,6 +553,7 @@ const refreshChannels = async () => {
       }
       dashboardMetrics.value = dashboard.metrics
       dashboardStats.value = dashboard.stats
+      dashboardRecentActivity.value = dashboard.recentActivity
       return
     }
 
@@ -574,6 +577,7 @@ const refreshChannels = async () => {
     // 同时更新 metrics 和 stats
     dashboardMetrics.value = dashboard.metrics
     dashboardStats.value = dashboard.stats
+    dashboardRecentActivity.value = dashboard.recentActivity
   } catch (error) {
     handleAuthError(error)
   }
@@ -1124,6 +1128,7 @@ const startAutoRefresh = () => {
         // 更新 metrics 和 stats
         dashboardMetrics.value = dashboard.metrics
         dashboardStats.value = dashboard.stats
+        dashboardRecentActivity.value = dashboard.recentActivity
 
         // 请求成功，更新系统状态为运行中
         systemStatus.value = 'running'
@@ -1171,6 +1176,7 @@ watch(activeTab, async () => {
       }
       dashboardMetrics.value = dashboard.metrics
       dashboardStats.value = dashboard.stats
+      dashboardRecentActivity.value = dashboard.recentActivity
     } catch (error) {
       console.error('切换 Tab 刷新失败:', error)
     }

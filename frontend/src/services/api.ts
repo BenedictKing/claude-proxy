@@ -111,6 +111,7 @@ export interface ChannelDashboardResponse {
     windowSize: number
     circuitRecoveryTime: string
   }
+  recentActivity?: ChannelRecentActivity[]  // 最近 15 分钟分段活跃度
 }
 
 export interface PingResult {
@@ -195,6 +196,25 @@ export interface GlobalStatsSummary {
 export interface GlobalStatsHistoryResponse {
   dataPoints: GlobalHistoryDataPoint[]
   summary: GlobalStatsSummary
+}
+
+// ============== 渠道实时活跃度类型 ==============
+
+// 活跃度分段数据（每 6 秒一段）
+export interface ActivitySegment {
+  requestCount: number
+  successCount: number
+  failureCount: number
+  inputTokens: number
+  outputTokens: number
+}
+
+// 渠道最近活跃度数据
+export interface ChannelRecentActivity {
+  channelIndex: number
+  segments: ActivitySegment[]  // 150 段，每段 6 秒，从旧到新（共 15 分钟）
+  rpm: number                  // 15分钟平均 RPM
+  tpm: number                  // 15分钟平均 TPM
 }
 
 class ApiService {

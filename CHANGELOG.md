@@ -4,6 +4,20 @@
 
 ---
 
+## [Unreleased]
+
+### 新增
+
+- **渠道实时活跃度可视化** - 在渠道列表中显示最近 15 分钟的活跃度数据
+  - 后端新增 `GetRecentActivityMultiURL()` 方法，按 **6 秒粒度**分段统计请求量、成功/失败数、Token 消耗（共 150 段）
+  - **支持多 URL 和多 Key 聚合**：自动聚合渠道所有故障转移 URL 和所有活跃 API Key 的数据，提供完整的渠道活跃度视图
+  - Dashboard API 返回 `recentActivity` 字段，包含每个渠道的 150 段活跃度数据
+  - 前端渠道行显示 RPM/TPM 指标，**背景波形柱状图**实时反映活跃度变化（整体颜色根据全局失败率着色：绿色=成功率≥80%，橙色=成功率≥50%，红色=成功率<50%）
+  - 柱状图每 2 秒自动更新，用户调用 API 后立即看到柱子"跳动"，提供直观的脉冲式活跃度展示
+  - 涉及文件：`backend-go/internal/metrics/channel_metrics.go`、`backend-go/internal/handlers/channel_metrics_handler.go`、`frontend/src/components/ChannelOrchestration.vue`、`frontend/src/services/api.ts`、`frontend/src/App.vue`
+
+---
+
 ## [v2.4.32] - 2026-01-14
 
 ### ✨ 新增

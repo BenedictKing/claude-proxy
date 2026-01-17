@@ -612,12 +612,19 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 			"circuitRecoveryTime": metricsManager.GetCircuitRecoveryTime().String(),
 		}
 
+		// 4. 构建 recentActivity 数据（最近 15 分钟分段活跃度）
+		recentActivity := make([]*metrics.ChannelRecentActivity, len(upstreams))
+		for i, upstream := range upstreams {
+			recentActivity[i] = metricsManager.GetRecentActivityMultiURL(i, upstream.GetAllBaseURLs(), upstream.APIKeys)
+		}
+
 		// 返回合并数据
 		c.JSON(200, gin.H{
-			"channels":    channels,
-			"loadBalance": loadBalance,
-			"metrics":     metricsResult,
-			"stats":       stats,
+			"channels":       channels,
+			"loadBalance":    loadBalance,
+			"metrics":        metricsResult,
+			"stats":          stats,
+			"recentActivity": recentActivity,
 		})
 	}
 }

@@ -2068,3 +2068,120 @@ func CalculateTodayDuration() time.Duration {
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	return now.Sub(startOfDay)
 }
+
+// ============ 渠道实时活跃度数据（用于渐变背景显示）============
+
+// ActivitySegment 活跃度分段数据（每 6 秒一段）
+type ActivitySegment struct {
+	RequestCount int64 `json:"requestCount"`
+	SuccessCount int64 `json:"successCount"`
+	FailureCount int64 `json:"failureCount"`
+	InputTokens  int64 `json:"inputTokens"`
+	OutputTokens int64 `json:"outputTokens"`
+}
+
+// ChannelRecentActivity 渠道最近活跃度数据
+type ChannelRecentActivity struct {
+	ChannelIndex int               `json:"channelIndex"`
+	Segments     []ActivitySegment `json:"segments"` // 150 段，每段 6 秒，从旧到新（共 15 分钟）
+	RPM          float64           `json:"rpm"`      // 15分钟平均 RPM
+	TPM          float64           `json:"tpm"`      // 15分钟平均 TPM
+}
+
+// GetRecentActivityMultiURL 获取渠道最近活跃度数据（支持多 URL 和多 Key 聚合）
+// 参数：
+//   - channelIndex: 渠道索引
+//   - baseURLs: 渠道的所有故障转移 URL（支持多个）
+//   - activeKeys: 渠道的所有活跃 API Key（支持多个）
+//
+// 返回：
+//   - 150 段活跃度数据（每段 6 秒，共 15 分钟）
+//   - 自动聚合所有 URL × Key 组合的请求数据
+//   - RPM/TPM 为 15 分钟平均值
+func (m *MetricsManager) GetRecentActivityMultiURL(channelIndex int, baseURLs []string, activeKeys []string) *ChannelRecentActivity {
+	// 150 段，每段 6 秒 = 900 秒 = 15 分钟
+	const numSegments = 150
+	const segmentDuration = 6 * time.Second
+
+	if len(baseURLs) == 0 || len(activeKeys) == 0 {
+		return &ChannelRecentActivity{
+			ChannelIndex: channelIndex,
+			Segments:     make([]ActivitySegment, numSegments),
+			RPM:          0,
+			TPM:          0,
+		}
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	now := time.Now()
+
+	// 时间边界对齐：将 endTime 向上对齐到下一个 segmentDuration 边界
+	// 这样每次请求的分段边界都是固定的，不会因为 now 的微小变化而导致数据跳动
+	// 例如：segmentDuration=6s，now=12:34:57，则 endTime=12:35:00（包含当前正在进行的段）
+	endTimeUnix := now.Unix()
+	segmentSeconds := int64(segmentDuration.Seconds())
+	alignedEndUnix := ((endTimeUnix / segmentSeconds) + 1) * segmentSeconds
+	endTime := time.Unix(alignedEndUnix, 0)
+	startTime := endTime.Add(-time.Duration(numSegments) * segmentDuration)
+
+	// 初始化分段数据
+	segments := make([]ActivitySegment, numSegments)
+
+	// 汇总统计
+	var totalRequests, totalInputTokens, totalOutputTokens int64
+
+	// 遍历所有 BaseURL 和 Key 的组合
+	for _, baseURL := range baseURLs {
+		for _, apiKey := range activeKeys {
+			metricsKey := generateMetricsKey(baseURL, apiKey)
+			metrics, exists := m.keyMetrics[metricsKey]
+			if !exists {
+				continue
+			}
+
+			// 遍历该 Key 的请求历史，放入对应分段
+			for _, record := range metrics.requestHistory {
+				// 检查是否在 [startTime, endTime) 范围内
+				if record.Timestamp.Before(startTime) || !record.Timestamp.Before(endTime) {
+					continue
+				}
+
+				// 计算属于哪个分段
+				offset := int(record.Timestamp.Sub(startTime) / segmentDuration)
+				if offset < 0 || offset >= numSegments {
+					continue
+				}
+
+				seg := &segments[offset]
+				seg.RequestCount++
+				if record.Success {
+					seg.SuccessCount++
+				} else {
+					seg.FailureCount++
+				}
+				seg.InputTokens += record.InputTokens
+				seg.OutputTokens += record.OutputTokens
+
+				// 累加汇总
+				totalRequests++
+				totalInputTokens += record.InputTokens
+				totalOutputTokens += record.OutputTokens
+			}
+		}
+	}
+
+	// 计算 RPM 和 TPM（基于实际窗口时长）
+	// TPM 只计算输出 tokens（包含思考），不包含输入 tokens 和缓存 tokens
+	windowMinutes := float64(numSegments) * segmentDuration.Minutes()
+	rpm := float64(totalRequests) / windowMinutes
+	tpm := float64(totalOutputTokens) / windowMinutes
+
+	return &ChannelRecentActivity{
+		ChannelIndex: channelIndex,
+		Segments:     segments,
+		RPM:          rpm,
+		TPM:          tpm,
+	}
+}
