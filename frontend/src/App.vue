@@ -71,17 +71,17 @@
       <!-- 自定义标题容器 - 替代 v-app-bar-title -->
       <div class="header-title">
         <div :class="$vuetify.display.mobile ? 'text-body-2' : 'text-h6'" class="font-weight-bold d-flex align-center">
-          <span class="api-type-text" :class="{ active: channelStore.activeTab === 'messages' }" @click="channelStore.activeTab = 'messages'">
+          <router-link to="/channels/messages" class="api-type-text" :class="{ active: channelStore.activeTab === 'messages' }">
             Claude
-          </span>
+          </router-link>
           <span class="api-type-text separator">/</span>
-          <span class="api-type-text" :class="{ active: channelStore.activeTab === 'responses' }" @click="channelStore.activeTab = 'responses'">
+          <router-link to="/channels/responses" class="api-type-text" :class="{ active: channelStore.activeTab === 'responses' }">
             Codex
-          </span>
+          </router-link>
           <span class="api-type-text separator">/</span>
-          <span class="api-type-text" :class="{ active: channelStore.activeTab === 'gemini' }" @click="channelStore.activeTab = 'gemini'">
+          <router-link to="/channels/gemini" class="api-type-text" :class="{ active: channelStore.activeTab === 'gemini' }">
             Gemini
-          </span>
+          </router-link>
           <span class="brand-text d-none d-sm-inline">API Proxy</span>
         </div>
       </div>
@@ -276,16 +276,7 @@
         </div>
 
         <!-- 渠道编排（高密度列表模式） -->
-        <ChannelOrchestration
-          v-if="channelStore.currentChannelsData.channels?.length"
-          ref="channelOrchestrationRef"
-          :channels="channelStore.currentChannelsData.channels"
-          :current-channel-index="channelStore.currentChannelsData.current ?? 0"
-          :channel-type="channelStore.activeTab"
-          :dashboard-metrics="channelStore.dashboardMetrics"
-          :dashboard-stats="channelStore.dashboardStats"
-          :dashboard-recent-activity="channelStore.dashboardRecentActivity"
-          class="mb-6"
+        <router-view
           @edit="editChannel"
           @delete="deleteChannel"
           @ping="pingChannel"
@@ -293,20 +284,6 @@
           @error="showErrorToast"
           @success="showSuccessToast"
         />
-
-        <!-- 空状态 -->
-        <v-card v-if="!channelStore.currentChannelsData.channels?.length" elevation="2" class="text-center pa-12" rounded="lg">
-          <v-avatar size="120" color="primary" class="mb-6">
-            <v-icon size="60" color="white">mdi-rocket-launch</v-icon>
-          </v-avatar>
-          <div class="text-h4 mb-4 font-weight-bold">暂无渠道配置</div>
-          <div class="text-subtitle-1 text-medium-emphasis mb-8">
-            还没有配置任何API渠道，请添加第一个渠道来开始使用代理服务
-          </div>
-          <v-btn color="primary" size="x-large" prepend-icon="mdi-plus" variant="elevated" @click="openAddChannelModal">
-            添加第一个渠道
-          </v-btn>
-        </v-card>
       </v-container>
     </v-main>
 
@@ -365,7 +342,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useTheme } from 'vuetify'
-import { api, fetchHealth, type Channel } from './services/api'
+import { api, fetchHealth, ApiError, type Channel } from './services/api'
 import { versionService } from './services/version'
 import { useAuthStore } from './stores/auth'
 import { useChannelStore } from './stores/channel'
@@ -373,7 +350,6 @@ import { usePreferencesStore } from './stores/preferences'
 import { useDialogStore } from './stores/dialog'
 import { useSystemStore } from './stores/system'
 import AddChannelModal from './components/AddChannelModal.vue'
-import ChannelOrchestration from './components/ChannelOrchestration.vue'
 import GlobalStatsChart from './components/GlobalStatsChart.vue'
 import { useAppTheme } from './composables/useTheme'
 
@@ -397,9 +373,6 @@ const dialogStore = useDialogStore()
 
 // 系统状态 Store
 const systemStore = useSystemStore()
-
-// 渠道编排组件引用
-const channelOrchestrationRef = ref<InstanceType<typeof ChannelOrchestration> | null>(null)
 
 // 对话框状态已迁移到 DialogStore
 
@@ -662,16 +635,19 @@ const autoAuthenticate = async () => {
     // 密钥有效，认证成功
     authStore.setAuthError('')
     return true
-  } catch (error: any) {
-    // 密钥无效或过期
-    console.warn('自动认证失败:', error.message)
+  } catch (error) {
+    // 仅在明确 401 时视为密钥无效；其他错误（网络/5xx）不应清除密钥
+    if (error instanceof ApiError && error.status === 401) {
+      console.warn('自动认证失败: 认证失败(401)')
+      authStore.clearAuth()
+      authStore.setAuthError('保存的访问密钥已失效，请重新输入')
+      return false
+    }
 
-    // 清除无效的密钥
-    authStore.clearAuth()
-
-    // 显示登录对话框，提示用户重新输入
-    authStore.setAuthError('保存的访问密钥已失效，请重新输入')
-    return false
+    console.warn('自动认证暂时失败:', error)
+    showToast(`无法验证访问密钥: ${error instanceof Error ? error.message : '未知错误'}`, 'warning')
+    // 非 401：保留密钥，继续尝试连接后端（后续刷新会更新系统状态）
+    return true
   } finally {
     authStore.setAutoAuthenticating(false)
     authStore.setInitialized(true)
@@ -682,8 +658,6 @@ const autoAuthenticate = async () => {
 const setAuthKey = (key: string) => {
   authStore.setApiKey(key)
   authStore.setAuthError('')
-  // 重新加载数据
-  refreshChannels()
 }
 
 // 处理认证提交
@@ -723,22 +697,27 @@ const handleAuthSubmit = async () => {
     if (import.meta.env.DEV) {
       console.info('✅ 认证成功 - 时间:', new Date().toISOString())
     }
-  } catch {
-    // 认证失败
-    authStore.incrementAuthAttempts()
+  } catch (error) {
+    // 仅在明确 401 时计入认证失败；网络/5xx 不计入失败次数，也不清除已保存密钥
+    if (error instanceof ApiError && error.status === 401) {
+      authStore.incrementAuthAttempts()
 
-    // 记录认证失败(前端日志)
-    console.warn('🔒 认证失败 - 尝试次数:', authStore.authAttempts, '时间:', new Date().toISOString())
+      // 记录认证失败(前端日志)
+      console.warn('🔒 认证失败 - 尝试次数:', authStore.authAttempts, '时间:', new Date().toISOString())
 
-    // 如果尝试次数过多，锁定5分钟
-    if (authStore.authAttempts >= MAX_AUTH_ATTEMPTS) {
-      authStore.setAuthLockout(new Date(Date.now() + 5 * 60 * 1000))
-      authStore.setAuthError('认证尝试次数过多，请在5分钟后重试')
-    } else {
-      authStore.setAuthError(`访问密钥验证失败 (剩余尝试次数: ${MAX_AUTH_ATTEMPTS - authStore.authAttempts})`)
+      // 如果尝试次数过多，锁定5分钟
+      if (authStore.authAttempts >= MAX_AUTH_ATTEMPTS) {
+        authStore.setAuthLockout(new Date(Date.now() + 5 * 60 * 1000))
+        authStore.setAuthError('认证尝试次数过多，请在5分钟后重试')
+      } else {
+        authStore.setAuthError(`访问密钥验证失败 (剩余尝试次数: ${MAX_AUTH_ATTEMPTS - authStore.authAttempts})`)
+      }
+
+      authStore.clearAuth()
+      return
     }
 
-    authStore.clearAuth()
+    showToast(`无法验证访问密钥: ${error instanceof Error ? error.message : '未知错误'}`, 'error')
   } finally {
     authStore.setAuthLoading(false)
   }
@@ -845,8 +824,8 @@ onMounted(async () => {
     await loadFuzzyModeStatus()
     // 启动自动刷新
     startAutoRefresh()
-    // 初始化成功，设置系统状态为运行中
-    systemStore.setSystemStatus('running')
+    // 初始化完成后根据最新刷新结果设置系统状态
+    systemStore.setSystemStatus(channelStore.lastRefreshSuccess ? 'running' : 'error')
   }
 })
 
@@ -970,6 +949,12 @@ onUnmounted(() => {
   transition: all 0.1s ease;
   padding: 4px 8px;
   position: relative;
+  text-decoration: none;
+  color: inherit;
+}
+
+a.api-type-text {
+  display: inline-block;
 }
 
 .api-type-text:not(.separator):hover {

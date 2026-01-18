@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { api, type Channel, type ChannelsResponse, type ChannelMetrics, type ChannelDashboardResponse } from '@/services/api'
 
 /**
@@ -15,7 +16,21 @@ export const useChannelStore = defineStore('channel', () => {
   // ===== 状态 =====
 
   // 当前选中的 API 类型
-  const activeTab = ref<'messages' | 'responses' | 'gemini'>('messages')
+  type ApiTab = 'messages' | 'responses' | 'gemini'
+  const activeTab = ref<ApiTab>('messages')
+
+  // 路由同步：从路由读取当前类型
+  const router = useRouter()
+  const currentChannelType = computed(() => {
+    const route = router.currentRoute.value
+    const type = route.params.type as ApiTab
+    return (type === 'messages' || type === 'responses' || type === 'gemini') ? type : 'messages'
+  })
+
+  // 监听路由变化，同步 activeTab（确保兼容性）
+  watch(currentChannelType, (newType) => {
+    activeTab.value = newType
+  }, { immediate: true })
 
   // 三种 API 类型的渠道数据
   const channelsData = ref<ChannelsResponse>({
@@ -47,9 +62,14 @@ export const useChannelStore = defineStore('channel', () => {
   // 最后一次刷新状态（用于 systemStatus 更新）
   const lastRefreshSuccess = ref(true)
 
-  // 自动刷新定时器
-  let autoRefreshTimer: ReturnType<typeof setInterval> | null = null
+  // 自动刷新定时器（串行 setTimeout，避免重入）
+  let autoRefreshTimer: ReturnType<typeof setTimeout> | null = null
+  let autoRefreshRunning = false
   const AUTO_REFRESH_INTERVAL = 2000 // 2秒
+
+  // 刷新并发控制：同一时间只允许一个 refresh 在跑；期间再次调用会被合并成一次后续刷新
+  let refreshLoopPromise: Promise<void> | null = null
+  let refreshRequested = false
 
   // ===== 计算属性 =====
 
@@ -67,7 +87,7 @@ export const useChannelStore = defineStore('channel', () => {
   const activeChannelCount = computed(() => {
     const data = currentChannelsData.value
     if (!data.channels) return 0
-    return data.channels.filter(ch => ch.status === 'active').length
+    return data.channels.filter(ch => ch.status === 'active' || ch.status === undefined || ch.status === '').length
   })
 
   // 参与故障转移的渠道数（active + suspended）
@@ -106,41 +126,68 @@ export const useChannelStore = defineStore('channel', () => {
    * 刷新渠道数据
    */
   async function refreshChannels() {
-    // Gemini 使用专用的 dashboard API（降级实现）
-    if (activeTab.value === 'gemini') {
-      const dashboard = await api.getGeminiChannelDashboard()
-      geminiChannelsData.value = {
-        channels: mergeChannelsWithLocalData(dashboard.channels, geminiChannelsData.value.channels),
-        current: geminiChannelsData.value.current,
-        loadBalance: dashboard.loadBalance
+    refreshRequested = true
+    if (refreshLoopPromise) return refreshLoopPromise
+
+    const doRefresh = async (tab: ApiTab) => {
+      try {
+        // Gemini 使用专用的 dashboard API（降级实现）
+        if (tab === 'gemini') {
+          const dashboard = await api.getGeminiChannelDashboard()
+          geminiChannelsData.value = {
+            channels: mergeChannelsWithLocalData(dashboard.channels, geminiChannelsData.value.channels),
+            current: geminiChannelsData.value.current,
+            loadBalance: dashboard.loadBalance
+          }
+          dashboardMetrics.value = dashboard.metrics
+          dashboardStats.value = dashboard.stats
+          dashboardRecentActivity.value = dashboard.recentActivity
+          lastRefreshSuccess.value = true
+          return
+        }
+
+        // Messages / Responses 使用合并的 dashboard 接口
+        const dashboard = await api.getChannelDashboard(tab)
+
+        if (tab === 'messages') {
+          channelsData.value = {
+            channels: mergeChannelsWithLocalData(dashboard.channels, channelsData.value.channels),
+            current: channelsData.value.current, // 保留当前选中状态
+            loadBalance: dashboard.loadBalance
+          }
+        } else {
+          responsesChannelsData.value = {
+            channels: mergeChannelsWithLocalData(dashboard.channels, responsesChannelsData.value.channels),
+            current: responsesChannelsData.value.current, // 保留当前选中状态
+            loadBalance: dashboard.loadBalance
+          }
+        }
+
+        // 同时更新 metrics 和 stats
+        dashboardMetrics.value = dashboard.metrics
+        dashboardStats.value = dashboard.stats
+        dashboardRecentActivity.value = dashboard.recentActivity
+
+        lastRefreshSuccess.value = true
+      } catch (error) {
+        lastRefreshSuccess.value = false
+        throw error
       }
-      dashboardMetrics.value = dashboard.metrics
-      dashboardStats.value = dashboard.stats
-      dashboardRecentActivity.value = dashboard.recentActivity
-      return
     }
 
-    // Messages / Responses 使用合并的 dashboard 接口
-    const dashboard = await api.getChannelDashboard(activeTab.value)
-
-    if (activeTab.value === 'messages') {
-      channelsData.value = {
-        channels: mergeChannelsWithLocalData(dashboard.channels, channelsData.value.channels),
-        current: channelsData.value.current, // 保留当前选中状态
-        loadBalance: dashboard.loadBalance
+    refreshLoopPromise = (async () => {
+      try {
+        while (refreshRequested) {
+          refreshRequested = false
+          const tab = activeTab.value
+          await doRefresh(tab)
+        }
+      } finally {
+        refreshLoopPromise = null
       }
-    } else {
-      responsesChannelsData.value = {
-        channels: mergeChannelsWithLocalData(dashboard.channels, responsesChannelsData.value.channels),
-        current: responsesChannelsData.value.current, // 保留当前选中状态
-        loadBalance: dashboard.loadBalance
-      }
-    }
+    })()
 
-    // 同时更新 metrics 和 stats
-    dashboardMetrics.value = dashboard.metrics
-    dashboardStats.value = dashboard.stats
-    dashboardRecentActivity.value = dashboard.recentActivity
+    return refreshLoopPromise
   }
 
   /**
@@ -257,7 +304,6 @@ export const useChannelStore = defineStore('channel', () => {
     if (channel) {
       channel.latency = result.latency
       channel.latencyTestTime = Date.now()  // 记录测试时间，用于 5 分钟后清除
-      channel.status = result.success ? 'healthy' : 'error'
     }
 
     return { success: true }
@@ -285,7 +331,6 @@ export const useChannelStore = defineStore('channel', () => {
         if (channel) {
           channel.latency = result.latency
           channel.latencyTestTime = now  // 记录测试时间，用于 5 分钟后清除
-          channel.status = result.status as 'healthy' | 'error'
         }
       })
 
@@ -316,18 +361,26 @@ export const useChannelStore = defineStore('channel', () => {
    * 启动自动刷新定时器
    */
   function startAutoRefresh() {
-    if (autoRefreshTimer) {
-      clearInterval(autoRefreshTimer)
-    }
+    stopAutoRefresh()
+    autoRefreshRunning = true
 
-    autoRefreshTimer = setInterval(async () => {
+    const tick = async () => {
+      if (!autoRefreshRunning) return
       try {
         await refreshChannels()
-        lastRefreshSuccess.value = true
       } catch (error) {
-        lastRefreshSuccess.value = false
         console.warn('自动刷新失败:', error)
+      } finally {
+        if (autoRefreshRunning) {
+          autoRefreshTimer = setTimeout(() => {
+            void tick()
+          }, AUTO_REFRESH_INTERVAL)
+        }
       }
+    }
+
+    autoRefreshTimer = setTimeout(() => {
+      void tick()
     }, AUTO_REFRESH_INTERVAL)
   }
 
@@ -335,10 +388,10 @@ export const useChannelStore = defineStore('channel', () => {
    * 停止自动刷新定时器
    */
   function stopAutoRefresh() {
-    if (autoRefreshTimer) {
-      clearInterval(autoRefreshTimer)
-      autoRefreshTimer = null
-    }
+    autoRefreshRunning = false
+    if (!autoRefreshTimer) return
+    clearTimeout(autoRefreshTimer)
+    autoRefreshTimer = null
   }
 
   /**
