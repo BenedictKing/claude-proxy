@@ -1,10 +1,9 @@
 ---
 name: codex-review
 description: 调用 codex 命令行进行代码审核，自动收集当前文件修改和任务状态一并发送；工作区干净时自动审核最新提交 (user)
-version: 1.6.0
+version: 2.0.0
 author: https://github.com/BenedictKing/claude-proxy/
-allowed-tools: Bash, Read, Glob, Write, Edit
-context: fork
+allowed-tools: Bash, Read, Glob, Write, Edit, Task
 ---
 
 # Codex 代码审核技能
@@ -24,56 +23,12 @@ context: fork
 
 **"代码变更 + 意图描述"同时作为输入，是提升 AI 代码审查质量的最高效手段。**
 
-## Codex Review 命令完整用法
+## 技能架构
 
-### 基本语法
+本技能分为两个阶段：
 
-```bash
-codex review [OPTIONS] [PROMPT]
-```
-
-**注意**: `[PROMPT]` 参数不能与 `--uncommitted`、`--base`、`--commit` 同时使用。
-
-### 常用选项
-
-| 选项                       | 说明                                                        | 示例                                                         |
-| -------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------ |
-| `--uncommitted`            | 审核工作区所有未提交的更改（staged + unstaged + untracked） | `codex review --uncommitted`                                 |
-| `--base <BRANCH>`          | 审核相对于指定基准分支的更改                                | `codex review --base main`                                   |
-| `--commit <SHA>`           | 审核指定提交引入的更改                                      | `codex review --commit HEAD`                                 |
-| `--title <TITLE>`          | 可选的提交标题，显示在审核摘要中                            | `codex review --uncommitted --title "feat: add JSON parser"` |
-| `-c, --config <key=value>` | 覆盖配置值                                                  | `codex review --uncommitted -c model="o3"`                   |
-
-### 使用场景示例
-
-```bash
-# 1. 审核所有未提交的更改（最常用）
-codex review --uncommitted
-
-# 2. 审核最新提交
-codex review --commit HEAD
-
-# 3. 审核指定提交
-codex review --commit abc1234
-
-# 4. 审核当前分支相对于 main 的所有更改
-codex review --base main
-
-# 5. 审核当前分支相对于 develop 的更改
-codex review --base develop
-
-# 6. 带标题的审核（标题会显示在审核摘要中）
-codex review --uncommitted --title "fix: resolve JSON parsing errors"
-
-# 7. 使用特定模型进行审核
-codex review --uncommitted -c model="o3"
-```
-
-### 重要限制
-
-- `--uncommitted`、`--base`、`--commit` 三者互斥，不能同时使用
-- `[PROMPT]` 参数与上述三个选项互斥
-- 必须在 git 仓库目录下执行
+1. **准备阶段**（当前上下文）：检查工作区、更新 CHANGELOG、执行 Lint
+2. **审核阶段**（独立上下文）：调用 Task 工具执行 codex review（使用 context: fork 减少上下文浪费）
 
 ## 执行步骤
 
@@ -86,7 +41,7 @@ git diff --name-only && git status --short
 **根据输出决定审核模式：**
 
 - **有未提交变更** → 继续执行步骤 1-4（常规流程）
-- **工作区干净** → 直接审核最新提交：`codex review --commit HEAD`
+- **工作区干净** → 直接调用 codex-runner 执行：`codex review --commit HEAD`
 
 ### 1. 【强制】检查 CHANGELOG 是否已更新
 
@@ -144,9 +99,9 @@ npm run lint:fix
 black . && ruff check --fix .
 ```
 
-### 3. 调用 codex review（根据难度自适应配置）
+### 3. 评估任务难度并调用 codex-runner
 
-**首先评估任务难度：**
+**统计变更规模：**
 
 ```bash
 # 统计变更文件数量和代码行数
@@ -155,39 +110,34 @@ git diff --stat | tail -1
 
 **难度评估标准：**
 
-| 难度级别 | 判断条件                                                                                               | 配置参数                       | 超时时间            |
-| -------- | ------------------------------------------------------------------------------------------------------ | ------------------------------ | ------------------- |
-| **困难** | 满足任一条件：<br>• 修改文件 ≥ 10 个<br>• 代码变更 ≥ 500 行<br>• 涉及核心架构/算法修改<br>• 跨模块重构 | `model_reasoning_effort=xhigh` | 30 分钟 (1800000ms) |
-| **一般** | 其他情况                                                                                               | `model_reasoning_effort=high`  | 10 分钟 (600000ms)  |
+**困难任务**（满足任一条件）：
+- 修改文件 ≥ 10 个
+- 代码变更 ≥ 500 行
+- 涉及核心架构/算法修改
+- 跨模块重构
+- 配置：`model_reasoning_effort=xhigh`，超时 30 分钟
 
-**执行命令：**
+**一般任务**（其他情况）：
+- 配置：`model_reasoning_effort=high`，超时 10 分钟
 
-```bash
-# 困难任务（深度推理）
-codex review --uncommitted --config model_reasoning_effort=xhigh
-# 超时时间：30 分钟
+**调用 codex-runner 子任务：**
 
-# 一般任务（标准推理）
-codex review --uncommitted --config model_reasoning_effort=high
-# 超时时间：10 分钟
+使用 Task 工具调用 codex-runner，传入以下参数：
+
 ```
+Task 参数:
+- subagent_type: Bash
+- description: "执行 codex review"
+- prompt: 根据难度选择对应命令
 
-**自动判断逻辑示例：**
+困难任务:
+  codex review --uncommitted --config model_reasoning_effort=xhigh
 
-```bash
-# 1. 获取变更统计
-STATS=$(git diff --stat | tail -1)
-FILES_CHANGED=$(echo "$STATS" | grep -oE '[0-9]+ files? changed' | grep -oE '[0-9]+')
-LINES_CHANGED=$(echo "$STATS" | grep -oE '[0-9]+ insertions?|[0-9]+ deletions?' | grep -oE '[0-9]+' | awk '{s+=$1} END {print s}')
+一般任务:
+  codex review --uncommitted --config model_reasoning_effort=high
 
-# 2. 判断难度
-if [ "$FILES_CHANGED" -ge 10 ] || [ "$LINES_CHANGED" -ge 500 ]; then
-    echo "检测到困难任务：$FILES_CHANGED 个文件，约 $LINES_CHANGED 行变更"
-    codex review --uncommitted --config model_reasoning_effort=xhigh
-else
-    echo "检测到一般任务：$FILES_CHANGED 个文件，约 $LINES_CHANGED 行变更"
-    codex review --uncommitted --config model_reasoning_effort=high
-fi
+工作区干净时:
+  codex review --commit HEAD --config model_reasoning_effort=high
 ```
 
 ### 4. 自我修正
@@ -199,10 +149,61 @@ fi
 
 ## 完整审核协议
 
-1. **[GATE] Check CHANGELOG** - 未更新则自动生成并写入
+1. **[GATE] Check CHANGELOG** - 未更新则自动生成并写入（利用当前上下文理解变更意图）
 2. **[PREP] Lint & Format** - go fmt / npm lint / black
-3. **[EXEC] codex review --uncommitted** - Codex 同时看到意图 + 实现
+3. **[EXEC] Task → codex review** - 调用 Task 工具执行 codex（独立上下文，减少浪费）
 4. **[FIX] Self-Correction** - 意图 ≠ 实现时修复代码或更新描述
+
+## Codex Review 命令参考
+
+### 基本语法
+
+```bash
+codex review [OPTIONS] [PROMPT]
+```
+
+**注意**: `[PROMPT]` 参数不能与 `--uncommitted`、`--base`、`--commit` 同时使用。
+
+### 常用选项
+
+| 选项                       | 说明                                                        | 示例                                                         |
+| -------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------ |
+| `--uncommitted`            | 审核工作区所有未提交的更改（staged + unstaged + untracked） | `codex review --uncommitted`                                 |
+| `--base <BRANCH>`          | 审核相对于指定基准分支的更改                                | `codex review --base main`                                   |
+| `--commit <SHA>`           | 审核指定提交引入的更改                                      | `codex review --commit HEAD`                                 |
+| `--title <TITLE>`          | 可选的提交标题，显示在审核摘要中                            | `codex review --uncommitted --title "feat: add JSON parser"` |
+| `-c, --config <key=value>` | 覆盖配置值                                                  | `codex review --uncommitted -c model="o3"`                   |
+
+### 使用场景示例
+
+```bash
+# 1. 审核所有未提交的更改（最常用）
+codex review --uncommitted
+
+# 2. 审核最新提交
+codex review --commit HEAD
+
+# 3. 审核指定提交
+codex review --commit abc1234
+
+# 4. 审核当前分支相对于 main 的所有更改
+codex review --base main
+
+# 5. 审核当前分支相对于 develop 的更改
+codex review --base develop
+
+# 6. 带标题的审核（标题会显示在审核摘要中）
+codex review --uncommitted --title "fix: resolve JSON parsing errors"
+
+# 7. 使用特定模型进行审核
+codex review --uncommitted -c model="o3"
+```
+
+### 重要限制
+
+- `--uncommitted`、`--base`、`--commit` 三者互斥，不能同时使用
+- `[PROMPT]` 参数与上述三个选项互斥
+- 必须在 git 仓库目录下执行
 
 ## 注意事项
 
@@ -213,3 +214,11 @@ fi
 - codex 命令需要已正确配置并登录
 - 大量修改时 codex 会自动分批处理
 - **CHANGELOG.md 必须在未提交变更中，否则 Codex 无法看到意图描述**
+
+## 设计说明
+
+**为什么分离上下文？**
+
+1. **CHANGELOG 更新需要当前上下文**：理解用户之前的对话、任务意图，才能生成准确的变更描述
+2. **Codex 审核不需要对话历史**：只需要代码变更和 CHANGELOG，独立运行更高效
+3. **减少 Token 消耗**：codex review 作为独立子任务，不携带无关的对话上下文

@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+### 优化
+
+- **修复 Dashboard 切换 Tab 时数据闪烁问题** - 将 Dashboard 数据改为按 API 类型独立缓存
+  - 重构 `channelStore`：将单一全局 `dashboardMetrics`/`dashboardStats`/`dashboardRecentActivity` 改为按 Tab（messages/responses/gemini）独立缓存的 `dashboardCache` 结构
+  - 新增 `currentDashboardMetrics`、`currentDashboardStats`、`currentDashboardRecentActivity` 计算属性，根据当前 Tab 返回对应缓存数据
+  - 切换 Tab 时直接显示该 Tab 的缓存数据，避免显示其他 Tab 的旧数据导致闪烁
+  - 涉及文件：`frontend/src/stores/channel.ts`、`frontend/src/views/ChannelsView.vue`
+
 ### 重构
 
 - **前端系统状态管理重构** - 将 App.vue 中的系统级状态迁移到 SystemStore
