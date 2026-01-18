@@ -1,6 +1,18 @@
 // API服务模块
 import { useAuthStore } from '@/stores/auth'
 
+export class ApiError extends Error {
+  readonly status: number
+  readonly details?: unknown
+
+  constructor(message: string, status: number, details?: unknown) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.details = details
+  }
+}
+
 // 从环境变量读取配置
 const getApiBase = () => {
   // 在生产环境中，API调用会直接请求当前域名
@@ -225,6 +237,16 @@ class ApiService {
     return authStore.apiKey
   }
 
+  private async parseResponseBody(response: Response): Promise<unknown> {
+    const text = await response.text()
+    if (!text) return null
+    try {
+      return JSON.parse(text)
+    } catch {
+      return text
+    }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async request(url: string, options: RequestInit = {}): Promise<any> {
     const headers: Record<string, string> = {
@@ -244,21 +266,32 @@ class ApiService {
     })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }))
+      const errorBody = await this.parseResponseBody(response)
+      const errorMessage =
+        (typeof errorBody === 'object' && errorBody && 'error' in errorBody && typeof (errorBody as { error?: unknown }).error === 'string'
+          ? (errorBody as { error: string }).error
+          : typeof errorBody === 'object' && errorBody && 'message' in errorBody && typeof (errorBody as { message?: unknown }).message === 'string'
+            ? (errorBody as { message: string }).message
+            : typeof errorBody === 'string'
+              ? errorBody
+              : null) || `Request failed (${response.status})`
 
       // 如果是401错误，清除认证信息并提示用户重新登录
       if (response.status === 401) {
         const authStore = useAuthStore()
         authStore.clearAuth()
         // 记录认证失败(前端日志)
-        console.warn('🔒 认证失败 - 时间:', new Date().toISOString())
-        throw new Error('认证失败，请重新输入访问密钥')
+        if (import.meta.env.DEV) {
+          console.warn('🔒 认证失败 - 时间:', new Date().toISOString())
+        }
+        throw new ApiError('认证失败，请重新输入访问密钥', response.status, errorBody)
       }
 
-      throw new Error(error.error || error.message || 'Request failed')
+      throw new ApiError(errorMessage, response.status, errorBody)
     }
 
-    return response.json()
+    if (response.status === 204) return null
+    return this.parseResponseBody(response)
   }
 
   async getChannels(): Promise<ChannelsResponse> {
