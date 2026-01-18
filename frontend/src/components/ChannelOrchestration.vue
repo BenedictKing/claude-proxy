@@ -49,11 +49,19 @@
             >
               <!-- SVG 活跃度波形柱状图背景 -->
               <svg class="activity-chart-bg" preserveAspectRatio="none" viewBox="0 0 150 100">
-                <!-- 渐变定义 -->
+                <!-- 渐变定义（为每个柱子单独定义渐变） -->
                 <defs>
-                  <linearGradient :id="`gradient-${element.index}`" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" :stop-color="getActivityColor(element.index)" stop-opacity="0.8" />
-                    <stop offset="100%" :stop-color="getActivityColor(element.index)" stop-opacity="0.3" />
+                  <linearGradient
+                    v-for="(bar, i) in getActivityBars(element.index)"
+                    :id="`gradient-${element.index}-${i}`"
+                    :key="`gradient-${element.index}-${i}`"
+                    x1="0%"
+                    y1="0%"
+                    x2="0%"
+                    y2="100%"
+                  >
+                    <stop offset="0%" :stop-color="bar.color" stop-opacity="0.8" />
+                    <stop offset="100%" :stop-color="bar.color" stop-opacity="0.3" />
                   </linearGradient>
                 </defs>
                 <!-- 波形柱状图 -->
@@ -63,7 +71,7 @@
                     :y="bar.y"
                     :width="bar.width"
                     :height="bar.height"
-                    :fill="`url(#gradient-${element.index})`"
+                    :fill="`url(#gradient-${element.index}-${i})`"
                     :rx="bar.radius"
                     :ry="bar.radius"
                     class="activity-bar"
@@ -716,77 +724,84 @@ const getChannelActivity = (channelIndex: number): ChannelRecentActivity | undef
   return activityMap.value.get(channelIndex)
 }
 
-// 缓存所有渠道的活跃度颜色（避免在模板中重复计算）
-const activityColorCache = computed(() => {
-  const cache = new Map<number, string>()
+// 缓存所有渠道的柱状图数据（避免在模板中重复计算）
+const activityBarsCache = computed(() => {
+  const cache = new Map<number, Array<{ x: number; y: number; width: number; height: number; radius: number; color: string }>>()
+
+  // 使用 activityUpdateTick 触发响应式更新
+  const _ = activityUpdateTick.value
+
   for (const [channelIndex, activity] of activityMap.value.entries()) {
-    if (!activity || !activity.segments) {
-      cache.set(channelIndex, 'transparent')
+    if (!activity || !activity.segments || activity.segments.length === 0) {
+      cache.set(channelIndex, [])
       continue
     }
 
-    // 计算总失败率
-    const totalRequests = activity.segments.reduce((sum, s) => sum + s.requestCount, 0)
-    const totalFailures = activity.segments.reduce((sum, s) => sum + s.failureCount, 0)
+    const segments = activity.segments
+    const numSegments = segments.length  // 150（后端已聚合为每 6 秒一段）
 
-    if (totalRequests === 0) {
-      cache.set(channelIndex, 'rgb(74, 222, 128)')  // 默认绿色
-      continue
+    // 每个段一个柱子
+    const barWidth = 150 / numSegments
+    const barGap = barWidth * 0.2  // 20% 间隙
+    const actualBarWidth = barWidth - barGap
+
+    // 使用历史最大值作为归一化基准（避免高流量段离开后柱子突然变高）
+    const maxRequests = maxRequestsHistory.value.get(channelIndex) ?? Math.max(...segments.map(s => s.requestCount), 1)
+
+    const bars: Array<{ x: number; y: number; width: number; height: number; radius: number; color: string }> = []
+
+    for (let i = 0; i < numSegments; i++) {
+      const segment = segments[i]
+      const requests = segment.requestCount
+
+      // 计算柱子高度（最小高度 2，避免完全消失）
+      const heightPercent = requests / maxRequests
+      const height = Math.max(heightPercent * 85, requests > 0 ? 2 : 0)
+      const y = 100 - height
+
+      // 根据该 6 秒段的成功率计算颜色（7 档分级：极端档位 + 整数档位）
+      let color = 'rgb(74, 222, 128)'  // 默认绿色（无请求或 100% 成功）
+
+      if (requests > 0) {
+        const successCount = requests - segment.failureCount
+        const successRate = (successCount / requests) * 100
+
+        if (successRate < 5) {
+          color = 'rgb(220, 38, 38)'       // 0-5%：深红色（极端故障）
+        } else if (successRate < 20) {
+          color = 'rgb(239, 68, 68)'       // 5-20%：红色（严重失败）
+        } else if (successRate < 40) {
+          color = 'rgb(249, 115, 22)'      // 20-40%：深橙色（高失败率）
+        } else if (successRate < 60) {
+          color = 'rgb(251, 146, 60)'      // 40-60%：橙色（中等失败率）
+        } else if (successRate < 80) {
+          color = 'rgb(250, 204, 21)'      // 60-80%：黄色（轻微失败）
+        } else if (successRate < 95) {
+          color = 'rgb(132, 204, 22)'      // 80-95%：黄绿色（良好）
+        } else {
+          color = 'rgb(34, 197, 94)'       // 95-100%：绿色（优秀）
+        }
+      }
+
+      bars.push({
+        x: i * barWidth + barGap / 2,
+        y,
+        width: actualBarWidth,
+        height,
+        radius: Math.min(actualBarWidth / 2, 1.5),  // 圆角半径
+        color
+      })
     }
 
-    const failureRatio = totalFailures / totalRequests
-    if (failureRatio >= 0.5) cache.set(channelIndex, 'rgb(239, 68, 68)')       // ≥50% 失败：红色
-    else if (failureRatio >= 0.2) cache.set(channelIndex, 'rgb(251, 146, 60)') // ≥20% 失败：橙色
-    else cache.set(channelIndex, 'rgb(34, 197, 94)')                            // <20% 失败：绿色
+    cache.set(channelIndex, bars)
   }
+
   return cache
 })
 
-// 获取活跃度曲线颜色（从缓存中读取）
-const getActivityColor = (channelIndex: number): string => {
-  return activityColorCache.value.get(channelIndex) ?? 'transparent'
-}
-
-// 生成波形柱状图数据（直接使用后端 150 段数据，不做二次聚合）
-const getActivityBars = (channelIndex: number): Array<{ x: number; y: number; width: number; height: number; radius: number }> => {
-  const activity = getChannelActivity(channelIndex)
-  if (!activity || !activity.segments || activity.segments.length === 0) return []
-
-  // 使用 activityUpdateTick 触发响应式更新
-   
-  const _ = activityUpdateTick.value
-
-  const segments = activity.segments
-  const numSegments = segments.length  // 150（后端已聚合为每 6 秒一段）
-
-  // 每个段一个柱子
-  const barWidth = 150 / numSegments
-  const barGap = barWidth * 0.2  // 20% 间隙
-  const actualBarWidth = barWidth - barGap
-
-  // 使用历史最大值作为归一化基准（避免高流量段离开后柱子突然变高）
-  const maxRequests = maxRequestsHistory.value.get(channelIndex) ?? Math.max(...segments.map(s => s.requestCount), 1)
-
-  const bars: Array<{ x: number; y: number; width: number; height: number; radius: number }> = []
-
-  for (let i = 0; i < numSegments; i++) {
-    const requests = segments[i].requestCount
-
-    // 计算柱子高度（最小高度 2，避免完全消失）
-    const heightPercent = requests / maxRequests
-    const height = Math.max(heightPercent * 85, requests > 0 ? 2 : 0)
-    const y = 100 - height
-
-    bars.push({
-      x: i * barWidth + barGap / 2,
-      y,
-      width: actualBarWidth,
-      height,
-      radius: Math.min(actualBarWidth / 2, 1.5)  // 圆角半径
-    })
-  }
-
-  return bars
+// 生成波形柱状图数据（从缓存中读取）
+const getActivityBars = (channelIndex: number): Array<{ x: number; y: number; width: number; height: number; radius: number; color: string }> => {
+  return activityBarsCache.value.get(channelIndex) ?? []
 }
 
 // 生成平滑曲线路径（使用移动平均 + Catmull-Rom 样条）

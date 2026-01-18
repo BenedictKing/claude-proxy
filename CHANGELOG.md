@@ -8,6 +8,22 @@
 
 ### 优化
 
+- **渠道活跃度图表颜色优化** - 状态条柱状图颜色改为显示每个 6 秒段的独立成功率
+  - 修改 SVG 渐变定义：为每个柱子单独定义渐变色（`gradient-${channelIndex}-${i}`）
+  - 重构 `getActivityBars` 函数：为每个 6 秒时间段计算独立的成功率并分配颜色
+  - 颜色规则（7 档分级）：
+    - 深红色（0-5%）：极端故障
+    - 红色（5-20%）：严重失败
+    - 深橙色（20-40%）：高失败率
+    - 橙色（40-60%）：中等失败率
+    - 黄色（60-80%）：轻微失败
+    - 黄绿色（80-95%）：良好
+    - 绿色（95-100%）：优秀
+  - 效果：用户可以更清晰地看到每个时间段的健康状况，颜色变化更细腻
+  - 性能优化：新增 `activityBarsCache` 计算属性缓存柱状图数据，避免重复计算
+  - 代码清理：删除未使用的 `activityColorCache` 和 `getActivityColor` 函数
+  - 涉及文件：`frontend/src/components/ChannelOrchestration.vue`
+
 - **修复 Dashboard 切换 Tab 时数据闪烁问题** - 将 Dashboard 数据改为按 API 类型独立缓存
   - 重构 `channelStore`：将单一全局 `dashboardMetrics`/`dashboardStats`/`dashboardRecentActivity` 改为按 Tab（messages/responses/gemini）独立缓存的 `dashboardCache` 结构
   - 新增 `currentDashboardMetrics`、`currentDashboardStats`、`currentDashboardRecentActivity` 计算属性，根据当前 Tab 返回对应缓存数据

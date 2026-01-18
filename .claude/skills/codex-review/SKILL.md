@@ -27,8 +27,8 @@ allowed-tools: Bash, Read, Glob, Write, Edit, Task
 
 本技能分为两个阶段：
 
-1. **准备阶段**（当前上下文）：检查工作区、更新 CHANGELOG、执行 Lint
-2. **审核阶段**（独立上下文）：调用 Task 工具执行 codex review（使用 context: fork 减少上下文浪费）
+1. **准备阶段**（当前上下文）：检查工作区、更新 CHANGELOG
+2. **审核阶段**（独立上下文）：调用 Task 工具执行 Lint + codex review（使用 context: fork 减少上下文浪费）
 
 ## 执行步骤
 
@@ -84,22 +84,7 @@ git diff --name-only | grep -E "(CHANGELOG|changelog)"
 6. 继续执行 lint 和 codex review
 ```
 
-### 2. 预处理：Lint First（减少噪音）
-
-在调用 Codex 前，先用静态分析工具扫一遍：
-
-```bash
-# Go 项目
-go fmt ./... && go vet ./...
-
-# Node 项目
-npm run lint:fix
-
-# Python 项目
-black . && ruff check --fix .
-```
-
-### 3. 评估任务难度并调用 codex-runner
+### 2. 评估任务难度并调用 codex-runner
 
 **统计变更规模：**
 
@@ -122,25 +107,31 @@ git diff --stat | tail -1
 
 **调用 codex-runner 子任务：**
 
-使用 Task 工具调用 codex-runner，传入以下参数：
+使用 Task 工具调用 codex-runner，传入完整命令（包括 Lint + codex review）：
 
 ```
 Task 参数:
 - subagent_type: Bash
-- description: "执行 codex review"
-- prompt: 根据难度选择对应命令
+- description: "执行 Lint 和 codex review"
+- prompt: 根据项目类型和难度选择对应命令
 
-困难任务:
-  codex review --uncommitted --config model_reasoning_effort=xhigh
+Go 项目 - 困难任务:
+  go fmt ./... && go vet ./... && codex review --uncommitted --config model_reasoning_effort=xhigh
 
-一般任务:
-  codex review --uncommitted --config model_reasoning_effort=high
+Go 项目 - 一般任务:
+  go fmt ./... && go vet ./... && codex review --uncommitted --config model_reasoning_effort=high
+
+Node 项目:
+  npm run lint:fix && codex review --uncommitted --config model_reasoning_effort=high
+
+Python 项目:
+  black . && ruff check --fix . && codex review --uncommitted --config model_reasoning_effort=high
 
 工作区干净时:
   codex review --commit HEAD --config model_reasoning_effort=high
 ```
 
-### 4. 自我修正
+### 3. 自我修正
 
 如果 Codex 发现 Changelog 描述与代码逻辑不一致：
 
@@ -150,9 +141,8 @@ Task 参数:
 ## 完整审核协议
 
 1. **[GATE] Check CHANGELOG** - 未更新则自动生成并写入（利用当前上下文理解变更意图）
-2. **[PREP] Lint & Format** - go fmt / npm lint / black
-3. **[EXEC] Task → codex review** - 调用 Task 工具执行 codex（独立上下文，减少浪费）
-4. **[FIX] Self-Correction** - 意图 ≠ 实现时修复代码或更新描述
+2. **[EXEC] Task → Lint + codex review** - 调用 Task 工具执行 Lint 和 codex（独立上下文，减少浪费）
+3. **[FIX] Self-Correction** - 意图 ≠ 实现时修复代码或更新描述
 
 ## Codex Review 命令参考
 
