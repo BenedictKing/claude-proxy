@@ -8,6 +8,19 @@
 
 ### 重构
 
+- **前端系统状态管理重构** - 将 App.vue 中的系统级状态迁移到 SystemStore
+  - 新增 `src/stores/system.ts` 系统状态 Store，统一管理系统运行状态、版本信息、Fuzzy 模式加载状态
+  - 重构 `src/App.vue`，移除本地系统状态变量（systemStatus、versionInfo、isCheckingVersion、fuzzyModeLoading、fuzzyModeLoadError），改用 SystemStore 统一管理
+  - 更新 `src/stores/index.ts`，导出 SystemStore
+  - 新增 2 个计算属性：systemStatusText、systemStatusDesc
+  - 新增 8 个状态管理方法：setSystemStatus、setVersionInfo、setCurrentVersion、setCheckingVersion、setFuzzyModeLoading、setFuzzyModeLoadError、resetSystemState
+  - 优势：
+    - 状态集中：所有系统级状态统一管理，避免分散在组件中
+    - 代码简化：App.vue 系统状态逻辑更清晰，减少本地状态管理
+    - 可复用性：其他组件可直接使用 SystemStore 的系统状态
+    - 易维护：系统状态变更集中在 Store 中，便于调试和扩展
+  - 涉及文件：`frontend/src/stores/system.ts`、`frontend/src/stores/index.ts`、`frontend/src/App.vue`
+
 - **前端对话框状态管理重构** - 将 App.vue 中的对话框状态迁移到 DialogStore
   - 新增 `src/stores/dialog.ts` 对话框状态 Store，统一管理添加/编辑渠道对话框和添加 API 密钥对话框
   - 重构 `src/App.vue`，移除本地对话框状态变量（showAddChannelModal、showAddKeyModalRef、editingChannel、selectedChannelForKey、newApiKey），改用 DialogStore 统一管理

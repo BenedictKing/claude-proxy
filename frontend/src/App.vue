@@ -90,37 +90,37 @@
 
       <!-- 版本信息 -->
       <div
-        v-if="versionInfo.currentVersion"
+        v-if="systemStore.versionInfo.currentVersion"
         class="version-badge"
         :class="{
-          'version-clickable': versionInfo.status === 'update-available' || versionInfo.status === 'latest',
-          'version-checking': versionInfo.status === 'checking',
-          'version-latest': versionInfo.status === 'latest',
-          'version-update': versionInfo.status === 'update-available'
+          'version-clickable': systemStore.versionInfo.status === 'update-available' || systemStore.versionInfo.status === 'latest',
+          'version-checking': systemStore.versionInfo.status === 'checking',
+          'version-latest': systemStore.versionInfo.status === 'latest',
+          'version-update': systemStore.versionInfo.status === 'update-available'
         }"
         @click="handleVersionClick"
       >
         <v-icon
-          v-if="versionInfo.status === 'checking'"
+          v-if="systemStore.versionInfo.status === 'checking'"
           size="14"
           class="mr-1"
         >mdi-clock-outline</v-icon>
         <v-icon
-          v-else-if="versionInfo.status === 'latest'"
+          v-else-if="systemStore.versionInfo.status === 'latest'"
           size="14"
           class="mr-1"
           color="success"
         >mdi-check-circle</v-icon>
         <v-icon
-          v-else-if="versionInfo.status === 'update-available'"
+          v-else-if="systemStore.versionInfo.status === 'update-available'"
           size="14"
           class="mr-1"
           color="warning"
         >mdi-alert</v-icon>
-        <span class="version-text">{{ versionInfo.currentVersion }}</span>
-        <template v-if="versionInfo.status === 'update-available' && versionInfo.latestVersion">
+        <span class="version-text">{{ systemStore.versionInfo.currentVersion }}</span>
+        <template v-if="systemStore.versionInfo.status === 'update-available' && systemStore.versionInfo.latestVersion">
           <span class="version-arrow mx-1">→</span>
-          <span class="version-latest-text">{{ versionInfo.latestVersion }}</span>
+          <span class="version-latest-text">{{ systemStore.versionInfo.latestVersion }}</span>
         </template>
       </div>
 
@@ -206,14 +206,14 @@
           </v-col>
 
           <v-col cols="6" sm="4">
-            <div class="stat-card" :class="systemStatus === 'running' ? 'stat-card-emerald' : 'stat-card-error'">
-              <div class="stat-card-icon" :class="{ 'pulse-animation': systemStatus === 'running' }">
-                <v-icon size="28">{{ systemStatus === 'running' ? 'mdi-heart-pulse' : 'mdi-alert-circle' }}</v-icon>
+            <div class="stat-card" :class="systemStore.systemStatus === 'running' ? 'stat-card-emerald' : 'stat-card-error'">
+              <div class="stat-card-icon" :class="{ 'pulse-animation': systemStore.systemStatus === 'running' }">
+                <v-icon size="28">{{ systemStore.systemStatus === 'running' ? 'mdi-heart-pulse' : 'mdi-alert-circle' }}</v-icon>
               </div>
               <div class="stat-card-content">
-                <div class="stat-card-value">{{ systemStatusText }}</div>
+                <div class="stat-card-value">{{ systemStore.systemStatusText }}</div>
                 <div class="stat-card-label">系统状态</div>
-                <div class="stat-card-desc">{{ systemStatusDesc }}</div>
+                <div class="stat-card-desc">{{ systemStore.systemStatusDesc }}</div>
               </div>
               <div class="stat-card-glow"></div>
             </div>
@@ -258,19 +258,19 @@
                   v-bind="props"
                   variant="tonal"
                   size="large"
-                  :loading="fuzzyModeLoading"
-                  :disabled="fuzzyModeLoadError"
-                  :color="fuzzyModeLoadError ? 'error' : (preferencesStore.fuzzyModeEnabled ? 'warning' : 'default')"
+                  :loading="systemStore.fuzzyModeLoading"
+                  :disabled="systemStore.fuzzyModeLoadError"
+                  :color="systemStore.fuzzyModeLoadError ? 'error' : (preferencesStore.fuzzyModeEnabled ? 'warning' : 'default')"
                   class="action-btn"
                   @click="toggleFuzzyMode"
                 >
                   <v-icon start size="20">
-                    {{ fuzzyModeLoadError ? 'mdi-alert-circle-outline' : (preferencesStore.fuzzyModeEnabled ? 'mdi-shield-refresh' : 'mdi-shield-off-outline') }}
+                    {{ systemStore.fuzzyModeLoadError ? 'mdi-alert-circle-outline' : (preferencesStore.fuzzyModeEnabled ? 'mdi-shield-refresh' : 'mdi-shield-off-outline') }}
                   </v-icon>
                   Fuzzy
                 </v-btn>
               </template>
-              <span>{{ fuzzyModeLoadError ? '加载失败，请刷新页面' : (preferencesStore.fuzzyModeEnabled ? 'Fuzzy 模式已启用：模糊处理错误，自动尝试所有渠道' : 'Fuzzy 模式已关闭：精确处理错误，透传上游响应') }}</span>
+              <span>{{ systemStore.fuzzyModeLoadError ? '加载失败，请刷新页面' : (preferencesStore.fuzzyModeEnabled ? 'Fuzzy 模式已启用：模糊处理错误，自动尝试所有渠道' : 'Fuzzy 模式已关闭：精确处理错误，透传上游响应') }}</span>
             </v-tooltip>
           </div>
         </div>
@@ -366,11 +366,12 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useTheme } from 'vuetify'
 import { api, fetchHealth, type Channel } from './services/api'
-import { versionService, type VersionInfo } from './services/version'
+import { versionService } from './services/version'
 import { useAuthStore } from './stores/auth'
 import { useChannelStore } from './stores/channel'
 import { usePreferencesStore } from './stores/preferences'
 import { useDialogStore } from './stores/dialog'
+import { useSystemStore } from './stores/system'
 import AddChannelModal from './components/AddChannelModal.vue'
 import ChannelOrchestration from './components/ChannelOrchestration.vue'
 import GlobalStatsChart from './components/GlobalStatsChart.vue'
@@ -394,6 +395,9 @@ const preferencesStore = usePreferencesStore()
 // 对话框 Store
 const dialogStore = useDialogStore()
 
+// 系统状态 Store
+const systemStore = useSystemStore()
+
 // 渠道编排组件引用
 const channelOrchestrationRef = ref<InstanceType<typeof ChannelOrchestration> | null>(null)
 
@@ -401,41 +405,7 @@ const channelOrchestrationRef = ref<InstanceType<typeof ChannelOrchestration> | 
 
 // 主题和偏好设置已迁移到 PreferencesStore
 
-// Fuzzy 模式加载状态（业务逻辑状态，不持久化）
-const fuzzyModeLoading = ref(false)
-const fuzzyModeLoadError = ref(false) // 加载失败标记
-
-// 系统连接状态
-type SystemStatus = 'running' | 'error' | 'connecting'
-const systemStatus = ref<SystemStatus>('connecting')
-const systemStatusText = computed(() => {
-  switch (systemStatus.value) {
-    case 'running': return '运行中'
-    case 'error': return '连接失败'
-    case 'connecting': return '连接中...'
-    default: return '未知状态'
-  }
-})
-const systemStatusDesc = computed(() => {
-  switch (systemStatus.value) {
-    case 'running': return '服务正常运行'
-    case 'error': return '无法连接后端'
-    case 'connecting': return '正在检测服务...'
-    default: return '状态未知'
-  }
-})
-
-// 版本信息
-const versionInfo = ref<VersionInfo>({
-  currentVersion: '',
-  latestVersion: null,
-  isLatest: false,
-  hasUpdate: false,
-  releaseUrl: null,
-  lastCheckTime: 0,
-  status: 'checking'
-})
-const isCheckingVersion = ref(false)
+// 系统状态已迁移到 SystemStore
 
 // Toast通知系统
 interface Toast {
@@ -606,24 +576,24 @@ const _updateLoadBalance = async (strategy: string) => {
 
 // Fuzzy 模式管理
 const loadFuzzyModeStatus = async () => {
-  fuzzyModeLoadError.value = false
+  systemStore.setFuzzyModeLoadError(false)
   try {
     const { fuzzyModeEnabled: enabled } = await api.getFuzzyMode()
     preferencesStore.setFuzzyMode(enabled)
   } catch (e) {
     console.error('Failed to load fuzzy mode status:', e)
-    fuzzyModeLoadError.value = true
+    systemStore.setFuzzyModeLoadError(true)
     // 加载失败时不使用默认值，保持 UI 显示未知状态
     showToast('加载 Fuzzy 模式状态失败，请刷新页面重试', 'warning')
   }
 }
 
 const toggleFuzzyMode = async () => {
-  if (fuzzyModeLoadError.value) {
+  if (systemStore.fuzzyModeLoadError) {
     showToast('Fuzzy 模式状态未知，请先刷新页面', 'warning')
     return
   }
-  fuzzyModeLoading.value = true
+  systemStore.setFuzzyModeLoading(true)
   try {
     await api.setFuzzyMode(!preferencesStore.fuzzyModeEnabled)
     preferencesStore.toggleFuzzyMode()
@@ -631,7 +601,7 @@ const toggleFuzzyMode = async () => {
   } catch (e) {
     showToast(`切换 Fuzzy 模式失败: ${e instanceof Error ? e.message : '未知错误'}`, 'error')
   } finally {
-    fuzzyModeLoading.value = false
+    systemStore.setFuzzyModeLoading(false)
   }
 }
 
@@ -793,9 +763,9 @@ const handleAuthError = (error: any) => {
 
 // 版本检查
 const checkVersion = async () => {
-  if (isCheckingVersion.value) return
+  if (systemStore.isCheckingVersion) return
 
-  isCheckingVersion.value = true
+  systemStore.setCheckingVersion(true)
   try {
     // 先获取当前版本
     const health = await fetchHealth()
@@ -803,29 +773,35 @@ const checkVersion = async () => {
 
     if (currentVersion) {
       versionService.setCurrentVersion(currentVersion)
-      versionInfo.value.currentVersion = currentVersion
+      systemStore.setCurrentVersion(currentVersion)
 
       // 检查 GitHub 最新版本
       const result = await versionService.checkForUpdates()
-      versionInfo.value = result
+      systemStore.setVersionInfo(result)
     } else {
-      versionInfo.value.status = 'error'
+      systemStore.setVersionInfo({
+        ...systemStore.versionInfo,
+        status: 'error',
+      })
     }
   } catch (error) {
     console.warn('Version check failed:', error)
-    versionInfo.value.status = 'error'
+    systemStore.setVersionInfo({
+      ...systemStore.versionInfo,
+      status: 'error',
+    })
   } finally {
-    isCheckingVersion.value = false
+    systemStore.setCheckingVersion(false)
   }
 }
 
 // 版本点击处理
 const handleVersionClick = () => {
   if (
-    (versionInfo.value.status === 'update-available' || versionInfo.value.status === 'latest') &&
-    versionInfo.value.releaseUrl
+    (systemStore.versionInfo.status === 'update-available' || systemStore.versionInfo.status === 'latest') &&
+    systemStore.versionInfo.releaseUrl
   ) {
-    window.open(versionInfo.value.releaseUrl, '_blank', 'noopener,noreferrer')
+    window.open(systemStore.versionInfo.releaseUrl, '_blank', 'noopener,noreferrer')
   }
 }
 
@@ -870,7 +846,7 @@ onMounted(async () => {
     // 启动自动刷新
     startAutoRefresh()
     // 初始化成功，设置系统状态为运行中
-    systemStatus.value = 'running'
+    systemStore.setSystemStatus('running')
   }
 })
 
@@ -907,7 +883,7 @@ watch(isAuthenticated, newValue => {
 // 监听自动刷新状态，更新 systemStatus
 watch(() => channelStore.lastRefreshSuccess, (success) => {
   if (isAuthenticated.value) {
-    systemStatus.value = success ? 'running' : 'error'
+    systemStore.setSystemStatus(success ? 'running' : 'error')
   }
 })
 
