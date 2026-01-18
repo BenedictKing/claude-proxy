@@ -8,6 +8,18 @@
 
 ### 重构
 
+- **前端偏好设置管理重构** - 将 App.vue 中的用户偏好设置迁移到 PreferencesStore
+  - 新增 `src/stores/preferences.ts` 偏好设置 Store，统一管理暗色模式、Fuzzy 模式、全局统计面板状态
+  - 重构 `src/App.vue`，移除本地偏好设置变量（darkModePreference、fuzzyModeEnabled、showGlobalStats），改用 PreferencesStore 统一管理
+  - 更新 `src/stores/index.ts`，导出 PreferencesStore
+  - 支持自动持久化到 localStorage（使用 pinia-plugin-persistedstate）
+  - 优势：
+    - 状态集中：所有用户偏好设置统一管理，避免分散在组件中
+    - 自动持久化：用户设置自动保存到本地存储，刷新页面后保持
+    - 代码简化：App.vue 偏好设置逻辑更清晰，减少本地状态管理
+    - 可复用性：其他组件可直接使用 PreferencesStore 的偏好设置
+  - 涉及文件：`frontend/src/stores/preferences.ts`、`frontend/src/stores/index.ts`、`frontend/src/App.vue`
+
 - **前端认证状态管理重构** - 将 App.vue 中的认证相关状态迁移到 AuthStore
   - 扩展 `src/stores/auth.ts`，新增认证 UI 状态管理（authError、authAttempts、authLockoutTime、isAutoAuthenticating、isInitialized、authLoading、authKeyInput）
   - 重构 `src/App.vue`，移除本地认证状态变量，改用 AuthStore 统一管理

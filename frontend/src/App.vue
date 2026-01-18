@@ -153,7 +153,7 @@
           <div
             class="global-stats-header d-flex align-center justify-space-between px-4 py-2"
             style="cursor: pointer;"
-            @click="showGlobalStats = !showGlobalStats"
+            @click="preferencesStore.toggleGlobalStats()"
           >
             <div class="d-flex align-center">
               <v-icon size="20" class="mr-2">mdi-chart-areaspline</v-icon>
@@ -162,11 +162,11 @@
               </span>
             </div>
             <v-btn icon size="small" variant="text">
-              <v-icon>{{ showGlobalStats ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+              <v-icon>{{ preferencesStore.showGlobalStats ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
             </v-btn>
           </div>
           <v-expand-transition>
-            <div v-if="showGlobalStats">
+            <div v-if="preferencesStore.showGlobalStats">
               <v-divider />
               <GlobalStatsChart :api-type="channelStore.activeTab" />
             </div>
@@ -260,17 +260,17 @@
                   size="large"
                   :loading="fuzzyModeLoading"
                   :disabled="fuzzyModeLoadError"
-                  :color="fuzzyModeLoadError ? 'error' : (fuzzyModeEnabled ? 'warning' : 'default')"
+                  :color="fuzzyModeLoadError ? 'error' : (preferencesStore.fuzzyModeEnabled ? 'warning' : 'default')"
                   class="action-btn"
                   @click="toggleFuzzyMode"
                 >
                   <v-icon start size="20">
-                    {{ fuzzyModeLoadError ? 'mdi-alert-circle-outline' : (fuzzyModeEnabled ? 'mdi-shield-refresh' : 'mdi-shield-off-outline') }}
+                    {{ fuzzyModeLoadError ? 'mdi-alert-circle-outline' : (preferencesStore.fuzzyModeEnabled ? 'mdi-shield-refresh' : 'mdi-shield-off-outline') }}
                   </v-icon>
                   Fuzzy
                 </v-btn>
               </template>
-              <span>{{ fuzzyModeLoadError ? '加载失败，请刷新页面' : (fuzzyModeEnabled ? 'Fuzzy 模式已启用：模糊处理错误，自动尝试所有渠道' : 'Fuzzy 模式已关闭：精确处理错误，透传上游响应') }}</span>
+              <span>{{ fuzzyModeLoadError ? '加载失败，请刷新页面' : (preferencesStore.fuzzyModeEnabled ? 'Fuzzy 模式已启用：模糊处理错误，自动尝试所有渠道' : 'Fuzzy 模式已关闭：精确处理错误，透传上游响应') }}</span>
             </v-tooltip>
           </div>
         </div>
@@ -369,6 +369,7 @@ import { api, fetchHealth, type Channel } from './services/api'
 import { versionService, type VersionInfo } from './services/version'
 import { useAuthStore } from './stores/auth'
 import { useChannelStore } from './stores/channel'
+import { usePreferencesStore } from './stores/preferences'
 import AddChannelModal from './components/AddChannelModal.vue'
 import ChannelOrchestration from './components/ChannelOrchestration.vue'
 import GlobalStatsChart from './components/GlobalStatsChart.vue'
@@ -386,6 +387,9 @@ const authStore = useAuthStore()
 // 渠道 Store
 const channelStore = useChannelStore()
 
+// 偏好设置 Store
+const preferencesStore = usePreferencesStore()
+
 // 渠道编排组件引用
 const channelOrchestrationRef = ref<InstanceType<typeof ChannelOrchestration> | null>(null)
 
@@ -396,14 +400,9 @@ const editingChannel = ref<Channel | null>(null)
 const selectedChannelForKey = ref<number>(-1)
 const newApiKey = ref('')
 
-// 主题和偏好设置
-const darkModePreference = ref<'light' | 'dark' | 'auto'>('auto')
+// 主题和偏好设置已迁移到 PreferencesStore
 
-// 全局统计面板状态
-const showGlobalStats = ref(false) // 顶部可折叠卡片（默认收起）
-
-// Fuzzy 模式状态
-const fuzzyModeEnabled = ref(true)
+// Fuzzy 模式加载状态（业务逻辑状态，不持久化）
 const fuzzyModeLoading = ref(false)
 const fuzzyModeLoadError = ref(false) // 加载失败标记
 
@@ -617,7 +616,7 @@ const loadFuzzyModeStatus = async () => {
   fuzzyModeLoadError.value = false
   try {
     const { fuzzyModeEnabled: enabled } = await api.getFuzzyMode()
-    fuzzyModeEnabled.value = enabled
+    preferencesStore.setFuzzyMode(enabled)
   } catch (e) {
     console.error('Failed to load fuzzy mode status:', e)
     fuzzyModeLoadError.value = true
@@ -633,9 +632,9 @@ const toggleFuzzyMode = async () => {
   }
   fuzzyModeLoading.value = true
   try {
-    await api.setFuzzyMode(!fuzzyModeEnabled.value)
-    fuzzyModeEnabled.value = !fuzzyModeEnabled.value
-    showToast(`Fuzzy 模式已${fuzzyModeEnabled.value ? '启用' : '关闭'}`, 'success')
+    await api.setFuzzyMode(!preferencesStore.fuzzyModeEnabled)
+    preferencesStore.toggleFuzzyMode()
+    showToast(`Fuzzy 模式已${preferencesStore.fuzzyModeEnabled ? '启用' : '关闭'}`, 'success')
   } catch (e) {
     showToast(`切换 Fuzzy 模式失败: ${e instanceof Error ? e.message : '未知错误'}`, 'error')
   } finally {
@@ -645,12 +644,12 @@ const toggleFuzzyMode = async () => {
 
 // 主题管理
 const toggleDarkMode = () => {
-  const newMode = darkModePreference.value === 'dark' ? 'light' : 'dark'
+  const newMode = preferencesStore.darkModePreference === 'dark' ? 'light' : 'dark'
   setDarkMode(newMode)
 }
 
 const setDarkMode = (themeName: 'light' | 'dark' | 'auto') => {
-  darkModePreference.value = themeName
+  preferencesStore.setDarkMode(themeName)
   const apply = (isDark: boolean) => {
     // 使用 Vuetify 3.9+ 推荐的 theme.change() API
     theme.change(isDark ? 'dark' : 'light')
@@ -662,8 +661,7 @@ const setDarkMode = (themeName: 'light' | 'dark' | 'auto') => {
   } else {
     apply(themeName === 'dark')
   }
-
-  localStorage.setItem('theme', themeName)
+  // PreferencesStore 已通过 pinia-plugin-persistedstate 自动持久化，无需手动写入 localStorage
 }
 
 // 认证状态管理（使用 AuthStore）
@@ -844,14 +842,13 @@ onMounted(async () => {
   document.documentElement.dataset.theme = 'retro'
   initTheme()
 
-  // 加载保存的暗色模式偏好
-  const savedMode = (localStorage.getItem('theme') as 'light' | 'dark' | 'auto') || 'auto'
-  setDarkMode(savedMode)
+  // 加载保存的暗色模式偏好（从 PreferencesStore 读取，已自动从 localStorage 恢复）
+  setDarkMode(preferencesStore.darkModePreference)
 
   // 监听系统主题变化
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
   const handlePref = () => {
-    if (darkModePreference.value === 'auto') setDarkMode('auto')
+    if (preferencesStore.darkModePreference === 'auto') setDarkMode('auto')
   }
   mediaQuery.addEventListener('change', handlePref)
 
