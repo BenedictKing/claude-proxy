@@ -1,5 +1,5 @@
 <template>
-  <v-card elevation="2" rounded="lg" class="channel-orchestration">
+  <v-card elevation="0" rounded="lg" class="channel-orchestration" variant="flat">
     <!-- 调度器统计信息 -->
     <v-card-title class="d-flex align-center justify-space-between py-3 px-0">
       <div class="d-flex align-center">
