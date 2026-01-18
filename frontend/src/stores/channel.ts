@@ -51,10 +51,30 @@ export const useChannelStore = defineStore('channel', () => {
     loadBalance: 'round-robin'
   })
 
-  // Dashboard 数据（合并的 metrics 和 stats）
-  const dashboardMetrics = ref<ChannelMetrics[]>([])
-  const dashboardStats = ref<ChannelDashboardResponse['stats'] | undefined>(undefined)
-  const dashboardRecentActivity = ref<ChannelDashboardResponse['recentActivity']>(undefined)
+  // Dashboard 数据缓存结构（每个 tab 独立缓存）
+  interface DashboardCache {
+    metrics: ChannelMetrics[]
+    stats: ChannelDashboardResponse['stats'] | undefined
+    recentActivity: ChannelDashboardResponse['recentActivity'] | undefined
+  }
+
+  const dashboardCache = ref<Record<ApiTab, DashboardCache>>({
+    messages: {
+      metrics: [],
+      stats: undefined,
+      recentActivity: undefined
+    },
+    responses: {
+      metrics: [],
+      stats: undefined,
+      recentActivity: undefined
+    },
+    gemini: {
+      metrics: [],
+      stats: undefined,
+      recentActivity: undefined
+    }
+  })
 
   // 批量延迟测试加载状态
   const isPingingAll = ref(false)
@@ -82,6 +102,11 @@ export const useChannelStore = defineStore('channel', () => {
       default: return channelsData.value
     }
   })
+
+  // 根据当前 Tab 返回对应的 Dashboard 数据（独立缓存，避免切换闪烁）
+  const currentDashboardMetrics = computed(() => dashboardCache.value[activeTab.value].metrics)
+  const currentDashboardStats = computed(() => dashboardCache.value[activeTab.value].stats)
+  const currentDashboardRecentActivity = computed(() => dashboardCache.value[activeTab.value].recentActivity)
 
   // 活跃渠道数（仅 active 状态）
   const activeChannelCount = computed(() => {
@@ -139,9 +164,12 @@ export const useChannelStore = defineStore('channel', () => {
             current: geminiChannelsData.value.current,
             loadBalance: dashboard.loadBalance
           }
-          dashboardMetrics.value = dashboard.metrics
-          dashboardStats.value = dashboard.stats
-          dashboardRecentActivity.value = dashboard.recentActivity
+          // 更新 Gemini tab 的独立缓存
+          dashboardCache.value.gemini = {
+            metrics: dashboard.metrics,
+            stats: dashboard.stats,
+            recentActivity: dashboard.recentActivity
+          }
           lastRefreshSuccess.value = true
           return
         }
@@ -155,18 +183,25 @@ export const useChannelStore = defineStore('channel', () => {
             current: channelsData.value.current, // 保留当前选中状态
             loadBalance: dashboard.loadBalance
           }
+          // 更新 Messages tab 的独立缓存
+          dashboardCache.value.messages = {
+            metrics: dashboard.metrics,
+            stats: dashboard.stats,
+            recentActivity: dashboard.recentActivity
+          }
         } else {
           responsesChannelsData.value = {
             channels: mergeChannelsWithLocalData(dashboard.channels, responsesChannelsData.value.channels),
             current: responsesChannelsData.value.current, // 保留当前选中状态
             loadBalance: dashboard.loadBalance
           }
+          // 更新 Responses tab 的独立缓存
+          dashboardCache.value.responses = {
+            metrics: dashboard.metrics,
+            stats: dashboard.stats,
+            recentActivity: dashboard.recentActivity
+          }
         }
-
-        // 同时更新 metrics 和 stats
-        dashboardMetrics.value = dashboard.metrics
-        dashboardStats.value = dashboard.stats
-        dashboardRecentActivity.value = dashboard.recentActivity
 
         lastRefreshSuccess.value = true
       } catch (error) {
@@ -413,9 +448,25 @@ export const useChannelStore = defineStore('channel', () => {
       current: -1,
       loadBalance: 'round-robin'
     }
-    dashboardMetrics.value = []
-    dashboardStats.value = undefined
-    dashboardRecentActivity.value = undefined
+
+    // 清空所有 tab 的独立缓存
+    dashboardCache.value = {
+      messages: {
+        metrics: [],
+        stats: undefined,
+        recentActivity: undefined
+      },
+      responses: {
+        metrics: [],
+        stats: undefined,
+        recentActivity: undefined
+      },
+      gemini: {
+        metrics: [],
+        stats: undefined,
+        recentActivity: undefined
+      }
+    }
 
     // 重置状态标志，避免注销后状态残留
     lastRefreshSuccess.value = true
@@ -429,14 +480,14 @@ export const useChannelStore = defineStore('channel', () => {
     channelsData,
     responsesChannelsData,
     geminiChannelsData,
-    dashboardMetrics,
-    dashboardStats,
-    dashboardRecentActivity,
     isPingingAll,
     lastRefreshSuccess,
 
     // 计算属性
     currentChannelsData,
+    currentDashboardMetrics,
+    currentDashboardStats,
+    currentDashboardRecentActivity,
     activeChannelCount,
     failoverChannelCount,
 

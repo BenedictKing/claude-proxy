@@ -5,9 +5,9 @@
     :channels="channelStore.currentChannelsData.channels"
     :current-channel-index="channelStore.currentChannelsData.current ?? 0"
     :channel-type="channelType"
-    :dashboard-metrics="channelStore.dashboardMetrics"
-    :dashboard-stats="channelStore.dashboardStats"
-    :dashboard-recent-activity="channelStore.dashboardRecentActivity"
+    :dashboard-metrics="channelStore.currentDashboardMetrics"
+    :dashboard-stats="channelStore.currentDashboardStats"
+    :dashboard-recent-activity="channelStore.currentDashboardRecentActivity"
     class="mb-6"
     v-bind="$attrs"
   />
