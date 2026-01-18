@@ -4,3 +4,4 @@
 export { useAuthStore } from './auth'
 export { useChannelStore } from './channel'
 export { usePreferencesStore } from './preferences'
+export { useDialogStore } from './dialog'

@@ -312,14 +312,14 @@
 
     <!-- 添加渠道模态框 -->
     <AddChannelModal
-      v-model:show="showAddChannelModal"
-      :channel="editingChannel"
+      v-model:show="dialogStore.showAddChannelModal"
+      :channel="dialogStore.editingChannel"
       :channel-type="channelStore.activeTab"
       @save="saveChannel"
     />
 
     <!-- 添加API密钥对话框 -->
-    <v-dialog v-model="showAddKeyModalRef" max-width="500">
+    <v-dialog v-model="dialogStore.showAddKeyModal" max-width="500">
       <v-card rounded="lg">
         <v-card-title class="d-flex align-center">
           <v-icon class="mr-3">mdi-key-plus</v-icon>
@@ -327,7 +327,7 @@
         </v-card-title>
         <v-card-text>
           <v-text-field
-            v-model="newApiKey"
+            v-model="dialogStore.newApiKey"
             label="API密钥"
             type="password"
             variant="outlined"
@@ -338,8 +338,8 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer/>
-          <v-btn variant="text" @click="showAddKeyModalRef = false">取消</v-btn>
-          <v-btn :disabled="!newApiKey.trim()" color="primary" variant="elevated" @click="addApiKey">添加</v-btn>
+          <v-btn variant="text" @click="dialogStore.closeAddKeyModal()">取消</v-btn>
+          <v-btn :disabled="!dialogStore.newApiKey.trim()" color="primary" variant="elevated" @click="addApiKey">添加</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -370,6 +370,7 @@ import { versionService, type VersionInfo } from './services/version'
 import { useAuthStore } from './stores/auth'
 import { useChannelStore } from './stores/channel'
 import { usePreferencesStore } from './stores/preferences'
+import { useDialogStore } from './stores/dialog'
 import AddChannelModal from './components/AddChannelModal.vue'
 import ChannelOrchestration from './components/ChannelOrchestration.vue'
 import GlobalStatsChart from './components/GlobalStatsChart.vue'
@@ -390,15 +391,13 @@ const channelStore = useChannelStore()
 // 偏好设置 Store
 const preferencesStore = usePreferencesStore()
 
+// 对话框 Store
+const dialogStore = useDialogStore()
+
 // 渠道编排组件引用
 const channelOrchestrationRef = ref<InstanceType<typeof ChannelOrchestration> | null>(null)
 
-// 对话框状态
-const showAddChannelModal = ref(false)
-const showAddKeyModalRef = ref(false)
-const editingChannel = ref<Channel | null>(null)
-const selectedChannelForKey = ref<number>(-1)
-const newApiKey = ref('')
+// 对话框状态已迁移到 DialogStore
 
 // 主题和偏好设置已迁移到 PreferencesStore
 
@@ -506,13 +505,12 @@ const refreshChannels = async () => {
 
 const saveChannel = async (channel: Omit<Channel, 'index' | 'latency' | 'status'>, options?: { isQuickAdd?: boolean }) => {
   try {
-    const result = await channelStore.saveChannel(channel, editingChannel.value?.index ?? null, options)
+    const result = await channelStore.saveChannel(channel, dialogStore.editingChannel?.index ?? null, options)
     showToast(result.message, 'success')
     if (result.quickAddMessage) {
       showToast(result.quickAddMessage, 'info')
     }
-    showAddChannelModal.value = false
-    editingChannel.value = null
+    dialogStore.closeAddChannelModal()
     await refreshChannels()
   } catch (error) {
     handleAuthError(error)
@@ -520,8 +518,7 @@ const saveChannel = async (channel: Omit<Channel, 'index' | 'latency' | 'status'
 }
 
 const editChannel = (channel: Channel) => {
-  editingChannel.value = channel
-  showAddChannelModal.value = true
+  dialogStore.openEditChannelModal(channel)
 }
 
 const deleteChannel = async (channelId: number) => {
@@ -536,30 +533,26 @@ const deleteChannel = async (channelId: number) => {
 }
 
 const openAddChannelModal = () => {
-  editingChannel.value = null
-  showAddChannelModal.value = true
+  dialogStore.openAddChannelModal()
 }
 
 const _openAddKeyModal = (channelId: number) => {
-  selectedChannelForKey.value = channelId
-  newApiKey.value = ''
-  showAddKeyModalRef.value = true
+  dialogStore.openAddKeyModal(channelId)
 }
 
 const addApiKey = async () => {
-  if (!newApiKey.value.trim()) return
+  if (!dialogStore.newApiKey.trim()) return
 
   try {
     if (channelStore.activeTab === 'gemini') {
-      await api.addGeminiApiKey(selectedChannelForKey.value, newApiKey.value.trim())
+      await api.addGeminiApiKey(dialogStore.selectedChannelForKey, dialogStore.newApiKey.trim())
     } else if (channelStore.activeTab === 'responses') {
-      await api.addResponsesApiKey(selectedChannelForKey.value, newApiKey.value.trim())
+      await api.addResponsesApiKey(dialogStore.selectedChannelForKey, dialogStore.newApiKey.trim())
     } else {
-      await api.addApiKey(selectedChannelForKey.value, newApiKey.value.trim())
+      await api.addApiKey(dialogStore.selectedChannelForKey, dialogStore.newApiKey.trim())
     }
     showToast('API密钥添加成功', 'success')
-    showAddKeyModalRef.value = false
-    newApiKey.value = ''
+    dialogStore.closeAddKeyModal()
     await refreshChannels()
   } catch (error) {
     showToast(`添加API密钥失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error')

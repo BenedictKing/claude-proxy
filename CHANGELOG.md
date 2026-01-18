@@ -8,6 +8,18 @@
 
 ### 重构
 
+- **前端对话框状态管理重构** - 将 App.vue 中的对话框状态迁移到 DialogStore
+  - 新增 `src/stores/dialog.ts` 对话框状态 Store，统一管理添加/编辑渠道对话框和添加 API 密钥对话框
+  - 重构 `src/App.vue`，移除本地对话框状态变量（showAddChannelModal、showAddKeyModalRef、editingChannel、selectedChannelForKey、newApiKey），改用 DialogStore 统一管理
+  - 更新 `src/stores/index.ts`，导出 DialogStore
+  - 新增 6 个状态管理方法：openAddChannelModal、openEditChannelModal、closeAddChannelModal、openAddKeyModal、closeAddKeyModal、resetDialogState
+  - 优势：
+    - 状态集中：所有对话框相关状态统一管理，避免分散在组件中
+    - 代码简化：App.vue 对话框逻辑更清晰，减少本地状态管理
+    - 可复用性：其他组件可直接使用 DialogStore 的对话框状态
+    - 易维护：对话框状态变更集中在 Store 中，便于调试和扩展
+  - 涉及文件：`frontend/src/stores/dialog.ts`、`frontend/src/stores/index.ts`、`frontend/src/App.vue`
+
 - **前端偏好设置管理重构** - 将 App.vue 中的用户偏好设置迁移到 PreferencesStore
   - 新增 `src/stores/preferences.ts` 偏好设置 Store，统一管理暗色模式、Fuzzy 模式、全局统计面板状态
   - 重构 `src/App.vue`，移除本地偏好设置变量（darkModePreference、fuzzyModeEnabled、showGlobalStats），改用 PreferencesStore 统一管理
