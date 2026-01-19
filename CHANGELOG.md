@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **Gemini 渠道 stripThoughtSignature 字段无法保存** - 修复前端无法正确显示和保存"移除 Thought Signature"配置的问题
+  - 修复 `GetUpstreams` 函数返回数据中缺失 `stripThoughtSignature` 字段
+  - 修复前端图标显示问题（将 `mdi-signature-freehand` 改为 `mdi-close-circle`）
+  - 统一图标和开关颜色为 `error` 红色，与"移除"操作语义一致
+  - 涉及文件：
+    - `backend-go/internal/handlers/gemini/channels.go` - 添加缺失字段
+    - `frontend/src/components/AddChannelModal.vue` - 修复图标和颜色
+
 ### 新增
 
 - **Gemini API thought_signature 兼容性方案** - 新增 `stripThoughtSignature` 配置项，支持兼容旧版 Gemini API

@@ -1005,7 +1005,7 @@ type MetricsResponse struct {
 	SuccessRate         float64                    `json:"successRate"`
 	ErrorRate           float64                    `json:"errorRate"`
 	ConsecutiveFailures int64                      `json:"consecutiveFailures"`
-	ActiveRequests      int64                      `json:"activeRequests"`      // 进行中请求数
+	ActiveRequests      int64                      `json:"activeRequests"` // 进行中请求数
 	Latency             int64                      `json:"latency"`
 	LastSuccessAt       *string                    `json:"lastSuccessAt,omitempty"`
 	LastFailureAt       *string                    `json:"lastFailureAt,omitempty"`

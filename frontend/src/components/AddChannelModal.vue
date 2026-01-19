@@ -491,7 +491,7 @@
             <v-col v-if="props.channelType === 'gemini'" cols="12">
               <div class="d-flex align-center justify-space-between">
                 <div class="d-flex align-center ga-2">
-                  <v-icon color="warning">mdi-signature-freehand</v-icon>
+                  <v-icon color="error">mdi-close-circle</v-icon>
                   <div>
                     <div class="text-body-1 font-weight-medium">移除 Thought Signature</div>
                     <div class="text-caption text-medium-emphasis">
@@ -499,7 +499,7 @@
                     </div>
                   </div>
                 </div>
-                <v-switch v-model="form.stripThoughtSignature" inset color="warning" hide-details />
+                <v-switch v-model="form.stripThoughtSignature" inset color="error" hide-details />
               </div>
             </v-col>
           </v-row>

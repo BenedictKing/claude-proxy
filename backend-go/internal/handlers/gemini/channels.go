@@ -40,6 +40,7 @@ func GetUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				"promotionUntil":              up.PromotionUntil,
 				"lowQuality":                  up.LowQuality,
 				"injectDummyThoughtSignature": up.InjectDummyThoughtSignature,
+				"stripThoughtSignature":       up.StripThoughtSignature,
 			}
 		}
 
