@@ -238,9 +238,9 @@ func ProcessStreamEvent(
 	// 修补 token
 	eventToSend := event
 
-	// 处理 message_start 事件：补全空 id 和检查 model 一致性
+	// 处理 message_start 事件：补全空 id 和检查 model 一致性（可选）
 	if IsMessageStartEvent(event) && ctx.RequestModel != "" {
-		eventToSend = PatchMessageStartEvent(eventToSend, ctx.RequestModel, envCfg.EnableResponseLogs && envCfg.ShouldLog("debug"))
+		eventToSend = PatchMessageStartEvent(eventToSend, ctx.RequestModel, envCfg.RewriteResponseModel, envCfg.EnableResponseLogs && envCfg.ShouldLog("debug"))
 	}
 
 	if ctx.NeedTokenPatch && HasEventWithUsage(event) {
@@ -755,7 +755,7 @@ func IsMessageStartEvent(event string) bool {
 }
 
 // PatchMessageStartEvent 修补 message_start 事件中的 id 和 model 字段
-func PatchMessageStartEvent(event string, requestModel string, enableLog bool) string {
+func PatchMessageStartEvent(event string, requestModel string, rewriteModel bool, enableLog bool) string {
 	if !IsMessageStartEvent(event) {
 		return event
 	}
@@ -795,12 +795,14 @@ func PatchMessageStartEvent(event string, requestModel string, enableLog bool) s
 			}
 		}
 
-		// 检查 model 一致性
-		if responseModel, _ := msg["model"].(string); responseModel != "" && requestModel != "" && responseModel != requestModel {
-			msg["model"] = requestModel
-			patched = true
-			if enableLog {
-				log.Printf("[Messages-Stream-Patch] 改写 message.model: %s -> %s", responseModel, requestModel)
+		// 检查 model 一致性（仅在配置启用时改写）
+		if rewriteModel {
+			if responseModel, _ := msg["model"].(string); responseModel != "" && requestModel != "" && responseModel != requestModel {
+				msg["model"] = requestModel
+				patched = true
+				if enableLog {
+					log.Printf("[Messages-Stream-Patch] 改写 message.model: %s -> %s", responseModel, requestModel)
+				}
 			}
 		}
 

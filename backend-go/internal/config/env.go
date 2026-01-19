@@ -6,16 +6,17 @@ import (
 )
 
 type EnvConfig struct {
-	Port               int
-	Env                string
-	EnableWebUI        bool
-	ProxyAccessKey     string
-	LogLevel           string
-	EnableRequestLogs  bool
-	EnableResponseLogs bool
-	QuietPollingLogs   bool   // 静默轮询端点日志
-	RawLogOutput       bool   // 原始日志输出（不缩进、不截断、不重排序）
-	SSEDebugLevel      string // SSE 调试级别: off, summary, full
+	Port                 int
+	Env                  string
+	EnableWebUI          bool
+	ProxyAccessKey       string
+	LogLevel             string
+	EnableRequestLogs    bool
+	EnableResponseLogs   bool
+	QuietPollingLogs     bool   // 静默轮询端点日志
+	RawLogOutput         bool   // 原始日志输出（不缩进、不截断、不重排序）
+	SSEDebugLevel        string // SSE 调试级别: off, summary, full
+	RewriteResponseModel bool   // 是否改写响应中的 model 字段为请求的 model（默认 false）
 
 	RequestTimeout     int
 	MaxRequestBodySize int64 // 请求体最大大小 (字节)，由 MB 配置转换
@@ -48,16 +49,17 @@ func NewEnvConfig() *EnvConfig {
 	}
 
 	return &EnvConfig{
-		Port:               getEnvAsInt("PORT", 3000),
-		Env:                env,
-		EnableWebUI:        getEnv("ENABLE_WEB_UI", "true") != "false",
-		ProxyAccessKey:     getEnv("PROXY_ACCESS_KEY", "your-proxy-access-key"),
-		LogLevel:           getEnv("LOG_LEVEL", "info"),
-		EnableRequestLogs:  getEnv("ENABLE_REQUEST_LOGS", "true") != "false",
-		EnableResponseLogs: getEnv("ENABLE_RESPONSE_LOGS", "true") != "false",
-		QuietPollingLogs:   getEnv("QUIET_POLLING_LOGS", "true") != "false",
-		RawLogOutput:       getEnv("RAW_LOG_OUTPUT", "false") == "true",
-		SSEDebugLevel:      getEnv("SSE_DEBUG_LEVEL", "off"),
+		Port:                 getEnvAsInt("PORT", 3000),
+		Env:                  env,
+		EnableWebUI:          getEnv("ENABLE_WEB_UI", "true") != "false",
+		ProxyAccessKey:       getEnv("PROXY_ACCESS_KEY", "your-proxy-access-key"),
+		LogLevel:             getEnv("LOG_LEVEL", "info"),
+		EnableRequestLogs:    getEnv("ENABLE_REQUEST_LOGS", "true") != "false",
+		EnableResponseLogs:   getEnv("ENABLE_RESPONSE_LOGS", "true") != "false",
+		QuietPollingLogs:     getEnv("QUIET_POLLING_LOGS", "true") != "false",
+		RawLogOutput:         getEnv("RAW_LOG_OUTPUT", "false") == "true",
+		SSEDebugLevel:        getEnv("SSE_DEBUG_LEVEL", "off"),
+		RewriteResponseModel: getEnv("REWRITE_RESPONSE_MODEL", "false") == "true",
 
 		RequestTimeout:     getEnvAsInt("REQUEST_TIMEOUT", 300000),
 		MaxRequestBodySize: getEnvAsInt64("MAX_REQUEST_BODY_SIZE_MB", 50) * 1024 * 1024, // MB 转换为字节

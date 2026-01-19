@@ -4,6 +4,19 @@
 
 ---
 
+## [Unreleased]
+
+### 新增
+
+- **响应 model 字段改写可配置化** - 新增环境变量 `REWRITE_RESPONSE_MODEL` 控制是否改写响应中的 model 字段
+  - 默认值：`false`（保持上游返回的原始 model）
+  - 启用后：当上游返回的 model 与请求的 model 不一致时，自动改写为请求的 model
+  - 适用范围：仅影响 Messages API 的流式响应，不影响 Responses API 和 Gemini API
+  - 涉及文件：
+    - `backend-go/.env.example` - 添加配置说明和默认值
+    - `backend-go/internal/config/env.go` - 添加 `RewriteResponseModel` 配置字段
+    - `backend-go/internal/handlers/common/stream.go` - 修改 `PatchMessageStartEvent` 函数，仅在配置启用时改写 model 字段
+
 ## [v2.5.2] - 2026-01-19
 
 ### 新增
