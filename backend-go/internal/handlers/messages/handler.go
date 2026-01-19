@@ -221,7 +221,7 @@ func tryChannelWithAllKeys(
 				resp.Body.Close()
 				respBodyBytes = utils.DecompressGzipIfNeeded(resp, respBodyBytes)
 
-				shouldFailover, isQuotaRelated := common.ShouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled())
+				shouldFailover, isQuotaRelated := common.ShouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled(), "Messages")
 				log.Printf("[Messages-Failover] ShouldRetryWithNextKey: statusCode=%d, shouldFailover=%v, isQuotaRelated=%v", resp.StatusCode, shouldFailover, isQuotaRelated)
 				if shouldFailover {
 					failedKeys[apiKey] = true
@@ -389,7 +389,7 @@ func handleSingleChannel(
 				resp.Body.Close()
 				respBodyBytes = utils.DecompressGzipIfNeeded(resp, respBodyBytes)
 
-				shouldFailover, isQuotaRelated := common.ShouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled())
+				shouldFailover, isQuotaRelated := common.ShouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled(), "Messages")
 				log.Printf("[Messages-Failover] ShouldRetryWithNextKey(SingleChannel): statusCode=%d, shouldFailover=%v, isQuotaRelated=%v", resp.StatusCode, shouldFailover, isQuotaRelated)
 				if shouldFailover {
 					lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)

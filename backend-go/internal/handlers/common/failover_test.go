@@ -283,7 +283,7 @@ func TestClassifyByErrorMessage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			bodyBytes, _ := json.Marshal(tt.body)
-			gotFailover, gotQuota := classifyByErrorMessage(bodyBytes)
+			gotFailover, gotQuota := classifyByErrorMessage(bodyBytes, "Messages")
 			if gotFailover != tt.wantFailover {
 				t.Errorf("classifyByErrorMessage() failover = %v, want %v", gotFailover, tt.wantFailover)
 			}
@@ -304,7 +304,7 @@ func TestClassifyByErrorMessage_InvalidJSON(t *testing.T) {
 	}
 
 	for _, body := range invalidBodies {
-		gotFailover, gotQuota := classifyByErrorMessage(body)
+		gotFailover, gotQuota := classifyByErrorMessage(body, "Messages")
 		if gotFailover || gotQuota {
 			t.Errorf("classifyByErrorMessage(%q) should return (false, false) for invalid JSON", string(body))
 		}
@@ -317,7 +317,7 @@ func TestShouldRetryWithNextKey_403WithPredeductQuotaError(t *testing.T) {
 	// 使用生产环境的精确 JSON 格式
 	body := []byte(`{"error":{"type":"new_api_error","message":"预扣费额度失败, 用户剩余额度: ¥0.053950, 需要预扣费额度: ¥0.191160, 下次重置时间: 2025-01-01 00:00:00"},"type":"error"}`)
 
-	gotFailover, gotQuota := ShouldRetryWithNextKey(403, body, false)
+	gotFailover, gotQuota := ShouldRetryWithNextKey(403, body, false, "Messages")
 
 	if !gotFailover {
 		t.Errorf("ShouldRetryWithNextKey(403, prededuct_error, false) failover = %v, want true", gotFailover)
@@ -461,7 +461,7 @@ func TestShouldRetryWithNextKey(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			bodyBytes, _ := json.Marshal(tt.body)
 			// 测试非 Fuzzy 模式（精确错误分类）
-			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, bodyBytes, false)
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, bodyBytes, false, "Messages")
 			if gotFailover != tt.wantFailover {
 				t.Errorf("shouldRetryWithNextKey(%d, ..., false) failover = %v, want %v", tt.statusCode, gotFailover, tt.wantFailover)
 			}
@@ -574,7 +574,7 @@ func TestShouldRetryWithNextKeyFuzzyMode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 测试 Fuzzy 模式（所有非 2xx 都 failover）
-			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, nil, true)
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, nil, true, "Messages")
 			if gotFailover != tt.wantFailover {
 				t.Errorf("shouldRetryWithNextKey(%d, nil, true) failover = %v, want %v", tt.statusCode, gotFailover, tt.wantFailover)
 			}
@@ -634,7 +634,7 @@ func TestShouldRetryWithNextKey_FuzzyMode_403WithQuotaMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, tt.body, true)
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, tt.body, true, "Messages")
 			if gotFailover != tt.wantFailover {
 				t.Errorf("ShouldRetryWithNextKey(%d, body, true) failover = %v, want %v", tt.statusCode, gotFailover, tt.wantFailover)
 			}
@@ -724,7 +724,7 @@ func TestShouldRetryWithNextKey_SensitiveWordsDetected(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, body, tt.fuzzyMode)
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, body, tt.fuzzyMode, "Messages")
 			if gotFailover != tt.wantFailover {
 				t.Errorf("ShouldRetryWithNextKey(%d, sensitive_words_body, %v) failover = %v, want %v",
 					tt.statusCode, tt.fuzzyMode, gotFailover, tt.wantFailover)

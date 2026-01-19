@@ -18,6 +18,7 @@ type FailoverError struct {
 // ShouldRetryWithNextKey 判断是否应该使用下一个密钥重试
 // 返回: (shouldFailover bool, isQuotaRelated bool)
 //
+// apiType: 接口类型（Messages/Responses/Gemini），用于日志标签前缀
 // fuzzyMode: 启用时，所有非 2xx 错误都触发 failover（模糊处理错误类型）
 //
 // HTTP 状态码分类策略（非 fuzzy 模式）：
@@ -28,20 +29,20 @@ type FailoverError struct {
 // isQuotaRelated 标记用于调度器优先级调整：
 //   - true: 额度/配额相关，降低密钥优先级
 //   - false: 临时错误，不影响优先级
-func ShouldRetryWithNextKey(statusCode int, bodyBytes []byte, fuzzyMode bool) (bool, bool) {
-	log.Printf("[Failover-Entry] ShouldRetryWithNextKey 入口: statusCode=%d, bodyLen=%d, fuzzyMode=%v",
-		statusCode, len(bodyBytes), fuzzyMode)
+func ShouldRetryWithNextKey(statusCode int, bodyBytes []byte, fuzzyMode bool, apiType string) (bool, bool) {
+	log.Printf("[%s-Failover-Entry] ShouldRetryWithNextKey 入口: statusCode=%d, bodyLen=%d, fuzzyMode=%v",
+		apiType, statusCode, len(bodyBytes), fuzzyMode)
 	if fuzzyMode {
-		return shouldRetryWithNextKeyFuzzy(statusCode, bodyBytes)
+		return shouldRetryWithNextKeyFuzzy(statusCode, bodyBytes, apiType)
 	}
-	return shouldRetryWithNextKeyNormal(statusCode, bodyBytes)
+	return shouldRetryWithNextKeyNormal(statusCode, bodyBytes, apiType)
 }
 
 // shouldRetryWithNextKeyFuzzy Fuzzy 模式：所有非 2xx 错误都尝试 failover
 // 同时检查消息体中的配额相关关键词，确保 403 + "预扣费额度" 等情况能正确识别
 // 但对于内容审核等不可重试错误，即使在 Fuzzy 模式下也不应重试
-func shouldRetryWithNextKeyFuzzy(statusCode int, bodyBytes []byte) (bool, bool) {
-	log.Printf("[Failover-Fuzzy] 进入 Fuzzy 模式处理: statusCode=%d, bodyLen=%d", statusCode, len(bodyBytes))
+func shouldRetryWithNextKeyFuzzy(statusCode int, bodyBytes []byte, apiType string) (bool, bool) {
+	log.Printf("[%s-Failover-Fuzzy] 进入 Fuzzy 模式处理: statusCode=%d, bodyLen=%d", apiType, statusCode, len(bodyBytes))
 	if statusCode >= 200 && statusCode < 300 {
 		return false, false
 	}
@@ -49,43 +50,43 @@ func shouldRetryWithNextKeyFuzzy(statusCode int, bodyBytes []byte) (bool, bool) 
 	// 检查是否为不可重试错误（内容审核等）
 	if len(bodyBytes) > 0 {
 		if isNonRetryableError(bodyBytes) {
-			log.Printf("[Failover-Fuzzy] 检测到不可重试错误，不进行 failover")
+			log.Printf("[%s-Failover-Fuzzy] 检测到不可重试错误，不进行 failover", apiType)
 			return false, false
 		}
 	}
 
 	// 状态码直接标记为配额相关
 	if statusCode == 402 || statusCode == 429 {
-		log.Printf("[Failover-Fuzzy] 状态码 %d 直接标记为配额相关", statusCode)
+		log.Printf("[%s-Failover-Fuzzy] 状态码 %d 直接标记为配额相关", apiType, statusCode)
 		return true, true
 	}
 
 	// 对于其他状态码，检查消息体是否包含配额相关关键词
 	// 这样 403 + "预扣费额度" 消息 → isQuotaRelated=true
 	if len(bodyBytes) > 0 {
-		_, msgQuota := classifyByErrorMessage(bodyBytes)
+		_, msgQuota := classifyByErrorMessage(bodyBytes, apiType)
 		if msgQuota {
-			log.Printf("[Failover-Fuzzy] 消息体包含配额相关关键词，标记为配额相关")
+			log.Printf("[%s-Failover-Fuzzy] 消息体包含配额相关关键词，标记为配额相关", apiType)
 			return true, true
 		}
 	}
 
-	log.Printf("[Failover-Fuzzy] Fuzzy 模式结果: shouldFailover=true, isQuotaRelated=false")
+	log.Printf("[%s-Failover-Fuzzy] Fuzzy 模式结果: shouldFailover=true, isQuotaRelated=false", apiType)
 	return true, false
 }
 
 // shouldRetryWithNextKeyNormal 原有的精确错误分类逻辑
-func shouldRetryWithNextKeyNormal(statusCode int, bodyBytes []byte) (bool, bool) {
+func shouldRetryWithNextKeyNormal(statusCode int, bodyBytes []byte, apiType string) (bool, bool) {
 	// 先检查是否为不可重试错误（内容审核等），这类错误无论状态码如何都不应重试
 	if len(bodyBytes) > 0 && isNonRetryableError(bodyBytes) {
-		log.Printf("[Failover-Debug] 检测到不可重试错误，不进行 failover")
+		log.Printf("[%s-Failover-Debug] 检测到不可重试错误，不进行 failover", apiType)
 		return false, false
 	}
 
 	shouldFailover, isQuotaRelated := classifyByStatusCode(statusCode)
 
-	log.Printf("[Failover-Debug] shouldRetryWithNextKeyNormal: statusCode=%d, bodyLen=%d, shouldFailover=%v, isQuotaRelated=%v",
-		statusCode, len(bodyBytes), shouldFailover, isQuotaRelated)
+	log.Printf("[%s-Failover-Debug] shouldRetryWithNextKeyNormal: statusCode=%d, bodyLen=%d, shouldFailover=%v, isQuotaRelated=%v",
+		apiType, statusCode, len(bodyBytes), shouldFailover, isQuotaRelated)
 
 	if shouldFailover {
 		// 如果状态码已标记为 quota 相关，直接返回
@@ -94,9 +95,9 @@ func shouldRetryWithNextKeyNormal(statusCode int, bodyBytes []byte) (bool, bool)
 		}
 		// 否则，仍检查消息体是否包含 quota 相关关键词
 		// 这样 403 + "预扣费额度" 消息 → isQuotaRelated=true
-		log.Printf("[Failover-Debug] 调用 classifyByErrorMessage, body=%s", string(bodyBytes))
-		_, msgQuota := classifyByErrorMessage(bodyBytes)
-		log.Printf("[Failover-Debug] classifyByErrorMessage 返回: msgQuota=%v", msgQuota)
+		log.Printf("[%s-Failover-Debug] 调用 classifyByErrorMessage, body=%s", apiType, string(bodyBytes))
+		_, msgQuota := classifyByErrorMessage(bodyBytes, apiType)
+		log.Printf("[%s-Failover-Debug] classifyByErrorMessage 返回: msgQuota=%v", apiType, msgQuota)
 		if msgQuota {
 			return true, true
 		}
@@ -104,7 +105,7 @@ func shouldRetryWithNextKeyNormal(statusCode int, bodyBytes []byte) (bool, bool)
 	}
 
 	// statusCode 不触发 failover 时，完全依赖消息体判断
-	return classifyByErrorMessage(bodyBytes)
+	return classifyByErrorMessage(bodyBytes, apiType)
 }
 
 // classifyByStatusCode 基于 HTTP 状态码分类
@@ -155,23 +156,23 @@ func classifyByStatusCode(statusCode int) (bool, bool) {
 }
 
 // classifyByErrorMessage 基于错误消息内容分类
-func classifyByErrorMessage(bodyBytes []byte) (bool, bool) {
+func classifyByErrorMessage(bodyBytes []byte, apiType string) (bool, bool) {
 	var errResp map[string]interface{}
 	if err := json.Unmarshal(bodyBytes, &errResp); err != nil {
-		log.Printf("[Failover-Debug] JSON解析失败: %v, body长度=%d", err, len(bodyBytes))
+		log.Printf("[%s-Failover-Debug] JSON解析失败: %v, body长度=%d", apiType, err, len(bodyBytes))
 		return false, false
 	}
 
 	errObj, ok := errResp["error"].(map[string]interface{})
 	if !ok {
-		log.Printf("[Failover-Debug] 未找到error对象, keys=%v", getMapKeys(errResp))
+		log.Printf("[%s-Failover-Debug] 未找到error对象, keys=%v", apiType, getMapKeys(errResp))
 		return false, false
 	}
 
 	// 检查 error.code 字段，某些错误码不应重试（内容审核、无效请求等）
 	if errCode, ok := errObj["code"].(string); ok {
 		if isNonRetryableErrorCode(errCode) {
-			log.Printf("[Failover-Debug] 检测到不可重试错误码: %s", errCode)
+			log.Printf("[%s-Failover-Debug] 检测到不可重试错误码: %s", apiType, errCode)
 			return false, false
 		}
 	}
@@ -180,9 +181,9 @@ func classifyByErrorMessage(bodyBytes []byte) (bool, bool) {
 	messageFields := []string{"message", "upstream_error", "detail"}
 	for _, field := range messageFields {
 		if msg, ok := errObj[field].(string); ok {
-			log.Printf("[Failover-Debug] 提取到消息 (字段: %s): %s", field, msg)
+			log.Printf("[%s-Failover-Debug] 提取到消息 (字段: %s): %s", apiType, field, msg)
 			if failover, quota := classifyMessage(msg); failover {
-				log.Printf("[Failover-Debug] 消息分类结果: failover=%v, quota=%v", failover, quota)
+				log.Printf("[%s-Failover-Debug] 消息分类结果: failover=%v, quota=%v", apiType, failover, quota)
 				return true, quota
 			}
 		}
@@ -191,9 +192,9 @@ func classifyByErrorMessage(bodyBytes []byte) (bool, bool) {
 	// 如果 upstream_error 是嵌套对象，尝试提取其中的消息
 	if upstreamErr, ok := errObj["upstream_error"].(map[string]interface{}); ok {
 		if msg, ok := upstreamErr["message"].(string); ok {
-			log.Printf("[Failover-Debug] 提取到嵌套 upstream_error.message: %s", msg)
+			log.Printf("[%s-Failover-Debug] 提取到嵌套 upstream_error.message: %s", apiType, msg)
 			if failover, quota := classifyMessage(msg); failover {
-				log.Printf("[Failover-Debug] 消息分类结果: failover=%v, quota=%v", failover, quota)
+				log.Printf("[%s-Failover-Debug] 消息分类结果: failover=%v, quota=%v", apiType, failover, quota)
 				return true, quota
 			}
 		}
@@ -206,7 +207,7 @@ func classifyByErrorMessage(bodyBytes []byte) (bool, bool) {
 		}
 	}
 
-	log.Printf("[Failover-Debug] 未匹配任何关键词, errObj keys=%v", getMapKeys(errObj))
+	log.Printf("[%s-Failover-Debug] 未匹配任何关键词, errObj keys=%v", apiType, getMapKeys(errObj))
 	return false, false
 }
 

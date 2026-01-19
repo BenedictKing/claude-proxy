@@ -276,7 +276,7 @@ func tryCompactWithKey(
 
 	// 判断是否需要故障转移
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		shouldFailover, _ := common.ShouldRetryWithNextKey(resp.StatusCode, respBody, cfgManager.GetFuzzyModeEnabled())
+		shouldFailover, _ := common.ShouldRetryWithNextKey(resp.StatusCode, respBody, cfgManager.GetFuzzyModeEnabled(), "Responses")
 		return false, &compactError{status: resp.StatusCode, body: respBody, shouldFailover: shouldFailover}
 	}
 
