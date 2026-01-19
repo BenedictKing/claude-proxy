@@ -26,6 +26,17 @@
     - `frontend/src/plugins/vuetify.ts` - 添加 `mdi-signature` 图标映射
   - 配置优化：将 `.ccb_config/` 目录加入 `.gitignore`，避免泄露本机路径等敏感信息
 
+- **codex-review 技能 v2.1.0** - 新增自动暂存新增文件功能，避免 codex 审核时报 P1 错误
+  - 新增步骤 2：在审核前自动暂存所有新增文件
+  - 使用安全的 `git ls-files -z | while read` 命令，正确处理特殊文件名（空格、换行、以 `-` 开头）
+  - 修复空列表问题：当没有新增文件时安全跳过，不会报错
+  - 优化元数据：添加 `user-invocable: true` 和 `context: fork` 字段
+  - 优化描述：添加触发关键词，移除 `(user)` 后缀
+  - 更新完整审核协议：增加 `[PREPARE] Stage Untracked Files` 步骤
+  - 创建 Plugin Marketplace 配置：`.claude-plugin/marketplace.json`
+  - 创建详细文档：`.claude/skills/codex-review/README.md`
+  - 涉及文件：`.claude/skills/codex-review/SKILL.md`, `.claude-plugin/marketplace.json`, `.claude/skills/codex-review/README.md`
+
 ### 优化
 
 - **渠道活跃度图表颜色优化** - 状态条柱状图颜色改为显示每个 6 秒段的独立成功率
