@@ -116,12 +116,16 @@ func TryUpstreamWithAllKeys(
 				continue
 			}
 
+			// 记录请求开始
+			channelScheduler.RecordRequestStart(currentBaseURL, apiKey, kind)
+
 			resp, err := SendRequest(req, upstream, envCfg, isStream, apiType)
 			if err != nil {
 				lastError = err
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey, apiType)
 				channelScheduler.RecordFailure(currentBaseURL, apiKey, kind)
+				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
 				if markURLFailure != nil {
 					markURLFailure(currentBaseURL)
 				}
@@ -140,6 +144,7 @@ func TryUpstreamWithAllKeys(
 					failedKeys[apiKey] = true
 					cfgManager.MarkKeyAsFailed(apiKey, apiType)
 					channelScheduler.RecordFailure(currentBaseURL, apiKey, kind)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
 					if markURLFailure != nil {
 						markURLFailure(currentBaseURL)
 					}
@@ -158,6 +163,7 @@ func TryUpstreamWithAllKeys(
 
 				// 非 failover 错误，记录失败指标后返回（请求已处理）
 				channelScheduler.RecordFailure(currentBaseURL, apiKey, kind)
+				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
 				c.Data(resp.StatusCode, "application/json", respBodyBytes)
 				return true, "", 0, nil, nil, nil
 			}
@@ -174,6 +180,7 @@ func TryUpstreamWithAllKeys(
 			}
 
 			usage = handleSuccess(c, resp, upstreamCopy, apiKey)
+			channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
 			return true, apiKey, originalIdx, nil, usage, nil
 		}
 
