@@ -278,13 +278,18 @@ func handleSingleChannel(
 	handleAllKeysFailed(c, lastFailoverError, lastError)
 }
 
-// ensureThoughtSignatures 确保所有 functionCall 都有 thought_signature
+// ensureThoughtSignatures 确保所有 functionCall 都有 thought_signature 字段
+// 用于兼容 x666.me 等要求必须有该字段的第三方 API
 // 参考: https://ai.google.dev/gemini-api/docs/thought-signatures
-// 参考 CLIProxyAPI 的实现，使用 dummy signature 跳过验证
-// 注意：虽然官方文档说并行 FC 只有第一个需要真实 signature，
-// 但对于 dummy signature（用于跳过验证），所有 FC 都需要添加
+//
+// 行为：
+//   - 如果 functionCall 已有 thought_signature（非空），保留原始值
+//   - 如果 functionCall 没有 thought_signature（空字符串），填充 DummyThoughtSignature
+//
+// 使用场景：
+//   - x666.me 等第三方 API 会验证 thought_signature 字段必须存在
+//   - Gemini CLI 等客户端可能不会为所有 functionCall 提供 thought_signature
 func ensureThoughtSignatures(geminiReq *types.GeminiRequest) {
-	// 遍历所有 contents
 	for i := range geminiReq.Contents {
 		for j := range geminiReq.Contents[i].Parts {
 			part := &geminiReq.Contents[i].Parts[j]
@@ -302,7 +307,8 @@ func stripThoughtSignature(geminiReq *types.GeminiRequest) {
 		for j := range geminiReq.Contents[i].Parts {
 			part := &geminiReq.Contents[i].Parts[j]
 			if part.FunctionCall != nil {
-				part.FunctionCall.ThoughtSignature = ""
+				// 使用特殊标记表示需要完全移除字段
+				part.FunctionCall.ThoughtSignature = types.StripThoughtSignatureMarker
 			}
 		}
 	}
@@ -344,11 +350,12 @@ func buildProviderRequest(
 			stripThoughtSignature(reqCopy)
 			reqToUse = reqCopy
 		} else if upstream.InjectDummyThoughtSignature {
-			// 其次处理 InjectDummyThoughtSignature（注入 dummy 值）
+			// 给空签名注入 dummy 值（兼容 x666.me 等要求必须有该字段的 API）
 			reqCopy := cloneGeminiRequest(geminiReq)
 			ensureThoughtSignatures(reqCopy)
 			reqToUse = reqCopy
 		}
+		// else: 默认直接透传，不做任何修改
 
 		requestBody, err = json.Marshal(reqToUse)
 		if err != nil {
@@ -400,11 +407,12 @@ func buildProviderRequest(
 			stripThoughtSignature(reqCopy)
 			reqToUse = reqCopy
 		} else if upstream.InjectDummyThoughtSignature {
-			// 其次处理 InjectDummyThoughtSignature（注入 dummy 值）
+			// 给空签名注入 dummy 值（兼容 x666.me 等要求必须有该字段的 API）
 			reqCopy := cloneGeminiRequest(geminiReq)
 			ensureThoughtSignatures(reqCopy)
 			reqToUse = reqCopy
 		}
+		// else: 默认直接透传，不做任何修改
 
 		requestBody, err = json.Marshal(reqToUse)
 		if err != nil {

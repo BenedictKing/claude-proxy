@@ -8,6 +8,10 @@
 
 ### 修复
 
+- **Gemini CLI 工具调用签名兼容** - 修复多轮工具调用中签名字段位置/命名不一致导致上游返回 400 的问题（启用 `injectDummyThoughtSignature` 时会为缺失签名的 `functionCall` 注入 dummy）。
+- **Gemini CLI tools schema 兼容** - 支持 `parametersJsonSchema` 并在转发前清洗不兼容字段（`$schema` / `additionalProperties` / `const`），避免上游 400。
+- **Gemini Dashboard stripThoughtSignature 字段缺失** - Dashboard API 补齐 `stripThoughtSignature` 字段，避免配置在刷新后丢失。
+
 - **Gemini 渠道 stripThoughtSignature 字段无法保存** - 修复前端无法正确显示和保存"移除 Thought Signature"配置的问题
   - 修复 `GetUpstreams` 函数返回数据中缺失 `stripThoughtSignature` 字段
   - 修复前端图标显示问题（将 `mdi-signature-freehand` 改为 `mdi-close-circle`）

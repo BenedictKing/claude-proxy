@@ -41,6 +41,7 @@ func GetDashboard(cfgManager *config.ConfigManager, sch *scheduler.ChannelSchedu
 				"promotionUntil":              up.PromotionUntil,
 				"lowQuality":                  up.LowQuality,
 				"injectDummyThoughtSignature": up.InjectDummyThoughtSignature,
+				"stripThoughtSignature":       up.StripThoughtSignature,
 			}
 		}
 

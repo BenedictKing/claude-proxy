@@ -30,7 +30,7 @@ type UpstreamConfig struct {
 	PromotionUntil *time.Time `json:"promotionUntil,omitempty"` // 促销期截止时间，在此期间内优先使用此渠道（忽略trace亲和）
 	LowQuality     bool       `json:"lowQuality,omitempty"`     // 低质量渠道标记：启用后强制本地估算 token，偏差>5%时使用本地值
 	// Gemini 特定配置
-	InjectDummyThoughtSignature bool `json:"injectDummyThoughtSignature,omitempty"` // 为 Gemini functionCall 注入 dummy thought_signature（兼容第三方 API）
+	InjectDummyThoughtSignature bool `json:"injectDummyThoughtSignature,omitempty"` // 给空 thought_signature 注入 dummy 值（兼容 x666.me 等要求必须有该字段的 API）
 	StripThoughtSignature       bool `json:"stripThoughtSignature,omitempty"`       // 移除 thought_signature 字段（兼容旧版 Gemini API）
 }
 

@@ -3,6 +3,7 @@ package gemini
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -232,9 +233,10 @@ func TestStripThoughtSignature(t *testing.T) {
 						if expectedPart.FunctionCall == nil {
 							t.Fatalf("FunctionCall mismatch at content %d, part %d: got non-nil, want nil", i, j)
 						}
-						if inputPart.FunctionCall.ThoughtSignature != expectedPart.FunctionCall.ThoughtSignature {
+						// stripThoughtSignature 使用特殊标记而不是空字符串
+						if inputPart.FunctionCall.ThoughtSignature != types.StripThoughtSignatureMarker {
 							t.Errorf("ThoughtSignature mismatch at content %d, part %d: got %q, want %q",
-								i, j, inputPart.FunctionCall.ThoughtSignature, expectedPart.FunctionCall.ThoughtSignature)
+								i, j, inputPart.FunctionCall.ThoughtSignature, types.StripThoughtSignatureMarker)
 						}
 					}
 				}
@@ -262,11 +264,25 @@ func TestBuildProviderRequest_StripThoughtSignature(t *testing.T) {
 			expectedThoughtSignature: "",
 		},
 		{
-			name:                     "StripThoughtSignature=false 保留字段",
+			name:                     "默认行为：透传非空签名",
 			stripThoughtSignature:    false,
 			injectDummyThoughtSig:    false,
 			inputThoughtSignature:    "test_signature",
 			expectedThoughtSignature: "test_signature",
+		},
+		{
+			name:                     "默认行为：完全透传空签名",
+			stripThoughtSignature:    false,
+			injectDummyThoughtSig:    false,
+			inputThoughtSignature:    "",
+			expectedThoughtSignature: "",
+		},
+		{
+			name:                     "InjectDummyThoughtSignature=true 注入 dummy",
+			stripThoughtSignature:    false,
+			injectDummyThoughtSig:    true,
+			inputThoughtSignature:    "",
+			expectedThoughtSignature: types.DummyThoughtSignature,
 		},
 		{
 			name:                     "StripThoughtSignature=true 优先于 InjectDummyThoughtSignature",
@@ -274,13 +290,6 @@ func TestBuildProviderRequest_StripThoughtSignature(t *testing.T) {
 			injectDummyThoughtSig:    true,
 			inputThoughtSignature:    "test_signature",
 			expectedThoughtSignature: "",
-		},
-		{
-			name:                     "InjectDummyThoughtSignature=true 注入 dummy 值",
-			stripThoughtSignature:    false,
-			injectDummyThoughtSig:    true,
-			inputThoughtSignature:    "",
-			expectedThoughtSignature: types.DummyThoughtSignature,
 		},
 	}
 
@@ -344,5 +353,89 @@ func TestBuildProviderRequest_StripThoughtSignature(t *testing.T) {
 					geminiReq.Contents[0].Parts[0].FunctionCall.ThoughtSignature, tt.inputThoughtSignature)
 			}
 		})
+	}
+}
+
+func TestBuildProviderRequest_InjectDummyThoughtSignature_PreservesThoughtSignatureAtPartLevel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstream := &config.UpstreamConfig{
+		BaseURL:                     "https://test.example.com",
+		ServiceType:                 "gemini",
+		StripThoughtSignature:       false,
+		InjectDummyThoughtSignature: true,
+	}
+
+	// 模拟 Gemini CLI：thoughtSignature 出现在 part 层级（而非 functionCall 内部）
+	var geminiReq types.GeminiRequest
+	if err := json.Unmarshal([]byte(`{
+  "contents": [
+    {
+      "parts": [
+        {
+          "functionCall": {
+            "name": "run_shell_command",
+            "args": { "command": "ls -R" }
+          },
+          "thoughtSignature": "sig_from_cli"
+        }
+      ]
+    }
+  ]
+}`), &geminiReq); err != nil {
+		t.Fatalf("Unmarshal 请求失败: %v", err)
+	}
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/test", nil)
+
+	req, err := buildProviderRequest(c, upstream, upstream.BaseURL, "test-key", &geminiReq, "gemini-2.0-flash", false)
+	if err != nil {
+		t.Fatalf("buildProviderRequest failed: %v", err)
+	}
+
+	bodyBytes, err := io.ReadAll(req.Body)
+	if err != nil {
+		t.Fatalf("读取请求体失败: %v", err)
+	}
+
+	// 解析为通用 map，验证字段名格式（thought_signature vs thoughtSignature）
+	var raw map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &raw); err != nil {
+		t.Fatalf("解析请求体 JSON 失败: %v", err)
+	}
+
+	contents, ok := raw["contents"].([]interface{})
+	if !ok || len(contents) != 1 {
+		t.Fatalf("contents 解析失败: %T, len=%d", raw["contents"], len(contents))
+	}
+	content0, ok := contents[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("contents[0] 类型=%T, want=map[string]interface{}", contents[0])
+	}
+	parts, ok := content0["parts"].([]interface{})
+	if !ok || len(parts) != 1 {
+		t.Fatalf("parts 解析失败: %T, len=%d", content0["parts"], len(parts))
+	}
+	part0, ok := parts[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("parts[0] 类型=%T, want=map[string]interface{}", parts[0])
+	}
+	if v, exists := part0["thoughtSignature"]; !exists || v != "sig_from_cli" {
+		t.Fatalf("part.thoughtSignature=%v, want=%v", v, "sig_from_cli")
+	}
+	if _, exists := part0["thought_signature"]; exists {
+		t.Fatalf("不应在 part 层级输出 thought_signature: %v", part0)
+	}
+
+	fc, ok := part0["functionCall"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("functionCall 类型=%T, want=map[string]interface{}", part0["functionCall"])
+	}
+	if _, exists := fc["thoughtSignature"]; exists {
+		t.Fatalf("不应在 functionCall 内输出 thoughtSignature: %v", fc)
+	}
+	if _, exists := fc["thought_signature"]; exists {
+		t.Fatalf("不应在 functionCall 内输出 thought_signature: %v", fc)
 	}
 }

@@ -1,5 +1,7 @@
 package types
 
+import "encoding/json"
+
 // ============================================================================
 // Gemini API 常量
 // ============================================================================
@@ -7,6 +9,10 @@ package types
 // DummyThoughtSignature 用于跳过 Gemini thought_signature 验证
 // 参考: https://ai.google.dev/gemini-api/docs/thought-signatures
 const DummyThoughtSignature = "skip_thought_signature_validator"
+
+// StripThoughtSignatureMarker 特殊标记，表示需要完全移除 thought_signature 字段
+// 用于 stripThoughtSignature 函数标记需要移除的字段
+const StripThoughtSignatureMarker = "__STRIP_THOUGHT_SIGNATURE__"
 
 // ============================================================================
 // Gemini API 请求结构
@@ -37,6 +43,59 @@ type GeminiPart struct {
 	Thought          bool                    `json:"thought,omitempty"` // 是否为 thinking 内容
 }
 
+// UnmarshalJSON 自定义反序列化，兼容部分客户端将 thoughtSignature 放在 part 层级的情况（而非 functionCall 内部）
+// 示例（Gemini CLI）：
+//
+//	{
+//	  "functionCall": { ... },
+//	  "thoughtSignature": "..."
+//	}
+func (p *GeminiPart) UnmarshalJSON(data []byte) error {
+	type partAlias GeminiPart
+	var raw struct {
+		partAlias
+		ThoughtSignatureCamel string `json:"thoughtSignature,omitempty"`
+		ThoughtSignatureSnake string `json:"thought_signature,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	*p = GeminiPart(raw.partAlias)
+
+	// 兼容：当签名出现在 part 层级时，将其归一化到 functionCall 内部（内部存储即可）
+	if p.FunctionCall == nil || p.FunctionCall.ThoughtSignature != "" {
+		return nil
+	}
+	if raw.ThoughtSignatureSnake != "" {
+		p.FunctionCall.ThoughtSignature = raw.ThoughtSignatureSnake
+	} else if raw.ThoughtSignatureCamel != "" {
+		p.FunctionCall.ThoughtSignature = raw.ThoughtSignatureCamel
+	}
+
+	return nil
+}
+
+// MarshalJSON 自定义序列化：Gemini thoughtSignature 字段位于 part 层级（与 functionCall 同级）。
+func (p GeminiPart) MarshalJSON() ([]byte, error) {
+	type partAlias GeminiPart
+	out := struct {
+		partAlias
+		ThoughtSignature string `json:"thoughtSignature,omitempty"`
+	}{
+		partAlias: partAlias(p),
+	}
+
+	if p.FunctionCall != nil {
+		sig := p.FunctionCall.ThoughtSignature
+		if sig != "" && sig != StripThoughtSignatureMarker {
+			out.ThoughtSignature = sig
+		}
+	}
+
+	return json.Marshal(out)
+}
+
 // GeminiInlineData 内联数据（图片、音频等）
 type GeminiInlineData struct {
 	MimeType string `json:"mimeType"`
@@ -50,10 +109,14 @@ type GeminiFileData struct {
 }
 
 // GeminiFunctionCall 函数调用
+// 注意：thought_signature 有两种格式：
+// - 下划线格式（thought_signature）：Google 官方 API
+// - 驼峰格式（thoughtSignature）：Gemini CLI 等第三方客户端
+// 为了保持透传，我们记录原始格式并在输出时使用相同格式
 type GeminiFunctionCall struct {
 	Name             string                 `json:"name"`
 	Args             map[string]interface{} `json:"args"`
-	ThoughtSignature string                 `json:"thought_signature,omitempty"` // thinking 模式下的签名，需原样传回
+	ThoughtSignature string                 `json:"-"` // thoughtSignature 位于 part 层级，仅内部使用
 }
 
 // GeminiFunctionResponse 函数响应
@@ -72,6 +135,88 @@ type GeminiFunctionDeclaration struct {
 	Name        string      `json:"name"`
 	Description string      `json:"description,omitempty"`
 	Parameters  interface{} `json:"parameters,omitempty"` // JSON Schema
+}
+
+// UnmarshalJSON 自定义反序列化：
+// - 支持 parameters（官方字段）
+// - 兼容部分客户端使用 parametersJsonSchema（例如 Gemini CLI）
+// 为了让上游模型正确理解参数结构，统一写入 Parameters，并在序列化时输出为 parameters。
+func (fd *GeminiFunctionDeclaration) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	if nameRaw, ok := raw["name"]; ok {
+		if err := json.Unmarshal(nameRaw, &fd.Name); err != nil {
+			return err
+		}
+	}
+	if descRaw, ok := raw["description"]; ok {
+		if err := json.Unmarshal(descRaw, &fd.Description); err != nil {
+			return err
+		}
+	}
+
+	var paramsRaw json.RawMessage
+	if v, ok := raw["parameters"]; ok {
+		paramsRaw = v
+	} else if v, ok := raw["parametersJsonSchema"]; ok {
+		paramsRaw = v
+	}
+	if paramsRaw != nil {
+		var params interface{}
+		if err := json.Unmarshal(paramsRaw, &params); err != nil {
+			return err
+		}
+		fd.Parameters = sanitizeGeminiToolSchema(params)
+	}
+
+	return nil
+}
+
+// sanitizeGeminiToolSchema 清洗工具参数 schema，以兼容部分上游对 parameters 字段的严格校验。
+//
+// 已知不兼容字段：
+// - $schema
+// - additionalProperties
+// - const（转换为 enum: [const]）
+func sanitizeGeminiToolSchema(v interface{}) interface{} {
+	switch vv := v.(type) {
+	case map[string]interface{}:
+		out := make(map[string]interface{}, len(vv))
+		var constValue interface{}
+		hasConst := false
+
+		for k, val := range vv {
+			switch k {
+			case "$schema", "additionalProperties":
+				continue
+			case "const":
+				constValue = val
+				hasConst = true
+				continue
+			default:
+				out[k] = sanitizeGeminiToolSchema(val)
+			}
+		}
+
+		if hasConst {
+			if _, ok := out["enum"]; !ok {
+				out["enum"] = []interface{}{sanitizeGeminiToolSchema(constValue)}
+			}
+		}
+
+		return out
+	case []interface{}:
+		out := make([]interface{}, len(vv))
+		for i := range vv {
+			out[i] = sanitizeGeminiToolSchema(vv[i])
+		}
+		return out
+	default:
+		return v
+	}
 }
 
 // GeminiGenerationConfig 生成配置
