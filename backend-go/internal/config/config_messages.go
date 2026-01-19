@@ -437,7 +437,7 @@ func (cm *ConfigManager) DeprioritizeAPIKey(apiKey string) error {
 			// 移动到末尾
 			upstream.APIKeys = append(upstream.APIKeys[:index], upstream.APIKeys[index+1:]...)
 			upstream.APIKeys = append(upstream.APIKeys, apiKey)
-			log.Printf("[Messages-Key] 已将API密钥移动到末尾以降低优先级: %s (Responses渠道: %s)", utils.MaskAPIKey(apiKey), upstream.Name)
+			log.Printf("[Responses-Key] 已将API密钥移动到末尾以降低优先级: %s (Responses渠道: %s)", utils.MaskAPIKey(apiKey), upstream.Name)
 			return cm.saveConfigLocked(cm.config)
 		}
 	}

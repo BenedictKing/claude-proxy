@@ -8,6 +8,11 @@
 
 ### 修复
 
+- **Models API 日志标签修正** - 修正 Models API 相关日志标签，确保正确区分 Messages 和 Responses 渠道
+  - 修正 `models.go` 中 `tryModelsRequest` 和 `fetchModelsFromChannel` 函数的日志标签
+  - 使用动态 `channelType` 变量替代硬编码的 `"Messages"` 字符串
+  - 日志标签格式统一为 `[Messages-Models]` 或 `[Responses-Models]`
+  - 涉及文件：`backend-go/internal/handlers/messages/models.go`
 - **多渠道 failover 客户端取消检测** - 在 failover 循环中添加客户端断开检测，避免客户端已取消请求后继续尝试其他渠道
   - 在每次渠道选择前检查 `c.Request.Context().Done()`
   - 客户端断开时立即返回，不再进行无效的渠道 failover
