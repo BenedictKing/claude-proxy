@@ -114,7 +114,7 @@ func TestPromotedChannelBypassesHealthCheck(t *testing.T) {
 	}
 
 	// 选择渠道 - 促销渠道应该被选中，即使它不健康
-	result, err := scheduler.SelectChannel(context.Background(), "test-user", make(map[int]bool), false)
+	result, err := scheduler.SelectChannel(context.Background(), "test-user", make(map[int]bool), ChannelKindMessages)
 	if err != nil {
 		t.Fatalf("选择渠道失败: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestPromotedChannelSkippedAfterFailure(t *testing.T) {
 	}
 
 	// 选择渠道 - 应该跳过促销渠道，选择正常渠道
-	result, err := scheduler.SelectChannel(context.Background(), "test-user", failedChannels, false)
+	result, err := scheduler.SelectChannel(context.Background(), "test-user", failedChannels, ChannelKindMessages)
 	if err != nil {
 		t.Fatalf("选择渠道失败: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestNonPromotedChannelStillChecksHealth(t *testing.T) {
 	}
 
 	// 选择渠道 - 应该跳过不健康的渠道，选择健康的渠道
-	result, err := scheduler.SelectChannel(context.Background(), "test-user", make(map[int]bool), false)
+	result, err := scheduler.SelectChannel(context.Background(), "test-user", make(map[int]bool), ChannelKindMessages)
 	if err != nil {
 		t.Fatalf("选择渠道失败: %v", err)
 	}
@@ -259,7 +259,7 @@ func TestExpiredPromotionNotBypassHealthCheck(t *testing.T) {
 	}
 
 	// 选择渠道 - 过期促销渠道不应该被优先选择，应该选择健康的渠道
-	result, err := scheduler.SelectChannel(context.Background(), "test-user", make(map[int]bool), false)
+	result, err := scheduler.SelectChannel(context.Background(), "test-user", make(map[int]bool), ChannelKindMessages)
 	if err != nil {
 		t.Fatalf("选择渠道失败: %v", err)
 	}

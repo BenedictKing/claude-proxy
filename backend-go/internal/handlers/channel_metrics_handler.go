@@ -166,7 +166,11 @@ func ResumeChannel(sch *scheduler.ChannelScheduler, isResponses bool) gin.Handle
 		}
 
 		// 重置渠道所有 Key 的指标
-		sch.ResetChannelMetrics(id, isResponses)
+		kind := scheduler.ChannelKindMessages
+		if isResponses {
+			kind = scheduler.ChannelKindResponses
+		}
+		sch.ResetChannelMetrics(id, kind)
 
 		c.JSON(200, gin.H{
 			"success": true,
@@ -180,6 +184,10 @@ func GetSchedulerStats(sch *scheduler.ChannelScheduler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 获取 isResponses 参数
 		isResponses := strings.ToLower(c.Query("type")) == "responses"
+		kind := scheduler.ChannelKindMessages
+		if isResponses {
+			kind = scheduler.ChannelKindResponses
+		}
 
 		// 根据类型选择对应的指标管理器
 		var metricsManager *metrics.MetricsManager
@@ -190,8 +198,8 @@ func GetSchedulerStats(sch *scheduler.ChannelScheduler) gin.HandlerFunc {
 		}
 
 		stats := gin.H{
-			"multiChannelMode":    sch.IsMultiChannelMode(isResponses),
-			"activeChannelCount":  sch.GetActiveChannelCount(isResponses),
+			"multiChannelMode":    sch.IsMultiChannelMode(kind),
+			"activeChannelCount":  sch.GetActiveChannelCount(kind),
 			"traceAffinityCount":  sch.GetTraceAffinityManager().Size(),
 			"traceAffinityTTL":    sch.GetTraceAffinityManager().GetTTL().String(),
 			"failureThreshold":    metricsManager.GetFailureThreshold() * 100,
@@ -528,6 +536,10 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 	return func(c *gin.Context) {
 		// 获取 type 参数，默认为 messages
 		isResponses := strings.ToLower(c.Query("type")) == "responses"
+		kind := scheduler.ChannelKindMessages
+		if isResponses {
+			kind = scheduler.ChannelKindResponses
+		}
 
 		cfg := cfgManager.GetConfig()
 		var upstreams []config.UpstreamConfig
@@ -603,8 +615,8 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 
 		// 3. 构建 stats 数据
 		stats := gin.H{
-			"multiChannelMode":    sch.IsMultiChannelMode(isResponses),
-			"activeChannelCount":  sch.GetActiveChannelCount(isResponses),
+			"multiChannelMode":    sch.IsMultiChannelMode(kind),
+			"activeChannelCount":  sch.GetActiveChannelCount(kind),
 			"traceAffinityCount":  sch.GetTraceAffinityManager().Size(),
 			"traceAffinityTTL":    sch.GetTraceAffinityManager().GetTTL().String(),
 			"failureThreshold":    metricsManager.GetFailureThreshold() * 100,

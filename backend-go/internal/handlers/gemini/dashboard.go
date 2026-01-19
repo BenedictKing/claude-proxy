@@ -78,8 +78,8 @@ func GetDashboard(cfgManager *config.ConfigManager, sch *scheduler.ChannelSchedu
 
 		// 3. 构建 stats 数据
 		stats := gin.H{
-			"multiChannelMode":    sch.IsMultiChannelModeGemini(),
-			"activeChannelCount":  sch.GetActiveGeminiChannelCount(),
+			"multiChannelMode":    sch.IsMultiChannelMode(scheduler.ChannelKindGemini),
+			"activeChannelCount":  sch.GetActiveChannelCount(scheduler.ChannelKindGemini),
 			"traceAffinityCount":  sch.GetTraceAffinityManager().Size(),
 			"traceAffinityTTL":    sch.GetTraceAffinityManager().GetTTL().String(),
 			"failureThreshold":    metricsManager.GetFailureThreshold() * 100,

@@ -61,7 +61,7 @@ func Handler(
 		common.LogOriginalRequest(c, bodyBytes, envCfg, "Responses")
 
 		// 检查是否为多渠道模式
-		isMultiChannel := channelScheduler.IsMultiChannelMode(true) // true = isResponses
+		isMultiChannel := channelScheduler.IsMultiChannelMode(scheduler.ChannelKindResponses)
 
 		if isMultiChannel {
 			handleMultiChannel(c, envCfg, cfgManager, channelScheduler, sessionManager, bodyBytes, responsesReq, userID, startTime)
@@ -83,196 +83,84 @@ func handleMultiChannel(
 	userID string,
 	startTime time.Time,
 ) {
-	failedChannels := make(map[int]bool)
-	var lastError error
-	var lastFailoverError *common.FailoverError
-
-	maxChannelAttempts := channelScheduler.GetActiveChannelCount(true) // true = isResponses
-
-	for channelAttempt := 0; channelAttempt < maxChannelAttempts; channelAttempt++ {
-		// 检查客户端是否已断开连接
-		select {
-		case <-c.Request.Context().Done():
-			if envCfg.ShouldLog("info") {
-				log.Printf("[Responses-Cancel] 请求已取消，停止渠道 failover")
-			}
-			return
-		default:
-			// 继续正常流程
-		}
-
-		selection, err := channelScheduler.SelectChannel(c.Request.Context(), userID, failedChannels, true)
-		if err != nil {
-			lastError = err
-			break
-		}
-
-		upstream := selection.Upstream
-		channelIndex := selection.ChannelIndex
-
-		if envCfg.ShouldLog("info") {
-			log.Printf("[Responses-Select] 选择渠道: [%d] %s (原因: %s, 尝试 %d/%d)",
-				channelIndex, upstream.Name, selection.Reason, channelAttempt+1, maxChannelAttempts)
-		}
-
-		success, successKey, successBaseURLIdx, failoverErr, usage := tryChannelWithAllKeys(c, envCfg, cfgManager, channelScheduler, sessionManager, upstream, channelIndex, bodyBytes, responsesReq, startTime)
-
-		if success {
-			if successKey != "" {
-				channelScheduler.RecordSuccessWithUsage(upstream.GetAllBaseURLs()[successBaseURLIdx], successKey, usage, true)
-			}
-			channelScheduler.SetTraceAffinity(userID, channelIndex)
-			return
-		}
-
-		failedChannels[channelIndex] = true
-
-		if failoverErr != nil {
-			lastFailoverError = failoverErr
-			lastError = fmt.Errorf("渠道 [%d] %s 失败", channelIndex, upstream.Name)
-		}
-
-		log.Printf("[Responses-Failover] 警告: 渠道 [%d] %s 所有密钥都失败，尝试下一个渠道", channelIndex, upstream.Name)
-	}
-
-	log.Printf("[Responses-Error] 所有渠道都失败了")
-	common.HandleAllChannelsFailed(c, cfgManager.GetFuzzyModeEnabled(), lastFailoverError, lastError, "Responses")
-}
-
-// tryChannelWithAllKeys 尝试使用 Responses 渠道的所有密钥（纯 failover 模式）
-// 返回: success, successKey, successBaseURLIdx, failoverError, usage
-func tryChannelWithAllKeys(
-	c *gin.Context,
-	envCfg *config.EnvConfig,
-	cfgManager *config.ConfigManager,
-	channelScheduler *scheduler.ChannelScheduler,
-	sessionManager *session.SessionManager,
-	upstream *config.UpstreamConfig,
-	channelIndex int,
-	bodyBytes []byte,
-	responsesReq types.ResponsesRequest,
-	startTime time.Time,
-) (bool, string, int, *common.FailoverError, *types.Usage) {
-	if len(upstream.APIKeys) == 0 {
-		return false, "", 0, nil, nil
-	}
-
 	provider := &providers.ResponsesProvider{SessionManager: sessionManager}
 	metricsManager := channelScheduler.GetResponsesMetricsManager()
-	baseURLs := upstream.GetAllBaseURLs()
 
-	// 获取动态排序后的 URL 列表（非阻塞，立即返回）
-	sortedURLResults := channelScheduler.GetSortedURLsForChannel(channelIndex, baseURLs)
+	common.HandleMultiChannelFailover(
+		c,
+		envCfg,
+		channelScheduler,
+		scheduler.ChannelKindResponses,
+		"Responses",
+		userID,
+		func(selection *scheduler.SelectionResult) common.MultiChannelAttemptResult {
+			upstream := selection.Upstream
+			channelIndex := selection.ChannelIndex
 
-	var lastFailoverError *common.FailoverError
-	deprioritizeCandidates := make(map[string]bool)
-
-	// 强制探测模式
-	forceProbeMode := common.AreAllKeysSuspended(metricsManager, upstream.BaseURL, upstream.APIKeys)
-	if forceProbeMode {
-		log.Printf("[Responses-ForceProbe] 渠道 %s 所有 Key 都被熔断，启用强制探测模式", upstream.Name)
-	}
-
-	// 纯 failover：按预热排序遍历所有 BaseURL，每个 BaseURL 尝试所有 Key
-	for sortedIdx, urlResult := range sortedURLResults {
-		currentBaseURL := urlResult.URL
-		originalIdx := urlResult.OriginalIdx // 原始索引用于指标记录
-		failedKeys := make(map[string]bool)  // 每个 BaseURL 重置失败 Key 列表
-		maxRetries := len(upstream.APIKeys)
-
-		for attempt := 0; attempt < maxRetries; attempt++ {
-			common.RestoreRequestBody(c, bodyBytes)
-
-			// 按优先级顺序选择下一个可用 Key
-			apiKey, err := cfgManager.GetNextResponsesAPIKey(upstream, failedKeys)
-			if err != nil {
-				break // 当前 BaseURL 没有可用 Key，尝试下一个 BaseURL
+			if upstream == nil {
+				return common.MultiChannelAttemptResult{}
 			}
 
-			// 检查熔断状态
-			if !forceProbeMode && metricsManager.ShouldSuspendKey(currentBaseURL, apiKey) {
-				failedKeys[apiKey] = true
-				log.Printf("[Responses-Circuit] 跳过熔断中的 Key: %s", utils.MaskAPIKey(apiKey))
-				continue
+			baseURLs := upstream.GetAllBaseURLs()
+			sortedURLResults := channelScheduler.GetSortedURLsForChannel(scheduler.ChannelKindResponses, channelIndex, baseURLs)
+
+			handled, successKey, successBaseURLIdx, failoverErr, usage, lastErr := common.TryUpstreamWithAllKeys(
+				c,
+				envCfg,
+				cfgManager,
+				channelScheduler,
+				scheduler.ChannelKindResponses,
+				"Responses",
+				metricsManager,
+				upstream,
+				sortedURLResults,
+				bodyBytes,
+				responsesReq.Stream,
+				func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
+					return cfgManager.GetNextResponsesAPIKey(upstream, failedKeys)
+				},
+				func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
+					req, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
+					return req, err
+				},
+				func(apiKey string) {
+					_ = cfgManager.DeprioritizeAPIKey(apiKey)
+				},
+				func(url string) {
+					channelScheduler.MarkURLFailure(scheduler.ChannelKindResponses, channelIndex, url)
+				},
+				func(url string) {
+					channelScheduler.MarkURLSuccess(scheduler.ChannelKindResponses, channelIndex, url)
+				},
+				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) *types.Usage {
+					return handleSuccess(c, resp, provider, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, bodyBytes)
+				},
+			)
+
+			return common.MultiChannelAttemptResult{
+				Handled:           handled,
+				Attempted:         true,
+				SuccessKey:        successKey,
+				SuccessBaseURLIdx: successBaseURLIdx,
+				FailoverError:     failoverErr,
+				Usage:             usage,
+				LastError:         lastErr,
 			}
-
-			if envCfg.ShouldLog("info") {
-				log.Printf("[Responses-Key] 使用API密钥: %s (BaseURL %d/%d, 尝试 %d/%d)", utils.MaskAPIKey(apiKey), sortedIdx+1, len(sortedURLResults), attempt+1, maxRetries)
+		},
+		func(selection *scheduler.SelectionResult, result common.MultiChannelAttemptResult) {
+			if result.SuccessKey == "" || selection.Upstream == nil {
+				return
 			}
-
-			// 使用深拷贝避免并发修改问题
-			upstreamCopy := upstream.Clone()
-			upstreamCopy.BaseURL = currentBaseURL
-
-			providerReq, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
-
-			if err != nil {
-				failedKeys[apiKey] = true
-				channelScheduler.RecordFailure(currentBaseURL, apiKey, true)
-				continue
+			baseURLs := selection.Upstream.GetAllBaseURLs()
+			if result.SuccessBaseURLIdx < 0 || result.SuccessBaseURLIdx >= len(baseURLs) {
+				return
 			}
-
-			resp, err := common.SendRequest(providerReq, upstream, envCfg, responsesReq.Stream, "Responses")
-			if err != nil {
-				failedKeys[apiKey] = true
-				cfgManager.MarkKeyAsFailed(apiKey, "Responses")
-				channelScheduler.RecordFailure(currentBaseURL, apiKey, true)
-				// 网络错误（超时等）触发 URL 动态降级
-				channelScheduler.MarkURLFailure(channelIndex, currentBaseURL)
-				log.Printf("[Responses-Key] 警告: API密钥失败: %v", err)
-				continue
-			}
-
-			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-				respBodyBytes, _ := io.ReadAll(resp.Body)
-				resp.Body.Close()
-				respBodyBytes = utils.DecompressGzipIfNeeded(resp, respBodyBytes)
-
-				shouldFailover, isQuotaRelated := common.ShouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled(), "Responses")
-				if shouldFailover {
-					failedKeys[apiKey] = true
-					cfgManager.MarkKeyAsFailed(apiKey, "Responses")
-					channelScheduler.RecordFailure(currentBaseURL, apiKey, true)
-					// HTTP 5xx 等错误也触发 URL 动态降级
-					channelScheduler.MarkURLFailure(channelIndex, currentBaseURL)
-					log.Printf("[Responses-Key] 警告: API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
-
-					lastFailoverError = &common.FailoverError{
-						Status: resp.StatusCode,
-						Body:   respBodyBytes,
-					}
-
-					if isQuotaRelated {
-						deprioritizeCandidates[apiKey] = true
-					}
-					continue
-				}
-
-				// 非 failover 错误，记录失败指标后返回
-				channelScheduler.RecordFailure(currentBaseURL, apiKey, true)
-				c.Data(resp.StatusCode, "application/json", respBodyBytes)
-				return true, "", 0, nil, nil
-			}
-
-			if len(deprioritizeCandidates) > 0 {
-				for key := range deprioritizeCandidates {
-					_ = cfgManager.DeprioritizeAPIKey(key)
-				}
-			}
-
-			// 标记 URL 成功，触发动态排序优化
-			channelScheduler.MarkURLSuccess(channelIndex, currentBaseURL)
-
-			usage := handleSuccess(c, resp, provider, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, bodyBytes)
-			return true, apiKey, originalIdx, nil, usage
-		}
-		// 当前 BaseURL 的所有 Key 都失败，记录并尝试下一个 BaseURL
-		if sortedIdx < len(sortedURLResults)-1 {
-			log.Printf("[Responses-BaseURL] BaseURL %d/%d 所有 Key 失败，切换到下一个 BaseURL", sortedIdx+1, len(sortedURLResults))
-		}
-	}
-
-	return false, "", 0, lastFailoverError, nil
+			channelScheduler.RecordSuccessWithUsage(baseURLs[result.SuccessBaseURLIdx], result.SuccessKey, result.Usage, scheduler.ChannelKindResponses)
+		},
+		func(ctx *gin.Context, failoverErr *common.FailoverError, lastError error) {
+			common.HandleAllChannelsFailed(ctx, cfgManager.GetFuzzyModeEnabled(), failoverErr, lastError, "Responses")
+		},
+	)
 }
 
 // handleSingleChannel 处理单渠道 Responses 请求
@@ -308,145 +196,43 @@ func handleSingleChannel(
 	metricsManager := channelScheduler.GetResponsesMetricsManager()
 	baseURLs := upstream.GetAllBaseURLs()
 
-	var lastError error
-	var lastFailoverError *common.FailoverError
-	deprioritizeCandidates := make(map[string]bool)
+	urlResults := common.BuildDefaultURLResults(baseURLs)
 
-	// 强制探测模式：检查首个 BaseURL 的所有 Key 是否都被熔断
-	forceProbeMode := common.AreAllKeysSuspended(metricsManager, baseURLs[0], upstream.APIKeys)
-	if forceProbeMode {
-		log.Printf("[Responses-ForceProbe] 渠道 %s 所有 Key 都被熔断，启用强制探测模式", upstream.Name)
-	}
-
-	// 纯 failover：遍历所有 BaseURL，每个 BaseURL 尝试所有 Key
-	for baseURLIdx, currentBaseURL := range baseURLs {
-		failedKeys := make(map[string]bool) // 每个 BaseURL 重置失败 Key 列表
-		maxRetries := len(upstream.APIKeys)
-
-		for attempt := 0; attempt < maxRetries; attempt++ {
-			common.RestoreRequestBody(c, bodyBytes)
-
-			apiKey, err := cfgManager.GetNextResponsesAPIKey(upstream, failedKeys)
-			if err != nil {
-				lastError = err
-				break // 当前 BaseURL 没有可用 Key，尝试下一个 BaseURL
+	handled, successKey, successBaseURLIdx, lastFailoverError, usage, lastError := common.TryUpstreamWithAllKeys(
+		c,
+		envCfg,
+		cfgManager,
+		channelScheduler,
+		scheduler.ChannelKindResponses,
+		"Responses",
+		metricsManager,
+		upstream,
+		urlResults,
+		bodyBytes,
+		responsesReq.Stream,
+		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
+			return cfgManager.GetNextResponsesAPIKey(upstream, failedKeys)
+		},
+		func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
+			req, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
+			return req, err
+		},
+		func(apiKey string) {
+			if err := cfgManager.DeprioritizeAPIKey(apiKey); err != nil {
+				log.Printf("[Responses-Key] 警告: 密钥降级失败: %v", err)
 			}
-
-			// 检查熔断状态
-			if !forceProbeMode && metricsManager.ShouldSuspendKey(currentBaseURL, apiKey) {
-				failedKeys[apiKey] = true
-				log.Printf("[Responses-Circuit] 跳过熔断中的 Key: %s", utils.MaskAPIKey(apiKey))
-				continue
-			}
-
-			if envCfg.ShouldLog("info") {
-				log.Printf("[Responses-Upstream] 使用 Responses 上游: %s - %s (BaseURL %d/%d, 尝试 %d/%d)", upstream.Name, currentBaseURL, baseURLIdx+1, len(baseURLs), attempt+1, maxRetries)
-				log.Printf("[Responses-Key] 使用API密钥: %s", utils.MaskAPIKey(apiKey))
-			}
-
-			// 使用深拷贝避免并发修改问题
-			upstreamCopy := upstream.Clone()
-			upstreamCopy.BaseURL = currentBaseURL
-
-			providerReq, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
-
-			if err != nil {
-				lastError = err
-				failedKeys[apiKey] = true
-				channelScheduler.RecordFailure(currentBaseURL, apiKey, true)
-				continue
-			}
-
-			resp, err := common.SendRequest(providerReq, upstream, envCfg, responsesReq.Stream, "Responses")
-			if err != nil {
-				lastError = err
-				failedKeys[apiKey] = true
-				cfgManager.MarkKeyAsFailed(apiKey, "Responses")
-				channelScheduler.RecordFailure(currentBaseURL, apiKey, true)
-				log.Printf("[Responses-Key] 警告: API密钥失败: %v", err)
-				continue
-			}
-
-			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-				respBodyBytes, _ := io.ReadAll(resp.Body)
-				resp.Body.Close()
-				respBodyBytes = utils.DecompressGzipIfNeeded(resp, respBodyBytes)
-
-				shouldFailover, isQuotaRelated := common.ShouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled(), "Responses")
-				if shouldFailover {
-					lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)
-					failedKeys[apiKey] = true
-					cfgManager.MarkKeyAsFailed(apiKey, "Responses")
-					channelScheduler.RecordFailure(currentBaseURL, apiKey, true)
-
-					log.Printf("[Responses-Key] 警告: Responses API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
-					if envCfg.EnableResponseLogs && envCfg.IsDevelopment() {
-						var formattedBody string
-						if envCfg.RawLogOutput {
-							formattedBody = utils.FormatJSONBytesRaw(respBodyBytes)
-						} else {
-							formattedBody = utils.FormatJSONBytesForLog(respBodyBytes, 500)
-						}
-						log.Printf("[Responses-Error] 失败原因:\n%s", formattedBody)
-					} else if envCfg.EnableResponseLogs {
-						log.Printf("[Responses-Error] 失败原因: %s", string(respBodyBytes))
-					}
-
-					lastFailoverError = &common.FailoverError{
-						Status: resp.StatusCode,
-						Body:   respBodyBytes,
-					}
-
-					if isQuotaRelated {
-						deprioritizeCandidates[apiKey] = true
-					}
-					continue
-				}
-
-				// 非 failover 错误，记录失败指标后返回
-				if envCfg.EnableResponseLogs {
-					log.Printf("[Responses-Response] 警告: Responses 上游返回错误: %d", resp.StatusCode)
-					if envCfg.IsDevelopment() {
-						var formattedBody string
-						if envCfg.RawLogOutput {
-							formattedBody = utils.FormatJSONBytesRaw(respBodyBytes)
-						} else {
-							formattedBody = utils.FormatJSONBytesForLog(respBodyBytes, 500)
-						}
-						log.Printf("[Responses-Response] 错误响应体:\n%s", formattedBody)
-
-						respHeaders := make(map[string]string)
-						for key, values := range resp.Header {
-							if len(values) > 0 {
-								respHeaders[key] = values[0]
-							}
-						}
-						var respHeadersJSON []byte
-						if envCfg.RawLogOutput {
-							respHeadersJSON, _ = json.Marshal(respHeaders)
-						} else {
-							respHeadersJSON, _ = json.MarshalIndent(respHeaders, "", "  ")
-						}
-						log.Printf("[Responses-Response] 错误响应头:\n%s", string(respHeadersJSON))
-					}
-				}
-				channelScheduler.RecordFailure(currentBaseURL, apiKey, true)
-				c.Data(resp.StatusCode, "application/json", respBodyBytes)
-				return
-			}
-
-			if len(deprioritizeCandidates) > 0 {
-				for key := range deprioritizeCandidates {
-					if err := cfgManager.DeprioritizeAPIKey(key); err != nil {
-						log.Printf("[Responses-Key] 警告: 密钥降级失败: %v", err)
-					}
-				}
-			}
-
-			usage := handleSuccess(c, resp, provider, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, bodyBytes)
-			channelScheduler.RecordSuccessWithUsage(currentBaseURL, apiKey, usage, true)
-			return
+		},
+		nil,
+		nil,
+		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) *types.Usage {
+			return handleSuccess(c, resp, provider, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, bodyBytes)
+		},
+	)
+	if handled {
+		if successKey != "" {
+			channelScheduler.RecordSuccessWithUsage(baseURLs[successBaseURLIdx], successKey, usage, scheduler.ChannelKindResponses)
 		}
+		return
 	}
 
 	log.Printf("[Responses-Error] 所有 Responses API密钥都失败了")

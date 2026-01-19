@@ -98,7 +98,7 @@ func UpdateUpstream(cfgManager *config.ConfigManager, sch *scheduler.ChannelSche
 		}
 
 		if shouldResetMetrics {
-			sch.ResetChannelMetrics(id, false)
+			sch.ResetChannelMetrics(id, scheduler.ChannelKindMessages)
 		}
 
 		cfg := cfgManager.GetConfig()

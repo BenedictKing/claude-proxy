@@ -88,7 +88,7 @@ func UpdateUpstream(cfgManager *config.ConfigManager, sch *scheduler.ChannelSche
 
 		// 单 key 更换时重置熔断状态
 		if shouldResetMetrics {
-			sch.ResetChannelMetrics(id, true)
+			sch.ResetChannelMetrics(id, scheduler.ChannelKindResponses)
 		}
 
 		c.JSON(200, gin.H{"message": "Responses upstream updated successfully"})

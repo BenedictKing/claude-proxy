@@ -92,7 +92,7 @@ func UpdateUpstream(cfgManager *config.ConfigManager, sch *scheduler.ChannelSche
 
 		// 单 key 更换时重置熔断状态
 		if shouldResetMetrics {
-			sch.ResetGeminiChannelMetrics(id)
+			sch.ResetChannelMetrics(id, scheduler.ChannelKindGemini)
 		}
 
 		c.JSON(200, gin.H{"message": "Gemini upstream updated successfully"})

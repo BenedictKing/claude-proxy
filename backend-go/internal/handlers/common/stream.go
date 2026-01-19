@@ -152,7 +152,7 @@ func ProcessStreamEvents(
 				logPartialResponse(ctx, envCfg)
 
 				// 记录失败指标
-				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, false)
+				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, scheduler.ChannelKindMessages)
 
 				// 向客户端发送错误事件（如果连接仍然有效）
 				if !ctx.ClientGone {
@@ -340,7 +340,7 @@ func logStreamCompletion(ctx *StreamContext, envCfg *config.EnvConfig, startTime
 	}
 
 	// 记录成功指标
-	channelScheduler.RecordSuccessWithUsage(upstream.BaseURL, apiKey, usage, false)
+	channelScheduler.RecordSuccessWithUsage(upstream.BaseURL, apiKey, usage, scheduler.ChannelKindMessages)
 }
 
 // logPartialResponse 记录部分响应日志

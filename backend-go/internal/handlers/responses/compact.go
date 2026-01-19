@@ -51,7 +51,7 @@ func CompactHandler(
 		userID := common.ExtractConversationID(c, bodyBytes)
 
 		// 检查是否为多渠道模式
-		isMultiChannel := channelScheduler.IsMultiChannelMode(true)
+		isMultiChannel := channelScheduler.IsMultiChannelMode(scheduler.ChannelKindResponses)
 
 		if isMultiChannel {
 			handleMultiChannelCompact(c, envCfg, cfgManager, channelScheduler, bodyBytes, userID)
@@ -136,11 +136,11 @@ func handleMultiChannelCompact(
 	userID string,
 ) {
 	failedChannels := make(map[int]bool)
-	maxAttempts := channelScheduler.GetActiveChannelCount(true)
+	maxAttempts := channelScheduler.GetActiveChannelCount(scheduler.ChannelKindResponses)
 	var lastErr *compactError
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		selection, err := channelScheduler.SelectChannel(c.Request.Context(), userID, failedChannels, true)
+		selection, err := channelScheduler.SelectChannel(c.Request.Context(), userID, failedChannels, scheduler.ChannelKindResponses)
 		if err != nil {
 			break
 		}
@@ -154,7 +154,7 @@ func handleMultiChannelCompact(
 		if success {
 			// compact 不产生 usage，但仍需记录成功以更新熔断器/权重
 			if successKey != "" {
-				channelScheduler.RecordSuccessWithUsage(upstream.BaseURL, successKey, nil, true)
+				channelScheduler.RecordSuccessWithUsage(upstream.BaseURL, successKey, nil, scheduler.ChannelKindResponses)
 			}
 			channelScheduler.SetTraceAffinity(userID, channelIndex)
 			return
@@ -232,7 +232,7 @@ func tryCompactChannelWithAllKeys(
 			if compactErr.shouldFailover {
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey, "Responses")
-				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, true)
+				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, scheduler.ChannelKindResponses)
 				continue
 			}
 			// 非故障转移错误，返回但标记渠道成功（请求已处理）

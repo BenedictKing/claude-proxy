@@ -87,7 +87,7 @@ func Handler(
 		common.LogOriginalRequest(c, bodyBytes, envCfg, "Gemini")
 
 		// 检查是否为多渠道模式
-		isMultiChannel := channelScheduler.IsMultiChannelModeGemini()
+		isMultiChannel := channelScheduler.IsMultiChannelMode(scheduler.ChannelKindGemini)
 
 		if isMultiChannel {
 			handleMultiChannel(c, envCfg, cfgManager, channelScheduler, bodyBytes, &geminiReq, model, isStream, userID, startTime)
@@ -124,190 +124,81 @@ func handleMultiChannel(
 	userID string,
 	startTime time.Time,
 ) {
-	failedChannels := make(map[int]bool)
-	var lastError error
-	var lastFailoverError *common.FailoverError
-
-	maxChannelAttempts := channelScheduler.GetActiveGeminiChannelCount()
-
-	for channelAttempt := 0; channelAttempt < maxChannelAttempts; channelAttempt++ {
-		// 检查客户端是否已断开连接
-		select {
-		case <-c.Request.Context().Done():
-			if envCfg.ShouldLog("info") {
-				log.Printf("[Gemini-Cancel] 请求已取消，停止渠道 failover")
-			}
-			return
-		default:
-			// 继续正常流程
-		}
-
-		selection, err := channelScheduler.SelectGeminiChannel(c.Request.Context(), userID, failedChannels)
-		if err != nil {
-			lastError = err
-			break
-		}
-
-		upstream := selection.Upstream
-		channelIndex := selection.ChannelIndex
-
-		if envCfg.ShouldLog("info") {
-			log.Printf("[Gemini-Select] 选择渠道: [%d] %s (原因: %s, 尝试 %d/%d)",
-				channelIndex, upstream.Name, selection.Reason, channelAttempt+1, maxChannelAttempts)
-		}
-
-		success, successKey, successBaseURLIdx, failoverErr, usage := tryChannelWithAllKeys(
-			c, envCfg, cfgManager, channelScheduler, upstream, channelIndex,
-			bodyBytes, geminiReq, model, isStream, startTime,
-		)
-
-		if success {
-			if successKey != "" {
-				channelScheduler.RecordGeminiSuccessWithUsage(upstream.GetAllBaseURLs()[successBaseURLIdx], successKey, usage)
-			}
-			channelScheduler.SetTraceAffinity(userID, channelIndex)
-			return
-		}
-
-		failedChannels[channelIndex] = true
-
-		if failoverErr != nil {
-			lastFailoverError = failoverErr
-			lastError = fmt.Errorf("渠道 [%d] %s 失败", channelIndex, upstream.Name)
-		}
-
-		log.Printf("[Gemini-Failover] 警告: 渠道 [%d] %s 所有密钥都失败，尝试下一个渠道", channelIndex, upstream.Name)
-	}
-
-	log.Printf("[Gemini-Error] 所有渠道都失败了")
-	handleAllChannelsFailed(c, lastFailoverError, lastError)
-}
-
-// tryChannelWithAllKeys 尝试使用 Gemini 渠道的所有密钥
-func tryChannelWithAllKeys(
-	c *gin.Context,
-	envCfg *config.EnvConfig,
-	cfgManager *config.ConfigManager,
-	channelScheduler *scheduler.ChannelScheduler,
-	upstream *config.UpstreamConfig,
-	channelIndex int,
-	bodyBytes []byte,
-	geminiReq *types.GeminiRequest,
-	model string,
-	isStream bool,
-	startTime time.Time,
-) (bool, string, int, *common.FailoverError, *types.Usage) {
-	if len(upstream.APIKeys) == 0 {
-		return false, "", 0, nil, nil
-	}
-
 	metricsManager := channelScheduler.GetGeminiMetricsManager()
-	baseURLs := upstream.GetAllBaseURLs()
+	common.HandleMultiChannelFailover(
+		c,
+		envCfg,
+		channelScheduler,
+		scheduler.ChannelKindGemini,
+		"Gemini",
+		userID,
+		func(selection *scheduler.SelectionResult) common.MultiChannelAttemptResult {
+			upstream := selection.Upstream
+			channelIndex := selection.ChannelIndex
 
-	// 获取动态排序后的 URL 列表
-	sortedURLResults := channelScheduler.GetSortedURLsForChannel(channelIndex, baseURLs)
-
-	var lastFailoverError *common.FailoverError
-	deprioritizeCandidates := make(map[string]bool)
-
-	// 强制探测模式
-	forceProbeMode := common.AreAllKeysSuspended(metricsManager, upstream.BaseURL, upstream.APIKeys)
-	if forceProbeMode {
-		log.Printf("[Gemini-ForceProbe] 渠道 %s 所有 Key 都被熔断，启用强制探测模式", upstream.Name)
-	}
-
-	for sortedIdx, urlResult := range sortedURLResults {
-		currentBaseURL := urlResult.URL
-		originalIdx := urlResult.OriginalIdx
-		failedKeys := make(map[string]bool)
-		maxRetries := len(upstream.APIKeys)
-
-		for attempt := 0; attempt < maxRetries; attempt++ {
-			common.RestoreRequestBody(c, bodyBytes)
-
-			apiKey, err := cfgManager.GetNextGeminiAPIKey(upstream, failedKeys)
-			if err != nil {
-				break
+			if upstream == nil {
+				return common.MultiChannelAttemptResult{}
 			}
 
-			// 检查熔断状态
-			if !forceProbeMode && metricsManager.ShouldSuspendKey(currentBaseURL, apiKey) {
-				failedKeys[apiKey] = true
-				log.Printf("[Gemini-Circuit] 跳过熔断中的 Key: %s", utils.MaskAPIKey(apiKey))
-				continue
+			baseURLs := upstream.GetAllBaseURLs()
+			sortedURLResults := channelScheduler.GetSortedURLsForChannel(scheduler.ChannelKindGemini, channelIndex, baseURLs)
+
+			handled, successKey, successBaseURLIdx, failoverErr, usage, lastErr := common.TryUpstreamWithAllKeys(
+				c,
+				envCfg,
+				cfgManager,
+				channelScheduler,
+				scheduler.ChannelKindGemini,
+				"Gemini",
+				metricsManager,
+				upstream,
+				sortedURLResults,
+				bodyBytes,
+				isStream,
+				func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
+					return cfgManager.GetNextGeminiAPIKey(upstream, failedKeys)
+				},
+				func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
+					return buildProviderRequest(c, upstreamCopy, upstreamCopy.BaseURL, apiKey, geminiReq, model, isStream)
+				},
+				func(apiKey string) {
+					_ = cfgManager.DeprioritizeAPIKey(apiKey)
+				},
+				func(url string) {
+					channelScheduler.MarkURLFailure(scheduler.ChannelKindGemini, channelIndex, url)
+				},
+				func(url string) {
+					channelScheduler.MarkURLSuccess(scheduler.ChannelKindGemini, channelIndex, url)
+				},
+				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) *types.Usage {
+					return handleSuccess(c, resp, upstreamCopy.ServiceType, envCfg, startTime, geminiReq, model, isStream)
+				},
+			)
+
+			return common.MultiChannelAttemptResult{
+				Handled:           handled,
+				Attempted:         true,
+				SuccessKey:        successKey,
+				SuccessBaseURLIdx: successBaseURLIdx,
+				FailoverError:     failoverErr,
+				Usage:             usage,
+				LastError:         lastErr,
 			}
-
-			if envCfg.ShouldLog("info") {
-				log.Printf("[Gemini-Key] 使用API密钥: %s (BaseURL %d/%d, 尝试 %d/%d)",
-					utils.MaskAPIKey(apiKey), sortedIdx+1, len(sortedURLResults), attempt+1, maxRetries)
+		},
+		func(selection *scheduler.SelectionResult, result common.MultiChannelAttemptResult) {
+			if result.SuccessKey == "" || selection.Upstream == nil {
+				return
 			}
-
-			// 构建请求
-			providerReq, err := buildProviderRequest(c, upstream, currentBaseURL, apiKey, geminiReq, model, isStream)
-			if err != nil {
-				failedKeys[apiKey] = true
-				channelScheduler.RecordGeminiFailure(currentBaseURL, apiKey)
-				continue
+			baseURLs := selection.Upstream.GetAllBaseURLs()
+			if result.SuccessBaseURLIdx < 0 || result.SuccessBaseURLIdx >= len(baseURLs) {
+				return
 			}
-
-			resp, err := common.SendRequest(providerReq, upstream, envCfg, isStream, "Gemini")
-			if err != nil {
-				failedKeys[apiKey] = true
-				cfgManager.MarkKeyAsFailed(apiKey, "Gemini")
-				channelScheduler.RecordGeminiFailure(currentBaseURL, apiKey)
-				channelScheduler.MarkURLFailure(channelIndex, currentBaseURL)
-				log.Printf("[Gemini-Key] 警告: API密钥失败: %v", err)
-				continue
-			}
-
-			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-				respBodyBytes, _ := io.ReadAll(resp.Body)
-				resp.Body.Close()
-				respBodyBytes = utils.DecompressGzipIfNeeded(resp, respBodyBytes)
-
-				shouldFailover, isQuotaRelated := common.ShouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled(), "Gemini")
-				if shouldFailover {
-					failedKeys[apiKey] = true
-					cfgManager.MarkKeyAsFailed(apiKey, "Gemini")
-					channelScheduler.RecordGeminiFailure(currentBaseURL, apiKey)
-					channelScheduler.MarkURLFailure(channelIndex, currentBaseURL)
-					log.Printf("[Gemini-Key] 警告: API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
-
-					lastFailoverError = &common.FailoverError{
-						Status: resp.StatusCode,
-						Body:   respBodyBytes,
-					}
-
-					if isQuotaRelated {
-						deprioritizeCandidates[apiKey] = true
-					}
-					continue
-				}
-
-				// 非 failover 错误
-				channelScheduler.RecordGeminiFailure(currentBaseURL, apiKey)
-				c.Data(resp.StatusCode, "application/json", respBodyBytes)
-				return true, "", 0, nil, nil
-			}
-
-			if len(deprioritizeCandidates) > 0 {
-				for key := range deprioritizeCandidates {
-					_ = cfgManager.DeprioritizeAPIKey(key)
-				}
-			}
-
-			channelScheduler.MarkURLSuccess(channelIndex, currentBaseURL)
-
-			usage := handleSuccess(c, resp, upstream.ServiceType, envCfg, startTime, geminiReq, model, isStream)
-			return true, apiKey, originalIdx, nil, usage
-		}
-
-		if sortedIdx < len(sortedURLResults)-1 {
-			log.Printf("[Gemini-BaseURL] BaseURL %d/%d 所有 Key 失败，切换到下一个 BaseURL", sortedIdx+1, len(sortedURLResults))
-		}
-	}
-
-	return false, "", 0, lastFailoverError, nil
+			channelScheduler.RecordSuccessWithUsage(baseURLs[result.SuccessBaseURLIdx], result.SuccessKey, result.Usage, scheduler.ChannelKindGemini)
+		},
+		func(ctx *gin.Context, failoverErr *common.FailoverError, lastError error) {
+			handleAllChannelsFailed(ctx, failoverErr, lastError)
+		},
+	)
 }
 
 // handleSingleChannel 处理单渠道 Gemini 请求
@@ -347,98 +238,40 @@ func handleSingleChannel(
 
 	metricsManager := channelScheduler.GetGeminiMetricsManager()
 	baseURLs := upstream.GetAllBaseURLs()
+	urlResults := common.BuildDefaultURLResults(baseURLs)
 
-	var lastError error
-	var lastFailoverError *common.FailoverError
-	deprioritizeCandidates := make(map[string]bool)
-
-	forceProbeMode := common.AreAllKeysSuspended(metricsManager, baseURLs[0], upstream.APIKeys)
-	if forceProbeMode {
-		log.Printf("[Gemini-ForceProbe] 渠道 %s 所有 Key 都被熔断，启用强制探测模式", upstream.Name)
-	}
-
-	for baseURLIdx, currentBaseURL := range baseURLs {
-		failedKeys := make(map[string]bool)
-		maxRetries := len(upstream.APIKeys)
-
-		for attempt := 0; attempt < maxRetries; attempt++ {
-			common.RestoreRequestBody(c, bodyBytes)
-
-			apiKey, err := cfgManager.GetNextGeminiAPIKey(upstream, failedKeys)
-			if err != nil {
-				lastError = err
-				break
-			}
-
-			if !forceProbeMode && metricsManager.ShouldSuspendKey(currentBaseURL, apiKey) {
-				failedKeys[apiKey] = true
-				log.Printf("[Gemini-Circuit] 跳过熔断中的 Key: %s", utils.MaskAPIKey(apiKey))
-				continue
-			}
-
-			if envCfg.ShouldLog("info") {
-				log.Printf("[Gemini-Upstream] 使用 Gemini 上游: %s - %s (BaseURL %d/%d, 尝试 %d/%d)",
-					upstream.Name, currentBaseURL, baseURLIdx+1, len(baseURLs), attempt+1, maxRetries)
-				log.Printf("[Gemini-Key] 使用API密钥: %s", utils.MaskAPIKey(apiKey))
-			}
-
-			providerReq, err := buildProviderRequest(c, upstream, currentBaseURL, apiKey, geminiReq, model, isStream)
-			if err != nil {
-				lastError = err
-				failedKeys[apiKey] = true
-				channelScheduler.RecordGeminiFailure(currentBaseURL, apiKey)
-				continue
-			}
-
-			resp, err := common.SendRequest(providerReq, upstream, envCfg, isStream, "Gemini")
-			if err != nil {
-				lastError = err
-				failedKeys[apiKey] = true
-				cfgManager.MarkKeyAsFailed(apiKey, "Gemini")
-				channelScheduler.RecordGeminiFailure(currentBaseURL, apiKey)
-				log.Printf("[Gemini-Key] 警告: API密钥失败: %v", err)
-				continue
-			}
-
-			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-				respBodyBytes, _ := io.ReadAll(resp.Body)
-				resp.Body.Close()
-				respBodyBytes = utils.DecompressGzipIfNeeded(resp, respBodyBytes)
-
-				shouldFailover, isQuotaRelated := common.ShouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled(), "Gemini")
-				if shouldFailover {
-					lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)
-					failedKeys[apiKey] = true
-					cfgManager.MarkKeyAsFailed(apiKey, "Gemini")
-					channelScheduler.RecordGeminiFailure(currentBaseURL, apiKey)
-					log.Printf("[Gemini-Key] 警告: API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
-
-					lastFailoverError = &common.FailoverError{
-						Status: resp.StatusCode,
-						Body:   respBodyBytes,
-					}
-
-					if isQuotaRelated {
-						deprioritizeCandidates[apiKey] = true
-					}
-					continue
-				}
-
-				channelScheduler.RecordGeminiFailure(currentBaseURL, apiKey)
-				c.Data(resp.StatusCode, "application/json", respBodyBytes)
-				return
-			}
-
-			if len(deprioritizeCandidates) > 0 {
-				for key := range deprioritizeCandidates {
-					_ = cfgManager.DeprioritizeAPIKey(key)
-				}
-			}
-
-			usage := handleSuccess(c, resp, upstream.ServiceType, envCfg, startTime, geminiReq, model, isStream)
-			channelScheduler.RecordGeminiSuccessWithUsage(currentBaseURL, apiKey, usage)
-			return
+	handled, successKey, successBaseURLIdx, lastFailoverError, usage, lastError := common.TryUpstreamWithAllKeys(
+		c,
+		envCfg,
+		cfgManager,
+		channelScheduler,
+		scheduler.ChannelKindGemini,
+		"Gemini",
+		metricsManager,
+		upstream,
+		urlResults,
+		bodyBytes,
+		isStream,
+		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
+			return cfgManager.GetNextGeminiAPIKey(upstream, failedKeys)
+		},
+		func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
+			return buildProviderRequest(c, upstreamCopy, upstreamCopy.BaseURL, apiKey, geminiReq, model, isStream)
+		},
+		func(apiKey string) {
+			_ = cfgManager.DeprioritizeAPIKey(apiKey)
+		},
+		nil,
+		nil,
+		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) *types.Usage {
+			return handleSuccess(c, resp, upstreamCopy.ServiceType, envCfg, startTime, geminiReq, model, isStream)
+		},
+	)
+	if handled {
+		if successKey != "" && successBaseURLIdx >= 0 && successBaseURLIdx < len(baseURLs) {
+			channelScheduler.RecordSuccessWithUsage(baseURLs[successBaseURLIdx], successKey, usage, scheduler.ChannelKindGemini)
 		}
+		return
 	}
 
 	log.Printf("[Gemini-Error] 所有 API密钥都失败了")

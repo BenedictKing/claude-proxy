@@ -6,6 +6,21 @@
 
 ## [Unreleased]
 
+## [v2.5.4] - 2026-01-19
+
+### 重构
+
+- **Failover 逻辑模块化** - 将多渠道和单上游 failover 逻辑提取到公共模块，大幅减少代码重复
+  - 新增 `backend-go/internal/handlers/common/multi_channel_failover.go` - 多渠道 failover 外壳逻辑
+  - 新增 `backend-go/internal/handlers/common/upstream_failover.go` - 单上游 Key/BaseURL 轮转逻辑
+  - 重构 Messages、Responses、Gemini 三个 handler，使用统一的 failover 函数
+  - 代码行数减少：-1253 行，+475 行（净减少 778 行）
+  - 涉及文件：
+    - `backend-go/internal/handlers/messages/handler.go`
+    - `backend-go/internal/handlers/responses/handler.go`
+    - `backend-go/internal/handlers/gemini/handler.go`
+    - `backend-go/internal/scheduler/channel_scheduler.go`
+
 ## [v2.5.3] - 2026-01-19
 
 ### 修复

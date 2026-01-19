@@ -166,8 +166,13 @@ func tryModelsRequest(c *gin.Context, cfgManager *config.ConfigManager, channelS
 	}
 
 	for attempt := 0; attempt < maxChannelRetries; attempt++ {
+		kind := scheduler.ChannelKindMessages
+		if isResponses {
+			kind = scheduler.ChannelKindResponses
+		}
+
 		// 使用调度器选择渠道
-		selection, err := channelScheduler.SelectChannel(c.Request.Context(), "", failedChannels, isResponses)
+		selection, err := channelScheduler.SelectChannel(c.Request.Context(), "", failedChannels, kind)
 		if err != nil {
 			log.Printf("[%s-Models] 渠道无可用: %v", channelType, err)
 			break
