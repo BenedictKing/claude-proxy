@@ -25,21 +25,22 @@ func GetDashboard(cfgManager *config.ConfigManager, sch *scheduler.ChannelSchedu
 			priority := config.GetChannelPriority(&up, i)
 
 			channels[i] = gin.H{
-				"index":              i,
-				"name":               up.Name,
-				"serviceType":        up.ServiceType,
-				"baseUrl":            up.BaseURL,
-				"baseUrls":           up.BaseURLs,
-				"apiKeys":            up.APIKeys,
-				"description":        up.Description,
-				"website":            up.Website,
-				"insecureSkipVerify": up.InsecureSkipVerify,
-				"modelMapping":       up.ModelMapping,
-				"latency":            nil,
-				"status":             status,
-				"priority":           priority,
-				"promotionUntil":     up.PromotionUntil,
-				"lowQuality":         up.LowQuality,
+				"index":                       i,
+				"name":                        up.Name,
+				"serviceType":                 up.ServiceType,
+				"baseUrl":                     up.BaseURL,
+				"baseUrls":                    up.BaseURLs,
+				"apiKeys":                     up.APIKeys,
+				"description":                 up.Description,
+				"website":                     up.Website,
+				"insecureSkipVerify":          up.InsecureSkipVerify,
+				"modelMapping":                up.ModelMapping,
+				"latency":                     nil,
+				"status":                      status,
+				"priority":                    priority,
+				"promotionUntil":              up.PromotionUntil,
+				"lowQuality":                  up.LowQuality,
+				"injectDummyThoughtSignature": up.InjectDummyThoughtSignature,
 			}
 		}
 

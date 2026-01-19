@@ -228,6 +228,9 @@ test-*.ts
 .snow/
 refs/
 
+# CCB/Codex 会话配置（包含本机路径等敏感信息）
+.ccb_config/
+
 # 临时调查文档
 backend-go/cmd/
 !backend-go/cmd/stream_verify/

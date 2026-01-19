@@ -434,6 +434,23 @@ func handleSingleChannel(
 	handleAllKeysFailed(c, lastFailoverError, lastError)
 }
 
+// ensureThoughtSignatures 确保所有 functionCall 都有 thought_signature
+// 参考: https://ai.google.dev/gemini-api/docs/thought-signatures
+// 参考 CLIProxyAPI 的实现，使用 dummy signature 跳过验证
+// 注意：虽然官方文档说并行 FC 只有第一个需要真实 signature，
+// 但对于 dummy signature（用于跳过验证），所有 FC 都需要添加
+func ensureThoughtSignatures(geminiReq *types.GeminiRequest) {
+	// 遍历所有 contents
+	for i := range geminiReq.Contents {
+		for j := range geminiReq.Contents[i].Parts {
+			part := &geminiReq.Contents[i].Parts[j]
+			if part.FunctionCall != nil && part.FunctionCall.ThoughtSignature == "" {
+				part.FunctionCall.ThoughtSignature = types.DummyThoughtSignature
+			}
+		}
+	}
+}
+
 // buildProviderRequest 构建上游请求
 func buildProviderRequest(
 	c *gin.Context,
@@ -453,8 +470,18 @@ func buildProviderRequest(
 
 	switch upstream.ServiceType {
 	case "gemini":
-		// Gemini 上游：直接转发
-		requestBody, err = json.Marshal(geminiReq)
+		// Gemini 上游：根据配置决定是否注入 dummy thought_signature
+		// 注意：为避免多渠道 failover 时污染后续渠道请求，需要深拷贝后再注入
+		reqToUse := geminiReq
+		if upstream.InjectDummyThoughtSignature {
+			// 深拷贝请求对象（通过 JSON 序列化/反序列化）
+			reqCopy := &types.GeminiRequest{}
+			data, _ := json.Marshal(geminiReq)
+			json.Unmarshal(data, reqCopy)
+			ensureThoughtSignatures(reqCopy)
+			reqToUse = reqCopy
+		}
+		requestBody, err = json.Marshal(reqToUse)
 		if err != nil {
 			return nil, err
 		}
@@ -495,8 +522,18 @@ func buildProviderRequest(
 		url = fmt.Sprintf("%s/v1/chat/completions", strings.TrimRight(baseURL, "/"))
 
 	default:
-		// 默认当作 Gemini 处理
-		requestBody, err = json.Marshal(geminiReq)
+		// 默认当作 Gemini 处理，根据配置决定是否注入 thought_signature
+		// 注意：为避免多渠道 failover 时污染后续渠道请求，需要深拷贝后再注入
+		reqToUse := geminiReq
+		if upstream.InjectDummyThoughtSignature {
+			// 深拷贝请求对象（通过 JSON 序列化/反序列化）
+			reqCopy := &types.GeminiRequest{}
+			data, _ := json.Marshal(geminiReq)
+			json.Unmarshal(data, reqCopy)
+			ensureThoughtSignatures(reqCopy)
+			reqToUse = reqCopy
+		}
+		requestBody, err = json.Marshal(reqToUse)
 		if err != nil {
 			return nil, err
 		}

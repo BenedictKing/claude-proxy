@@ -24,21 +24,22 @@ func GetUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			priority := config.GetChannelPriority(&up, i)
 
 			upstreams[i] = gin.H{
-				"index":              i,
-				"name":               up.Name,
-				"serviceType":        up.ServiceType,
-				"baseUrl":            up.BaseURL,
-				"baseUrls":           up.BaseURLs,
-				"apiKeys":            up.APIKeys,
-				"description":        up.Description,
-				"website":            up.Website,
-				"insecureSkipVerify": up.InsecureSkipVerify,
-				"modelMapping":       up.ModelMapping,
-				"latency":            nil,
-				"status":             status,
-				"priority":           priority,
-				"promotionUntil":     up.PromotionUntil,
-				"lowQuality":         up.LowQuality,
+				"index":                       i,
+				"name":                        up.Name,
+				"serviceType":                 up.ServiceType,
+				"baseUrl":                     up.BaseURL,
+				"baseUrls":                    up.BaseURLs,
+				"apiKeys":                     up.APIKeys,
+				"description":                 up.Description,
+				"website":                     up.Website,
+				"insecureSkipVerify":          up.InsecureSkipVerify,
+				"modelMapping":                up.ModelMapping,
+				"latency":                     nil,
+				"status":                      status,
+				"priority":                    priority,
+				"promotionUntil":              up.PromotionUntil,
+				"lowQuality":                  up.LowQuality,
+				"injectDummyThoughtSignature": up.InjectDummyThoughtSignature,
 			}
 		}
 

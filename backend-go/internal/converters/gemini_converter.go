@@ -8,10 +8,6 @@ import (
 	"github.com/BenedictKing/claude-proxy/internal/types"
 )
 
-// dummyThoughtSignature 用于跳过 Gemini 3 thought_signature 验证
-// 参考: https://ai.google.dev/gemini-api/docs/thought-signatures
-const dummyThoughtSignature = "skip_thought_signature_validator"
-
 // ============== Gemini -> Claude/OpenAI 转换器 ==============
 
 // GeminiToClaudeRequest 将 Gemini 请求转换为 Claude Messages API 格式
@@ -207,7 +203,7 @@ func ClaudeResponseToGemini(claudeResp map[string]interface{}) (*types.GeminiRes
 			if signature, ok := contentBlock["signature"].(string); ok && signature != "" {
 				functionCall.ThoughtSignature = signature
 			} else {
-				functionCall.ThoughtSignature = dummyThoughtSignature
+				functionCall.ThoughtSignature = types.DummyThoughtSignature
 			}
 
 			parts = append(parts, types.GeminiPart{
@@ -301,7 +297,7 @@ func OpenAIResponseToGemini(openaiResp map[string]interface{}) (*types.GeminiRes
 					FunctionCall: &types.GeminiFunctionCall{
 						Name:             name,
 						Args:             args,
-						ThoughtSignature: dummyThoughtSignature,
+						ThoughtSignature: types.DummyThoughtSignature,
 					},
 				})
 			}

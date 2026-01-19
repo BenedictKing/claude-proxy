@@ -120,6 +120,9 @@ func (cm *ConfigManager) UpdateGeminiUpstream(index int, updates UpstreamUpdate)
 	if updates.LowQuality != nil {
 		upstream.LowQuality = *updates.LowQuality
 	}
+	if updates.InjectDummyThoughtSignature != nil {
+		upstream.InjectDummyThoughtSignature = *updates.InjectDummyThoughtSignature
+	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return false, err

@@ -6,6 +6,26 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **Gemini thought_signature 可配置化** - 新增渠道级配置开关 `injectDummyThoughtSignature`
+  - 新增 `ensureThoughtSignatures` 函数：为所有缺失 `thought_signature` 的 `functionCall` 注入 dummy 值
+  - 使用官方推荐的 `skip_thought_signature_validator` 跳过验证
+  - **默认关闭**：保持原样，符合官方 Gemini API 标准
+  - **用户可开启**：为需要该字段的第三方 API 注入 dummy signature
+  - 前端 UI：在 Gemini 渠道编辑界面添加"注入 Dummy Thought Signature"开关
+  - 涉及文件：
+    - `backend-go/internal/config/config.go` - 添加 `InjectDummyThoughtSignature` 配置字段
+    - `backend-go/internal/config/config_gemini.go` - 更新方法支持新字段
+    - `backend-go/internal/config/config_messages.go` - 更新方法支持新字段
+    - `backend-go/internal/handlers/gemini/handler.go` - 根据配置决定是否调用 `ensureThoughtSignatures`
+    - `backend-go/internal/types/gemini.go` - 新增共享常量 `DummyThoughtSignature`
+    - `backend-go/internal/converters/gemini_converter.go` - 使用共享常量
+    - `frontend/src/services/api.ts` - 添加类型定义
+    - `frontend/src/components/AddChannelModal.vue` - 添加配置开关 UI
+    - `frontend/src/plugins/vuetify.ts` - 添加 `mdi-signature` 图标映射
+  - 配置优化：将 `.ccb_config/` 目录加入 `.gitignore`，避免泄露本机路径等敏感信息
+
 ### 优化
 
 - **渠道活跃度图表颜色优化** - 状态条柱状图颜色改为显示每个 6 秒段的独立成功率

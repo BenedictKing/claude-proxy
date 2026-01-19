@@ -1,6 +1,14 @@
 package types
 
 // ============================================================================
+// Gemini API 常量
+// ============================================================================
+
+// DummyThoughtSignature 用于跳过 Gemini thought_signature 验证
+// 参考: https://ai.google.dev/gemini-api/docs/thought-signatures
+const DummyThoughtSignature = "skip_thought_signature_validator"
+
+// ============================================================================
 // Gemini API 请求结构
 // ============================================================================
 
