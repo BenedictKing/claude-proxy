@@ -1,9 +1,11 @@
 ---
 name: codex-review
-description: 调用 codex 命令行进行代码审核，自动收集当前文件修改和任务状态一并发送；工作区干净时自动审核最新提交 (user)
-version: 2.0.0
+description: 调用 codex 命令行进行代码审核，自动收集当前文件修改和任务状态一并发送；工作区干净时自动审核最新提交。触发词：代码审核、代码审查、review、code review、检查代码
+version: 2.1.0
 author: https://github.com/BenedictKing/claude-proxy/
 allowed-tools: Bash, Read, Glob, Write, Edit, Task
+context: fork
+user-invocable: true
 ---
 
 # Codex 代码审核技能
@@ -84,7 +86,31 @@ git diff --name-only | grep -E "(CHANGELOG|changelog)"
 6. 继续执行 lint 和 codex review
 ```
 
-### 2. 评估任务难度并调用 codex-runner
+### 2. 【关键】暂存所有新增文件
+
+**在调用 codex 审核前，必须将所有新增文件（untracked files）加入 git 暂存区，否则 codex 会报 P1 错误。**
+
+```bash
+# 检查是否有新增文件
+git status --short | grep "^??"
+```
+
+**如果有新增文件，自动执行：**
+
+```bash
+# 安全地暂存所有新增文件（处理空列表和特殊文件名）
+git ls-files --others --exclude-standard -z | while IFS= read -r -d '' f; do git add -- "$f"; done
+```
+
+**说明：**
+- `-z` 使用 null 字符分隔文件名，正确处理包含空格/换行的文件名
+- `while IFS= read -r -d ''` 逐个读取文件名
+- `git add -- "$f"` 使用 `--` 分隔符，正确处理以 `-` 开头的文件名
+- 当没有新增文件时，循环体不执行，安全跳过
+- 这不会暂存已修改的文件，只处理新增文件
+- codex 需要文件被 git 跟踪才能正确审核
+
+### 3. 评估任务难度并调用 codex-runner
 
 **统计变更规模：**
 
@@ -131,7 +157,7 @@ Python 项目:
   codex review --commit HEAD --config model_reasoning_effort=high
 ```
 
-### 3. 自我修正
+### 4. 自我修正
 
 如果 Codex 发现 Changelog 描述与代码逻辑不一致：
 
@@ -141,8 +167,9 @@ Python 项目:
 ## 完整审核协议
 
 1. **[GATE] Check CHANGELOG** - 未更新则自动生成并写入（利用当前上下文理解变更意图）
-2. **[EXEC] Task → Lint + codex review** - 调用 Task 工具执行 Lint 和 codex（独立上下文，减少浪费）
-3. **[FIX] Self-Correction** - 意图 ≠ 实现时修复代码或更新描述
+2. **[PREPARE] Stage Untracked Files** - 将所有新增文件加入 git 暂存区（避免 codex P1 错误）
+3. **[EXEC] Task → Lint + codex review** - 调用 Task 工具执行 Lint 和 codex（独立上下文，减少浪费）
+4. **[FIX] Self-Correction** - 意图 ≠ 实现时修复代码或更新描述
 
 ## Codex Review 命令参考
 
