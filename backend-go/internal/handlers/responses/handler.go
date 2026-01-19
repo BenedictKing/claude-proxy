@@ -90,6 +90,17 @@ func handleMultiChannel(
 	maxChannelAttempts := channelScheduler.GetActiveChannelCount(true) // true = isResponses
 
 	for channelAttempt := 0; channelAttempt < maxChannelAttempts; channelAttempt++ {
+		// 检查客户端是否已断开连接
+		select {
+		case <-c.Request.Context().Done():
+			if envCfg.ShouldLog("info") {
+				log.Printf("[Responses-Cancel] 请求已取消，停止渠道 failover")
+			}
+			return
+		default:
+			// 继续正常流程
+		}
+
 		selection, err := channelScheduler.SelectChannel(c.Request.Context(), userID, failedChannels, true)
 		if err != nil {
 			lastError = err
@@ -201,10 +212,10 @@ func tryChannelWithAllKeys(
 				continue
 			}
 
-			resp, err := common.SendRequest(providerReq, upstream, envCfg, responsesReq.Stream)
+			resp, err := common.SendRequest(providerReq, upstream, envCfg, responsesReq.Stream, "Responses")
 			if err != nil {
 				failedKeys[apiKey] = true
-				cfgManager.MarkKeyAsFailed(apiKey)
+				cfgManager.MarkKeyAsFailed(apiKey, "Responses")
 				channelScheduler.RecordFailure(currentBaseURL, apiKey, true)
 				// 网络错误（超时等）触发 URL 动态降级
 				channelScheduler.MarkURLFailure(channelIndex, currentBaseURL)
@@ -220,7 +231,7 @@ func tryChannelWithAllKeys(
 				shouldFailover, isQuotaRelated := common.ShouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled())
 				if shouldFailover {
 					failedKeys[apiKey] = true
-					cfgManager.MarkKeyAsFailed(apiKey)
+					cfgManager.MarkKeyAsFailed(apiKey, "Responses")
 					channelScheduler.RecordFailure(currentBaseURL, apiKey, true)
 					// HTTP 5xx 等错误也触发 URL 动态降级
 					channelScheduler.MarkURLFailure(channelIndex, currentBaseURL)
@@ -346,11 +357,11 @@ func handleSingleChannel(
 				continue
 			}
 
-			resp, err := common.SendRequest(providerReq, upstream, envCfg, responsesReq.Stream)
+			resp, err := common.SendRequest(providerReq, upstream, envCfg, responsesReq.Stream, "Responses")
 			if err != nil {
 				lastError = err
 				failedKeys[apiKey] = true
-				cfgManager.MarkKeyAsFailed(apiKey)
+				cfgManager.MarkKeyAsFailed(apiKey, "Responses")
 				channelScheduler.RecordFailure(currentBaseURL, apiKey, true)
 				log.Printf("[Responses-Key] 警告: API密钥失败: %v", err)
 				continue
@@ -365,7 +376,7 @@ func handleSingleChannel(
 				if shouldFailover {
 					lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)
 					failedKeys[apiKey] = true
-					cfgManager.MarkKeyAsFailed(apiKey)
+					cfgManager.MarkKeyAsFailed(apiKey, "Responses")
 					channelScheduler.RecordFailure(currentBaseURL, apiKey, true)
 
 					log.Printf("[Responses-Key] 警告: Responses API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)

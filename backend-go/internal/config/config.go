@@ -129,7 +129,8 @@ func (cm *ConfigManager) GetConfig() Config {
 }
 
 // GetNextAPIKey 获取下一个 API 密钥（纯 failover 模式）
-func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[string]bool) (string, error) {
+// apiType: 接口类型（Messages/Responses/Gemini），用于日志标签前缀
+func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[string]bool, apiType string) (string, error) {
 	if len(upstream.APIKeys) == 0 {
 		return "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)
 	}
@@ -166,7 +167,7 @@ func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[
 		cm.mu.RUnlock()
 
 		if oldestFailedKey != "" {
-			log.Printf("[Config-Key] 警告: 所有密钥都失效，尝试最早失败的密钥: %s", utils.MaskAPIKey(oldestFailedKey))
+			log.Printf("[%s-Key] 警告: 所有密钥都失效，尝试最早失败的密钥: %s", apiType, utils.MaskAPIKey(oldestFailedKey))
 			return oldestFailedKey, nil
 		}
 
@@ -183,12 +184,13 @@ func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[
 			break
 		}
 	}
-	log.Printf("[Config-Key] 故障转移选择密钥 %s (%d/%d)", utils.MaskAPIKey(selectedKey), keyIndex, len(upstream.APIKeys))
+	log.Printf("[%s-Key] 故障转移选择密钥 %s (%d/%d)", apiType, utils.MaskAPIKey(selectedKey), keyIndex, len(upstream.APIKeys))
 	return selectedKey, nil
 }
 
 // MarkKeyAsFailed 标记密钥失败
-func (cm *ConfigManager) MarkKeyAsFailed(apiKey string) {
+// apiType: 接口类型（Messages/Responses/Gemini），用于日志标签前缀
+func (cm *ConfigManager) MarkKeyAsFailed(apiKey string, apiType string) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -208,8 +210,8 @@ func (cm *ConfigManager) MarkKeyAsFailed(apiKey string) {
 		recoveryTime = cm.keyRecoveryTime * 2
 	}
 
-	log.Printf("[Config-Key] 标记API密钥失败: %s (失败次数: %d, 恢复时间: %v)",
-		utils.MaskAPIKey(apiKey), failure.FailureCount, recoveryTime)
+	log.Printf("[%s-Key] 标记API密钥失败: %s (失败次数: %d, 恢复时间: %v)",
+		apiType, utils.MaskAPIKey(apiKey), failure.FailureCount, recoveryTime)
 }
 
 // isKeyFailed 检查密钥是否失败
@@ -237,11 +239,12 @@ func (cm *ConfigManager) IsKeyFailed(apiKey string) bool {
 
 // clearFailedKeysForUpstream 清理指定渠道的所有失败 key 记录
 // 当渠道被删除时调用，避免内存泄漏和冷却状态残留
-func (cm *ConfigManager) clearFailedKeysForUpstream(upstream *UpstreamConfig) {
+// apiType: 接口类型（Messages/Responses/Gemini），用于日志标签前缀
+func (cm *ConfigManager) clearFailedKeysForUpstream(upstream *UpstreamConfig, apiType string) {
 	for _, key := range upstream.APIKeys {
 		if _, exists := cm.failedKeysCache[key]; exists {
 			delete(cm.failedKeysCache, key)
-			log.Printf("[Config-Key] 已清理被删除渠道 %s 的失败密钥记录: %s", upstream.Name, utils.MaskAPIKey(key))
+			log.Printf("[%s-Key] 已清理被删除渠道 %s 的失败密钥记录: %s", apiType, upstream.Name, utils.MaskAPIKey(key))
 		}
 	}
 }

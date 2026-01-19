@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **多渠道 failover 客户端取消检测** - 在 failover 循环中添加客户端断开检测，避免客户端已取消请求后继续尝试其他渠道
+  - 在每次渠道选择前检查 `c.Request.Context().Done()`
+  - 客户端断开时立即返回，不再进行无效的渠道 failover
+  - 涉及文件：
+    - `backend-go/internal/handlers/gemini/handler.go` - Gemini API 处理器
+    - `backend-go/internal/handlers/messages/handler.go` - Messages API 处理器
+    - `backend-go/internal/handlers/responses/handler.go` - Responses API 处理器
+
 ### 新增
 
 - **响应 model 字段改写可配置化** - 新增环境变量 `REWRITE_RESPONSE_MODEL` 控制是否改写响应中的 model 字段

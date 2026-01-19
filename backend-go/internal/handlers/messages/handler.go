@@ -39,7 +39,7 @@ func Handler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager, channel
 
 		// 预处理：移除空 signature 字段，预防 400 错误
 		// modified 表示请求体是否被修改，详细日志由 RemoveEmptySignatures 内部记录
-		bodyBytes, modified := common.RemoveEmptySignatures(bodyBytes, envCfg.EnableRequestLogs)
+		bodyBytes, modified := common.RemoveEmptySignatures(bodyBytes, envCfg.EnableRequestLogs, "Messages")
 		_ = modified // 保留以便未来扩展（如需在 handler 层面做额外处理）
 
 		// 解析请求
@@ -83,6 +83,17 @@ func handleMultiChannel(
 	maxChannelAttempts := channelScheduler.GetActiveChannelCount(false)
 
 	for channelAttempt := 0; channelAttempt < maxChannelAttempts; channelAttempt++ {
+		// 检查客户端是否已断开连接
+		select {
+		case <-c.Request.Context().Done():
+			if envCfg.ShouldLog("info") {
+				log.Printf("[Messages-Cancel] 请求已取消，停止渠道 failover")
+			}
+			return
+		default:
+			// 继续正常流程
+		}
+
 		selection, err := channelScheduler.SelectChannel(c.Request.Context(), userID, failedChannels, false)
 		if err != nil {
 			lastError = err
@@ -166,7 +177,7 @@ func tryChannelWithAllKeys(
 			common.RestoreRequestBody(c, bodyBytes)
 
 			// 按优先级顺序选择下一个可用 Key
-			apiKey, err := cfgManager.GetNextAPIKey(upstream, failedKeys)
+			apiKey, err := cfgManager.GetNextAPIKey(upstream, failedKeys, "Messages")
 			if err != nil {
 				break // 当前 BaseURL 没有可用 Key，尝试下一个 BaseURL
 			}
@@ -194,10 +205,10 @@ func tryChannelWithAllKeys(
 				continue
 			}
 
-			resp, err := common.SendRequest(providerReq, upstream, envCfg, claudeReq.Stream)
+			resp, err := common.SendRequest(providerReq, upstream, envCfg, claudeReq.Stream, "Messages")
 			if err != nil {
 				failedKeys[apiKey] = true
-				cfgManager.MarkKeyAsFailed(apiKey)
+				cfgManager.MarkKeyAsFailed(apiKey, "Messages")
 				channelScheduler.RecordFailure(currentBaseURL, apiKey, false)
 				// 网络错误（超时等）触发 URL 动态降级
 				channelScheduler.MarkURLFailure(channelIndex, currentBaseURL)
@@ -214,7 +225,7 @@ func tryChannelWithAllKeys(
 				log.Printf("[Messages-Failover] ShouldRetryWithNextKey: statusCode=%d, shouldFailover=%v, isQuotaRelated=%v", resp.StatusCode, shouldFailover, isQuotaRelated)
 				if shouldFailover {
 					failedKeys[apiKey] = true
-					cfgManager.MarkKeyAsFailed(apiKey)
+					cfgManager.MarkKeyAsFailed(apiKey, "Messages")
 					channelScheduler.RecordFailure(currentBaseURL, apiKey, false)
 					// HTTP 5xx 等错误也触发 URL 动态降级
 					channelScheduler.MarkURLFailure(channelIndex, currentBaseURL)
@@ -332,7 +343,7 @@ func handleSingleChannel(
 		for attempt := 0; attempt < maxRetries; attempt++ {
 			common.RestoreRequestBody(c, bodyBytes)
 
-			apiKey, err := cfgManager.GetNextAPIKey(upstream, failedKeys)
+			apiKey, err := cfgManager.GetNextAPIKey(upstream, failedKeys, "Messages")
 			if err != nil {
 				lastError = err
 				break // 当前 BaseURL 没有可用 Key，尝试下一个 BaseURL
@@ -363,11 +374,11 @@ func handleSingleChannel(
 				continue
 			}
 
-			resp, err := common.SendRequest(providerReq, upstream, envCfg, claudeReq.Stream)
+			resp, err := common.SendRequest(providerReq, upstream, envCfg, claudeReq.Stream, "Messages")
 			if err != nil {
 				lastError = err
 				failedKeys[apiKey] = true
-				cfgManager.MarkKeyAsFailed(apiKey)
+				cfgManager.MarkKeyAsFailed(apiKey, "Messages")
 				channelScheduler.RecordFailure(currentBaseURL, apiKey, false)
 				log.Printf("[Messages-Key] 警告: API密钥失败: %v", err)
 				continue
@@ -383,7 +394,7 @@ func handleSingleChannel(
 				if shouldFailover {
 					lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)
 					failedKeys[apiKey] = true
-					cfgManager.MarkKeyAsFailed(apiKey)
+					cfgManager.MarkKeyAsFailed(apiKey, "Messages")
 					channelScheduler.RecordFailure(currentBaseURL, apiKey, false)
 
 					log.Printf("[Messages-Key] 警告: API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)

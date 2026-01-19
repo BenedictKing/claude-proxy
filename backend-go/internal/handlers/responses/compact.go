@@ -98,7 +98,7 @@ func handleSingleChannelCompact(
 			lastErr = compactErr
 			if compactErr.shouldFailover {
 				failedKeys[apiKey] = true
-				cfgManager.MarkKeyAsFailed(apiKey)
+				cfgManager.MarkKeyAsFailed(apiKey, "Responses")
 				continue
 			}
 			// 非故障转移错误，直接返回
@@ -231,7 +231,7 @@ func tryCompactChannelWithAllKeys(
 			lastErr = compactErr
 			if compactErr.shouldFailover {
 				failedKeys[apiKey] = true
-				cfgManager.MarkKeyAsFailed(apiKey)
+				cfgManager.MarkKeyAsFailed(apiKey, "Responses")
 				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, true)
 				continue
 			}
@@ -265,7 +265,7 @@ func tryCompactWithKey(
 	utils.SetAuthenticationHeader(req.Header, apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := common.SendRequest(req, upstream, envCfg, false)
+	resp, err := common.SendRequest(req, upstream, envCfg, false, "Responses")
 	if err != nil {
 		return false, &compactError{status: 502, body: []byte(`{"error":"上游请求失败"}`), shouldFailover: true}
 	}

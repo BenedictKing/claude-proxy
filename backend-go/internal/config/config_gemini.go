@@ -145,7 +145,7 @@ func (cm *ConfigManager) RemoveGeminiUpstream(index int) (*UpstreamConfig, error
 	cm.config.GeminiUpstream = append(cm.config.GeminiUpstream[:index], cm.config.GeminiUpstream[index+1:]...)
 
 	// 清理被删除渠道的失败 key 冷却记录
-	cm.clearFailedKeysForUpstream(&removed)
+	cm.clearFailedKeysForUpstream(&removed, "Gemini")
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return nil, err
@@ -177,7 +177,7 @@ func (cm *ConfigManager) AddGeminiAPIKey(index int, apiKey string) error {
 		return err
 	}
 
-	log.Printf("[Config-Key] 已添加API密钥到 Gemini 上游 [%d] %s", index, cm.config.GeminiUpstream[index].Name)
+	log.Printf("[Gemini-Key] 已添加API密钥到 Gemini 上游 [%d] %s", index, cm.config.GeminiUpstream[index].Name)
 	return nil
 }
 
@@ -209,13 +209,13 @@ func (cm *ConfigManager) RemoveGeminiAPIKey(index int, apiKey string) error {
 		return err
 	}
 
-	log.Printf("[Config-Key] 已从 Gemini 上游 [%d] %s 删除API密钥", index, cm.config.GeminiUpstream[index].Name)
+	log.Printf("[Gemini-Key] 已从 Gemini 上游 [%d] %s 删除API密钥", index, cm.config.GeminiUpstream[index].Name)
 	return nil
 }
 
 // GetNextGeminiAPIKey 获取下一个 Gemini API 密钥（纯 failover 模式）
 func (cm *ConfigManager) GetNextGeminiAPIKey(upstream *UpstreamConfig, failedKeys map[string]bool) (string, error) {
-	return cm.GetNextAPIKey(upstream, failedKeys)
+	return cm.GetNextAPIKey(upstream, failedKeys, "Gemini")
 }
 
 // MoveGeminiAPIKeyToTop 将指定 Gemini 渠道的 API 密钥移到最前面

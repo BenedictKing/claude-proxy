@@ -185,7 +185,7 @@ func tryModelsRequest(c *gin.Context, cfgManager *config.ConfigManager, channelS
 		client := httpclient.GetManager().GetStandardClient(modelsRequestTimeout, upstream.InsecureSkipVerify)
 
 		// 获取第一个可用的 key
-		apiKey, err := cfgManager.GetNextAPIKey(upstream, nil)
+		apiKey, err := cfgManager.GetNextAPIKey(upstream, nil, "Messages")
 		if err != nil {
 			log.Printf("[Models] %s 获取 API Key 失败: channel=%s, error=%v", channelType, upstream.Name, err)
 			failedChannels[selection.ChannelIndex] = true

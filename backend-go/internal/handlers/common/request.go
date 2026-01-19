@@ -47,7 +47,8 @@ func RestoreRequestBody(c *gin.Context, bodyBytes []byte) {
 
 // SendRequest 发送 HTTP 请求到上游
 // isStream: 是否为流式请求（流式请求使用无超时客户端）
-func SendRequest(req *http.Request, upstream *config.UpstreamConfig, envCfg *config.EnvConfig, isStream bool) (*http.Response, error) {
+// apiType: 接口类型（Messages/Responses/Gemini），用于日志标签前缀
+func SendRequest(req *http.Request, upstream *config.UpstreamConfig, envCfg *config.EnvConfig, isStream bool, apiType string) (*http.Response, error) {
 	clientManager := httpclient.GetManager()
 
 	var client *http.Client
@@ -59,14 +60,14 @@ func SendRequest(req *http.Request, upstream *config.UpstreamConfig, envCfg *con
 	}
 
 	if upstream.InsecureSkipVerify && envCfg.EnableRequestLogs {
-		log.Printf("[Request-TLS] 警告: 正在跳过对 %s 的TLS证书验证", req.URL.String())
+		log.Printf("[%s-Request-TLS] 警告: 正在跳过对 %s 的TLS证书验证", apiType, req.URL.String())
 	}
 
 	if envCfg.EnableRequestLogs {
-		log.Printf("[Request-URL] 实际请求URL: %s", req.URL.String())
-		log.Printf("[Request-Method] 请求方法: %s", req.Method)
+		log.Printf("[%s-Request-URL] 实际请求URL: %s", apiType, req.URL.String())
+		log.Printf("[%s-Request-Method] 请求方法: %s", apiType, req.Method)
 		if envCfg.IsDevelopment() {
-			logRequestDetails(req, envCfg)
+			logRequestDetails(req, envCfg, apiType)
 		}
 	}
 
@@ -74,7 +75,8 @@ func SendRequest(req *http.Request, upstream *config.UpstreamConfig, envCfg *con
 }
 
 // logRequestDetails 记录请求详情（仅开发模式）
-func logRequestDetails(req *http.Request, envCfg *config.EnvConfig) {
+// apiType: 接口类型（Messages/Responses/Gemini），用于日志标签前缀
+func logRequestDetails(req *http.Request, envCfg *config.EnvConfig, apiType string) {
 	// 对请求头做敏感信息脱敏
 	reqHeaders := make(map[string]string)
 	for key, values := range req.Header {
@@ -89,7 +91,7 @@ func logRequestDetails(req *http.Request, envCfg *config.EnvConfig) {
 	} else {
 		reqHeadersJSON, _ = json.MarshalIndent(maskedReqHeaders, "", "  ")
 	}
-	log.Printf("[Request-Headers] 实际请求头:\n%s", string(reqHeadersJSON))
+	log.Printf("[%s-Request-Headers] 实际请求头:\n%s", apiType, string(reqHeadersJSON))
 
 	if req.Body != nil {
 		bodyBytes, err := io.ReadAll(req.Body)
@@ -101,7 +103,7 @@ func logRequestDetails(req *http.Request, envCfg *config.EnvConfig) {
 			} else {
 				formattedBody = utils.FormatJSONBytesForLog(bodyBytes, 500)
 			}
-			log.Printf("[Request-Body] 实际请求体:\n%s", formattedBody)
+			log.Printf("[%s-Request-Body] 实际请求体:\n%s", apiType, formattedBody)
 		}
 	}
 }
@@ -159,7 +161,8 @@ func AreAllKeysSuspended(metricsManager *metrics.MetricsManager, baseURL string,
 // 用于预防 Claude API 返回 400 错误
 // 仅处理已知路径：messages 数组中各消息的 content 数组中的 signature 字段
 // enableLog: 是否输出日志（由 envCfg.EnableRequestLogs 控制）
-func RemoveEmptySignatures(bodyBytes []byte, enableLog bool) ([]byte, bool) {
+// apiType: 接口类型（Messages/Responses/Gemini），用于日志标签前缀
+func RemoveEmptySignatures(bodyBytes []byte, enableLog bool, apiType string) ([]byte, bool) {
 	decoder := json.NewDecoder(bytes.NewReader(bodyBytes))
 	decoder.UseNumber() // 保留数字精度
 
@@ -174,7 +177,7 @@ func RemoveEmptySignatures(bodyBytes []byte, enableLog bool) ([]byte, bool) {
 	}
 
 	if enableLog && removedCount > 0 {
-		log.Printf("[Preprocess] 已移除 %d 个空 signature 字段", removedCount)
+		log.Printf("[%s-Preprocess] 已移除 %d 个空 signature 字段", apiType, removedCount)
 	}
 
 	// 使用 Encoder 并禁用 HTML 转义，保持原始格式

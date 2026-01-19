@@ -131,6 +131,17 @@ func handleMultiChannel(
 	maxChannelAttempts := channelScheduler.GetActiveGeminiChannelCount()
 
 	for channelAttempt := 0; channelAttempt < maxChannelAttempts; channelAttempt++ {
+		// 检查客户端是否已断开连接
+		select {
+		case <-c.Request.Context().Done():
+			if envCfg.ShouldLog("info") {
+				log.Printf("[Gemini-Cancel] 请求已取消，停止渠道 failover")
+			}
+			return
+		default:
+			// 继续正常流程
+		}
+
 		selection, err := channelScheduler.SelectGeminiChannel(c.Request.Context(), userID, failedChannels)
 		if err != nil {
 			lastError = err
@@ -239,10 +250,10 @@ func tryChannelWithAllKeys(
 				continue
 			}
 
-			resp, err := common.SendRequest(providerReq, upstream, envCfg, isStream)
+			resp, err := common.SendRequest(providerReq, upstream, envCfg, isStream, "Gemini")
 			if err != nil {
 				failedKeys[apiKey] = true
-				cfgManager.MarkKeyAsFailed(apiKey)
+				cfgManager.MarkKeyAsFailed(apiKey, "Gemini")
 				channelScheduler.RecordGeminiFailure(currentBaseURL, apiKey)
 				channelScheduler.MarkURLFailure(channelIndex, currentBaseURL)
 				log.Printf("[Gemini-Key] 警告: API密钥失败: %v", err)
@@ -257,7 +268,7 @@ func tryChannelWithAllKeys(
 				shouldFailover, isQuotaRelated := common.ShouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled())
 				if shouldFailover {
 					failedKeys[apiKey] = true
-					cfgManager.MarkKeyAsFailed(apiKey)
+					cfgManager.MarkKeyAsFailed(apiKey, "Gemini")
 					channelScheduler.RecordGeminiFailure(currentBaseURL, apiKey)
 					channelScheduler.MarkURLFailure(channelIndex, currentBaseURL)
 					log.Printf("[Gemini-Key] 警告: API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
@@ -379,11 +390,11 @@ func handleSingleChannel(
 				continue
 			}
 
-			resp, err := common.SendRequest(providerReq, upstream, envCfg, isStream)
+			resp, err := common.SendRequest(providerReq, upstream, envCfg, isStream, "Gemini")
 			if err != nil {
 				lastError = err
 				failedKeys[apiKey] = true
-				cfgManager.MarkKeyAsFailed(apiKey)
+				cfgManager.MarkKeyAsFailed(apiKey, "Gemini")
 				channelScheduler.RecordGeminiFailure(currentBaseURL, apiKey)
 				log.Printf("[Gemini-Key] 警告: API密钥失败: %v", err)
 				continue
@@ -398,7 +409,7 @@ func handleSingleChannel(
 				if shouldFailover {
 					lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)
 					failedKeys[apiKey] = true
-					cfgManager.MarkKeyAsFailed(apiKey)
+					cfgManager.MarkKeyAsFailed(apiKey, "Gemini")
 					channelScheduler.RecordGeminiFailure(currentBaseURL, apiKey)
 					log.Printf("[Gemini-Key] 警告: API密钥失败 (状态: %d)，尝试下一个密钥", resp.StatusCode)
 

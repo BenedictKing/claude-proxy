@@ -142,7 +142,7 @@ func (cm *ConfigManager) RemoveResponsesUpstream(index int) (*UpstreamConfig, er
 	cm.config.ResponsesUpstream = append(cm.config.ResponsesUpstream[:index], cm.config.ResponsesUpstream[index+1:]...)
 
 	// 清理被删除渠道的失败 key 冷却记录
-	cm.clearFailedKeysForUpstream(&removed)
+	cm.clearFailedKeysForUpstream(&removed, "Responses")
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return nil, err
@@ -174,7 +174,7 @@ func (cm *ConfigManager) AddResponsesAPIKey(index int, apiKey string) error {
 		return err
 	}
 
-	log.Printf("[Config-Key] 已添加API密钥到 Responses 上游 [%d] %s", index, cm.config.ResponsesUpstream[index].Name)
+	log.Printf("[Responses-Key] 已添加API密钥到 Responses 上游 [%d] %s", index, cm.config.ResponsesUpstream[index].Name)
 	return nil
 }
 
@@ -206,13 +206,13 @@ func (cm *ConfigManager) RemoveResponsesAPIKey(index int, apiKey string) error {
 		return err
 	}
 
-	log.Printf("[Config-Key] 已从 Responses 上游 [%d] %s 删除API密钥", index, cm.config.ResponsesUpstream[index].Name)
+	log.Printf("[Responses-Key] 已从 Responses 上游 [%d] %s 删除API密钥", index, cm.config.ResponsesUpstream[index].Name)
 	return nil
 }
 
 // GetNextResponsesAPIKey 获取下一个 API 密钥（Responses 负载均衡 - 纯 failover 模式）
 func (cm *ConfigManager) GetNextResponsesAPIKey(upstream *UpstreamConfig, failedKeys map[string]bool) (string, error) {
-	return cm.GetNextAPIKey(upstream, failedKeys)
+	return cm.GetNextAPIKey(upstream, failedKeys, "Responses")
 }
 
 // SetResponsesLoadBalance 设置 Responses 负载均衡策略

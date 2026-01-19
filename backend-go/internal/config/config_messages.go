@@ -147,7 +147,7 @@ func (cm *ConfigManager) RemoveUpstream(index int) (*UpstreamConfig, error) {
 	cm.config.Upstream = append(cm.config.Upstream[:index], cm.config.Upstream[index+1:]...)
 
 	// 清理被删除渠道的失败 key 冷却记录
-	cm.clearFailedKeysForUpstream(&removed)
+	cm.clearFailedKeysForUpstream(&removed, "Messages")
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return nil, err
@@ -179,7 +179,7 @@ func (cm *ConfigManager) AddAPIKey(index int, apiKey string) error {
 		return err
 	}
 
-	log.Printf("[Config-Key] 已添加API密钥到上游 [%d] %s", index, cm.config.Upstream[index].Name)
+	log.Printf("[Messages-Key] 已添加API密钥到上游 [%d] %s", index, cm.config.Upstream[index].Name)
 	return nil
 }
 
@@ -211,7 +211,7 @@ func (cm *ConfigManager) RemoveAPIKey(index int, apiKey string) error {
 		return err
 	}
 
-	log.Printf("[Config-Key] 已从上游 [%d] %s 删除API密钥", index, cm.config.Upstream[index].Name)
+	log.Printf("[Messages-Key] 已从上游 [%d] %s 删除API密钥", index, cm.config.Upstream[index].Name)
 	return nil
 }
 
@@ -417,7 +417,7 @@ func (cm *ConfigManager) DeprioritizeAPIKey(apiKey string) error {
 			// 移动到末尾
 			upstream.APIKeys = append(upstream.APIKeys[:index], upstream.APIKeys[index+1:]...)
 			upstream.APIKeys = append(upstream.APIKeys, apiKey)
-			log.Printf("[Config-Key] 已将API密钥移动到末尾以降低优先级: %s (渠道: %s)", utils.MaskAPIKey(apiKey), upstream.Name)
+			log.Printf("[Messages-Key] 已将API密钥移动到末尾以降低优先级: %s (渠道: %s)", utils.MaskAPIKey(apiKey), upstream.Name)
 			return cm.saveConfigLocked(cm.config)
 		}
 	}
@@ -437,7 +437,7 @@ func (cm *ConfigManager) DeprioritizeAPIKey(apiKey string) error {
 			// 移动到末尾
 			upstream.APIKeys = append(upstream.APIKeys[:index], upstream.APIKeys[index+1:]...)
 			upstream.APIKeys = append(upstream.APIKeys, apiKey)
-			log.Printf("[Config-Key] 已将API密钥移动到末尾以降低优先级: %s (Responses渠道: %s)", utils.MaskAPIKey(apiKey), upstream.Name)
+			log.Printf("[Messages-Key] 已将API密钥移动到末尾以降低优先级: %s (Responses渠道: %s)", utils.MaskAPIKey(apiKey), upstream.Name)
 			return cm.saveConfigLocked(cm.config)
 		}
 	}
