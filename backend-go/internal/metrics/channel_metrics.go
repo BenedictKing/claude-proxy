@@ -31,6 +31,7 @@ type KeyMetrics struct {
 	SuccessCount        int64      `json:"successCount"`        // 成功数
 	FailureCount        int64      `json:"failureCount"`        // 失败数
 	ConsecutiveFailures int64      `json:"consecutiveFailures"` // 连续失败数
+	ActiveRequests      int64      `json:"activeRequests"`      // 进行中的请求数
 	LastSuccessAt       *time.Time `json:"lastSuccessAt,omitempty"`
 	LastFailureAt       *time.Time `json:"lastFailureAt,omitempty"`
 	CircuitBrokenAt     *time.Time `json:"circuitBrokenAt,omitempty"` // 熔断开始时间
@@ -367,6 +368,28 @@ func (m *MetricsManager) RecordFailure(baseURL, apiKey string) {
 			CacheReadTokens:     0,
 			APIType:             m.apiType,
 		})
+	}
+}
+
+// RecordRequestStart 记录请求开始（增加进行中计数）
+func (m *MetricsManager) RecordRequestStart(baseURL, apiKey string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	metrics := m.getOrCreateKey(baseURL, apiKey)
+	metrics.ActiveRequests++
+}
+
+// RecordRequestEnd 记录请求结束（减少进行中计数）
+func (m *MetricsManager) RecordRequestEnd(baseURL, apiKey string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	metricsKey := generateMetricsKey(baseURL, apiKey)
+	if metrics, exists := m.keyMetrics[metricsKey]; exists {
+		if metrics.ActiveRequests > 0 {
+			metrics.ActiveRequests--
+		}
 	}
 }
 
@@ -982,6 +1005,7 @@ type MetricsResponse struct {
 	SuccessRate         float64                    `json:"successRate"`
 	ErrorRate           float64                    `json:"errorRate"`
 	ConsecutiveFailures int64                      `json:"consecutiveFailures"`
+	ActiveRequests      int64                      `json:"activeRequests"`      // 进行中请求数
 	Latency             int64                      `json:"latency"`
 	LastSuccessAt       *string                    `json:"lastSuccessAt,omitempty"`
 	LastFailureAt       *string                    `json:"lastFailureAt,omitempty"`
@@ -1051,6 +1075,7 @@ func (m *MetricsManager) ToResponseMultiURL(channelIndex int, baseURLs []string,
 				resp.RequestCount += metrics.RequestCount
 				resp.SuccessCount += metrics.SuccessCount
 				resp.FailureCount += metrics.FailureCount
+				resp.ActiveRequests += metrics.ActiveRequests
 				if metrics.ConsecutiveFailures > maxConsecutiveFailures {
 					maxConsecutiveFailures = metrics.ConsecutiveFailures
 				}
@@ -1178,6 +1203,7 @@ func (m *MetricsManager) ToResponse(channelIndex int, baseURL string, activeKeys
 			resp.RequestCount += metrics.RequestCount
 			resp.SuccessCount += metrics.SuccessCount
 			resp.FailureCount += metrics.FailureCount
+			resp.ActiveRequests += metrics.ActiveRequests
 			if metrics.ConsecutiveFailures > maxConsecutiveFailures {
 				maxConsecutiveFailures = metrics.ConsecutiveFailures
 			}

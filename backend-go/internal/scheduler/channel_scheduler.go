@@ -350,6 +350,16 @@ func (s *ChannelScheduler) RecordFailure(baseURL, apiKey string, kind ChannelKin
 	s.getMetricsManager(kind).RecordFailure(baseURL, apiKey)
 }
 
+// RecordRequestStart 记录请求开始
+func (s *ChannelScheduler) RecordRequestStart(baseURL, apiKey string, kind ChannelKind) {
+	s.getMetricsManager(kind).RecordRequestStart(baseURL, apiKey)
+}
+
+// RecordRequestEnd 记录请求结束
+func (s *ChannelScheduler) RecordRequestEnd(baseURL, apiKey string, kind ChannelKind) {
+	s.getMetricsManager(kind).RecordRequestEnd(baseURL, apiKey)
+}
+
 // SetTraceAffinity 设置 Trace 亲和
 func (s *ChannelScheduler) SetTraceAffinity(userID string, channelIndex int) {
 	if userID != "" {
