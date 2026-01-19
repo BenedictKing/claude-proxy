@@ -295,6 +295,19 @@ func ensureThoughtSignatures(geminiReq *types.GeminiRequest) {
 	}
 }
 
+// stripThoughtSignatures 移除所有 functionCall 的 thought_signature 字段
+// 用于兼容旧版 Gemini API（不支持该字段）
+func stripThoughtSignatures(geminiReq *types.GeminiRequest) {
+	for i := range geminiReq.Contents {
+		for j := range geminiReq.Contents[i].Parts {
+			part := &geminiReq.Contents[i].Parts[j]
+			if part.FunctionCall != nil {
+				part.FunctionCall.ThoughtSignature = ""
+			}
+		}
+	}
+}
+
 // buildProviderRequest 构建上游请求
 func buildProviderRequest(
 	c *gin.Context,
@@ -314,17 +327,26 @@ func buildProviderRequest(
 
 	switch upstream.ServiceType {
 	case "gemini":
-		// Gemini 上游：根据配置决定是否注入 dummy thought_signature
-		// 注意：为避免多渠道 failover 时污染后续渠道请求，需要深拷贝后再注入
+		// Gemini 上游：根据配置处理 thought_signature 字段
+		// 注意：为避免多渠道 failover 时污染后续渠道请求，需要深拷贝后再处理
 		reqToUse := geminiReq
-		if upstream.InjectDummyThoughtSignature {
-			// 深拷贝请求对象（通过 JSON 序列化/反序列化）
+
+		// 优先处理 StripThoughtSignature（移除字段）
+		if upstream.StripThoughtSignature {
+			reqCopy := &types.GeminiRequest{}
+			data, _ := json.Marshal(geminiReq)
+			json.Unmarshal(data, reqCopy)
+			stripThoughtSignatures(reqCopy)
+			reqToUse = reqCopy
+		} else if upstream.InjectDummyThoughtSignature {
+			// 其次处理 InjectDummyThoughtSignature（注入 dummy 值）
 			reqCopy := &types.GeminiRequest{}
 			data, _ := json.Marshal(geminiReq)
 			json.Unmarshal(data, reqCopy)
 			ensureThoughtSignatures(reqCopy)
 			reqToUse = reqCopy
 		}
+
 		requestBody, err = json.Marshal(reqToUse)
 		if err != nil {
 			return nil, err
@@ -366,17 +388,26 @@ func buildProviderRequest(
 		url = fmt.Sprintf("%s/v1/chat/completions", strings.TrimRight(baseURL, "/"))
 
 	default:
-		// 默认当作 Gemini 处理，根据配置决定是否注入 thought_signature
-		// 注意：为避免多渠道 failover 时污染后续渠道请求，需要深拷贝后再注入
+		// 默认当作 Gemini 处理，根据配置处理 thought_signature 字段
+		// 注意：为避免多渠道 failover 时污染后续渠道请求，需要深拷贝后再处理
 		reqToUse := geminiReq
-		if upstream.InjectDummyThoughtSignature {
-			// 深拷贝请求对象（通过 JSON 序列化/反序列化）
+
+		// 优先处理 StripThoughtSignature（移除字段）
+		if upstream.StripThoughtSignature {
+			reqCopy := &types.GeminiRequest{}
+			data, _ := json.Marshal(geminiReq)
+			json.Unmarshal(data, reqCopy)
+			stripThoughtSignatures(reqCopy)
+			reqToUse = reqCopy
+		} else if upstream.InjectDummyThoughtSignature {
+			// 其次处理 InjectDummyThoughtSignature（注入 dummy 值）
 			reqCopy := &types.GeminiRequest{}
 			data, _ := json.Marshal(geminiReq)
 			json.Unmarshal(data, reqCopy)
 			ensureThoughtSignatures(reqCopy)
 			reqToUse = reqCopy
 		}
+
 		requestBody, err = json.Marshal(reqToUse)
 		if err != nil {
 			return nil, err

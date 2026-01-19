@@ -123,6 +123,9 @@ func (cm *ConfigManager) UpdateGeminiUpstream(index int, updates UpstreamUpdate)
 	if updates.InjectDummyThoughtSignature != nil {
 		upstream.InjectDummyThoughtSignature = *updates.InjectDummyThoughtSignature
 	}
+	if updates.StripThoughtSignature != nil {
+		upstream.StripThoughtSignature = *updates.StripThoughtSignature
+	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return false, err

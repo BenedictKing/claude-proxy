@@ -4,6 +4,24 @@
 
 ---
 
+## [Unreleased]
+
+### 新增
+
+- **Gemini API thought_signature 兼容性方案** - 新增 `stripThoughtSignature` 配置项，支持兼容旧版 Gemini API
+  - 新增 `StripThoughtSignature` 配置字段（布尔值），用于移除 `thought_signature` 字段
+  - 实现 `stripThoughtSignatures()` 函数，移除所有 functionCall 的 thought_signature 字段
+  - 配置优先级：`StripThoughtSignature` > `InjectDummyThoughtSignature`
+  - 保持深拷贝机制，避免多渠道 failover 时污染后续请求
+  - 前端添加"移除 Thought Signature"开关（仅 Gemini 渠道显示）
+  - 涉及文件：
+    - `backend-go/internal/config/config.go` - 配置结构定义
+    - `backend-go/internal/config/config_gemini.go` - 配置更新逻辑
+    - `backend-go/internal/handlers/gemini/handler.go` - 请求处理逻辑
+    - `backend-go/internal/handlers/gemini/handler_test.go` - 单元测试
+    - `frontend/src/components/AddChannelModal.vue` - 前端开关
+    - `frontend/src/services/api.ts` - 类型定义
+
 ## [v2.5.5] - 2026-01-19
 
 ## [v2.5.4] - 2026-01-19

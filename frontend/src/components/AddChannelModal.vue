@@ -486,6 +486,22 @@
                 <v-switch v-model="form.injectDummyThoughtSignature" inset color="secondary" hide-details />
               </div>
             </v-col>
+
+            <!-- 移除 Thought Signature（仅 Gemini 渠道显示） -->
+            <v-col v-if="props.channelType === 'gemini'" cols="12">
+              <div class="d-flex align-center justify-space-between">
+                <div class="d-flex align-center ga-2">
+                  <v-icon color="warning">mdi-signature-freehand</v-icon>
+                  <div>
+                    <div class="text-body-1 font-weight-medium">移除 Thought Signature</div>
+                    <div class="text-caption text-medium-emphasis">
+                      移除 functionCall 的 thought_signature 字段，兼容不支持该字段的旧版 Gemini API
+                    </div>
+                  </div>
+                </div>
+                <v-switch v-model="form.stripThoughtSignature" inset color="warning" hide-details />
+              </div>
+            </v-col>
           </v-row>
         </v-form>
       </v-card-text>
@@ -954,6 +970,7 @@ const form = reactive({
   insecureSkipVerify: false,
   lowQuality: false,
   injectDummyThoughtSignature: false,
+  stripThoughtSignature: false,
   description: '',
   apiKeys: [] as string[],
   modelMapping: {} as Record<string, string>
@@ -1105,6 +1122,7 @@ const resetForm = () => {
   form.insecureSkipVerify = false
   form.lowQuality = false
   form.injectDummyThoughtSignature = false
+  form.stripThoughtSignature = false
   form.description = ''
   form.apiKeys = []
   form.modelMapping = {}
@@ -1144,6 +1162,7 @@ const loadChannelData = (channel: Channel) => {
   form.insecureSkipVerify = !!channel.insecureSkipVerify
   form.lowQuality = !!channel.lowQuality
   form.injectDummyThoughtSignature = !!channel.injectDummyThoughtSignature
+  form.stripThoughtSignature = !!channel.stripThoughtSignature
   form.description = channel.description || ''
 
   // 同步 baseUrlsText（优先使用 baseUrls，否则使用 baseUrl）
@@ -1308,6 +1327,7 @@ const handleSubmit = async () => {
     insecureSkipVerify: form.insecureSkipVerify,
     lowQuality: form.lowQuality,
     injectDummyThoughtSignature: form.injectDummyThoughtSignature,
+    stripThoughtSignature: form.stripThoughtSignature,
     description: form.description.trim(),
     apiKeys: processedApiKeys,
     modelMapping: form.modelMapping

@@ -31,6 +31,7 @@ type UpstreamConfig struct {
 	LowQuality     bool       `json:"lowQuality,omitempty"`     // 低质量渠道标记：启用后强制本地估算 token，偏差>5%时使用本地值
 	// Gemini 特定配置
 	InjectDummyThoughtSignature bool `json:"injectDummyThoughtSignature,omitempty"` // 为 Gemini functionCall 注入 dummy thought_signature（兼容第三方 API）
+	StripThoughtSignature       bool `json:"stripThoughtSignature,omitempty"`       // 移除 thought_signature 字段（兼容旧版 Gemini API）
 }
 
 // UpstreamUpdate 用于部分更新 UpstreamConfig
@@ -51,6 +52,7 @@ type UpstreamUpdate struct {
 	LowQuality     *bool      `json:"lowQuality"`
 	// Gemini 特定配置
 	InjectDummyThoughtSignature *bool `json:"injectDummyThoughtSignature"`
+	StripThoughtSignature       *bool `json:"stripThoughtSignature"`
 }
 
 // Config 配置结构
