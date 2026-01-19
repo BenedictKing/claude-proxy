@@ -49,8 +49,8 @@ func TestHandler_RequiresProxyAccessKeyEvenWhenGeminiKeyProvided(t *testing.T) {
 	})
 }
 
-// TestStripThoughtSignatures 测试 stripThoughtSignatures 函数
-func TestStripThoughtSignatures(t *testing.T) {
+// TestStripThoughtSignature 测试 stripThoughtSignature 函数
+func TestStripThoughtSignature(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    *types.GeminiRequest
@@ -212,7 +212,7 @@ func TestStripThoughtSignatures(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			stripThoughtSignatures(tt.input)
+			stripThoughtSignature(tt.input)
 
 			// 验证结果
 			if len(tt.input.Contents) != len(tt.expected.Contents) {
