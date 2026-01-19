@@ -96,8 +96,11 @@ log.Printf("[Component] 警告: 消息内容")
 | 压缩 | `[Gzip]` | Gzip 解压缩 |
 | Messages | `[Messages-Stream]` | Messages 流式处理 |
 | Messages | `[Messages-Stream-Token]` | Messages Token 统计 |
+| Messages | `[Messages-Models]` | Messages Models API 操作 |
 | Responses | `[Responses-Stream]` | Responses 流式处理 |
 | Responses | `[Responses-Stream-Token]` | Responses Token 统计 |
+| Responses | `[Responses-Models]` | Responses Models API 操作 |
+| Models | `[Models]` | 跨接口的模型列表合并操作 |
 
 ## 扩展指南
 
