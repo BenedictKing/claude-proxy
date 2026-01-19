@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [v2.5.3] - 2026-01-19
+
 ### 修复
 
 - **Models API 日志标签修正** - 修正 Models API 相关日志标签，确保正确区分 Messages 和 Responses 渠道
