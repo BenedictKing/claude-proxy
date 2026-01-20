@@ -550,6 +550,40 @@ func (m *MetricsManager) RecordRequestFinalizeFailure(baseURL, apiKey string, re
 	}
 }
 
+// RecordRequestFinalizeClientCancel 记录客户端取消的请求（计入总请求数但不计入失败）
+func (m *MetricsManager) RecordRequestFinalizeClientCancel(baseURL, apiKey string, requestID uint64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	metricsKey := generateMetricsKey(baseURL, apiKey)
+	metrics, exists := m.keyMetrics[metricsKey]
+	if !exists {
+		return
+	}
+
+	idx, ok := metrics.pendingHistoryIdx[requestID]
+	if !ok || idx < 0 || idx >= len(metrics.requestHistory) {
+		return
+	}
+	delete(metrics.pendingHistoryIdx, requestID)
+
+	// 仅计入总请求数，不计入失败数
+	metrics.RequestCount++
+	// 注意：不重置 ConsecutiveFailures，客户端取消不应影响连续失败计数
+
+	// 不更新滑动窗口（不影响失败率计算）
+	// 不检查熔断状态（客户端取消不应触发熔断）
+
+	// 从历史记录中移除（客户端取消不记录）
+	metrics.requestHistory = append(metrics.requestHistory[:idx], metrics.requestHistory[idx+1:]...)
+	// 更新后续索引
+	for rid, ridx := range metrics.pendingHistoryIdx {
+		if ridx > idx {
+			metrics.pendingHistoryIdx[rid] = ridx - 1
+		}
+	}
+}
+
 // RecordRequestStart 记录请求开始（增加进行中计数）
 func (m *MetricsManager) RecordRequestStart(baseURL, apiKey string) {
 	m.mu.Lock()
@@ -1079,6 +1113,21 @@ func (m *MetricsManager) GetAllTimeWindowStatsForKey(baseURL, apiKey string) map
 		"1h":  m.GetTimeWindowStatsForKey(baseURL, apiKey, 1*time.Hour),
 		"6h":  m.GetTimeWindowStatsForKey(baseURL, apiKey, 6*time.Hour),
 		"24h": m.GetTimeWindowStatsForKey(baseURL, apiKey, 24*time.Hour),
+	}
+}
+
+// ResetKeyFailureState 重置单个 Key 的熔断/失败状态（保留历史统计与总量计数）。
+// 用于“恢复熔断”场景：清零连续失败、清空滑动窗口、解除熔断标记。
+func (m *MetricsManager) ResetKeyFailureState(baseURL, apiKey string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	metricsKey := generateMetricsKey(baseURL, apiKey)
+	if metrics, exists := m.keyMetrics[metricsKey]; exists {
+		metrics.ConsecutiveFailures = 0
+		metrics.recentResults = make([]bool, 0, m.windowSize)
+		metrics.CircuitBrokenAt = nil
+		log.Printf("[Metrics-Reset] Key [%s] (%s) 熔断状态已重置（保留历史统计）", metrics.KeyMask, metrics.BaseURL)
 	}
 }
 

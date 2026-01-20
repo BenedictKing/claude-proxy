@@ -154,7 +154,7 @@ func GetResponsesChannelMetrics(metricsManager *metrics.MetricsManager) gin.Hand
 	return GetChannelMetrics(metricsManager)
 }
 
-// ResumeChannel 恢复熔断渠道（重置错误计数）
+// ResumeChannel 恢复熔断渠道（重置熔断状态，保留历史统计）
 // isResponses 参数指定是 Messages 渠道还是 Responses 渠道
 func ResumeChannel(sch *scheduler.ChannelScheduler, isResponses bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -165,7 +165,7 @@ func ResumeChannel(sch *scheduler.ChannelScheduler, isResponses bool) gin.Handle
 			return
 		}
 
-		// 重置渠道所有 Key 的指标
+		// 重置渠道所有 Key 的熔断状态（保留历史统计）
 		kind := scheduler.ChannelKindMessages
 		if isResponses {
 			kind = scheduler.ChannelKindResponses
@@ -174,7 +174,7 @@ func ResumeChannel(sch *scheduler.ChannelScheduler, isResponses bool) gin.Handle
 
 		c.JSON(200, gin.H{
 			"success": true,
-			"message": "渠道已恢复，错误计数已重置",
+			"message": "渠道已恢复，熔断状态已重置（历史统计保留）",
 		})
 	}
 }

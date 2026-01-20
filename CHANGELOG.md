@@ -8,6 +8,17 @@
 
 ### 修复
 
+- **客户端取消请求误计入失败** - 修复用户主动取消请求被错误计入渠道失败指标的问题
+  - 新增 `isClientSideError` 函数，使用 `errors.Is` 正确识别被包装的 `context.Canceled` 错误
+  - 仅识别明确的客户端取消（`context.Canceled`），连接故障（`broken pipe`、`connection reset`）继续 failover
+  - 统一口径：`SendRequest` 和 `handleSuccess` 路径均应用客户端取消判断
+  - 新增 `RecordRequestFinalizeClientCancel` 方法，客户端取消时仅计入总请求数，不计入失败数和失败率
+  - 客户端取消不重置 `ConsecutiveFailures`，保留真实的连续失败计数
+  - 涉及文件：
+    - `backend-go/internal/handlers/common/upstream_failover.go` - 错误类型判断与分流
+    - `backend-go/internal/metrics/channel_metrics.go` - 新增客户端取消记录方法
+    - `backend-go/internal/handlers/common/client_error_test.go` - 单元测试
+
 - **指标二次计数 Bug** - 修复 `RecordRequestFinalize*` fallback 路径导致的请求计数重复问题
   - 将 `RequestCount++` 从 `RecordRequestConnected` 移至 `RecordRequestFinalize*` 阶段
   - 采用延迟计数策略：连接时预写历史记录，完成时统一计数

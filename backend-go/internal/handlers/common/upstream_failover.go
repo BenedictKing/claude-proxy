@@ -2,6 +2,8 @@
 package common
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -15,6 +17,16 @@ import (
 	"github.com/BenedictKing/claude-proxy/internal/warmup"
 	"github.com/gin-gonic/gin"
 )
+
+// isClientSideError 判断错误是否由客户端明确取消（不应计入渠道失败）
+// 仅识别 context.Canceled，broken pipe/connection reset 视为连接故障需要 failover
+func isClientSideError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// 只有 context.Canceled 才是明确的客户端取消意图
+	return errors.Is(err, context.Canceled)
+}
 
 // NextAPIKeyFunc 返回下一个可用 API key（按 failover 策略）
 type NextAPIKeyFunc func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error)
@@ -125,6 +137,15 @@ func TryUpstreamWithAllKeys(
 			resp, err := SendRequest(req, upstream, envCfg, isStream, apiType)
 			if err != nil {
 				lastError = err
+				// 区分客户端取消和真实渠道故障（统一口径）
+				if isClientSideError(err) {
+					// 客户端取消：不计入失败，不触发 failover
+					metricsManager.RecordRequestFinalizeClientCancel(currentBaseURL, apiKey, requestID)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
+					log.Printf("[%s-Cancel] 请求已取消（SendRequest 阶段）", apiType)
+					return true, "", 0, nil, nil, err
+				}
+				// 真实渠道故障：计入失败，继续 failover
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey, apiType)
 				metricsManager.RecordRequestFinalizeFailure(currentBaseURL, apiKey, requestID)
@@ -185,10 +206,19 @@ func TryUpstreamWithAllKeys(
 			usage, err = handleSuccess(c, resp, upstreamCopy, apiKey)
 			if err != nil {
 				lastError = err
-				cfgManager.MarkKeyAsFailed(apiKey, apiType)
-				metricsManager.RecordRequestFinalizeFailure(currentBaseURL, apiKey, requestID)
-				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
-				log.Printf("[%s-Key] 警告: 响应处理失败: %v", apiType, err)
+				// 区分客户端错误和渠道故障
+				if isClientSideError(err) {
+					// 客户端取消/断开：计入总请求数但不计入失败
+					metricsManager.RecordRequestFinalizeClientCancel(currentBaseURL, apiKey, requestID)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
+					log.Printf("[%s-Cancel] 请求已取消，停止渠道 failover", apiType)
+				} else {
+					// 真实渠道故障：计入失败指标
+					cfgManager.MarkKeyAsFailed(apiKey, apiType)
+					metricsManager.RecordRequestFinalizeFailure(currentBaseURL, apiKey, requestID)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
+					log.Printf("[%s-Key] 警告: 响应处理失败: %v", apiType, err)
+				}
 				return true, "", 0, nil, usage, err
 			}
 

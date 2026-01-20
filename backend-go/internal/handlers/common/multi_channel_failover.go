@@ -89,7 +89,10 @@ func HandleMultiChannelFailover(
 			if onHandled != nil {
 				onHandled(selection, result)
 			}
-			channelScheduler.SetTraceAffinity(userID, channelIndex)
+			// 只有真正成功的请求才设置 Trace 亲和（客户端取消时 SuccessKey 为空）
+			if result.SuccessKey != "" {
+				channelScheduler.SetTraceAffinity(userID, channelIndex)
+			}
 			return
 		}
 

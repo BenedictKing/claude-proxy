@@ -394,18 +394,21 @@ func (s *ChannelScheduler) GetTraceAffinityManager() *session.TraceAffinityManag
 	return s.traceAffinity
 }
 
-// ResetChannelMetrics 重置渠道所有 Key 的指标（用于恢复熔断）
+// ResetChannelMetrics 重置渠道所有 Key 的熔断/失败状态（保留历史统计）
+// 用于：1) 手动恢复熔断 2) 更换 API Key 后重置熔断状态
 func (s *ChannelScheduler) ResetChannelMetrics(channelIndex int, kind ChannelKind) {
 	upstream := s.getUpstreamByIndex(channelIndex, kind)
 	if upstream == nil {
 		return
 	}
 	metricsManager := s.getMetricsManager(kind)
-	for _, apiKey := range upstream.APIKeys {
-		metricsManager.ResetKey(upstream.BaseURL, apiKey)
+	for _, baseURL := range upstream.GetAllBaseURLs() {
+		for _, apiKey := range upstream.APIKeys {
+			metricsManager.ResetKeyFailureState(baseURL, apiKey)
+		}
 	}
 	prefix := kindSchedulerLogPrefix(kind)
-	log.Printf("[%s-Reset] 渠道 [%d] %s 的所有 Key 指标已重置", prefix, channelIndex, upstream.Name)
+	log.Printf("[%s-Reset] 渠道 [%d] %s 的熔断状态已重置（保留历史统计）", prefix, channelIndex, upstream.Name)
 }
 
 // ResetKeyMetrics 重置单个 Key 的指标
