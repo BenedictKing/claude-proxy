@@ -12,7 +12,6 @@ import (
 
 	"github.com/BenedictKing/claude-proxy/internal/config"
 	"github.com/BenedictKing/claude-proxy/internal/providers"
-	"github.com/BenedictKing/claude-proxy/internal/scheduler"
 	"github.com/BenedictKing/claude-proxy/internal/types"
 	"github.com/BenedictKing/claude-proxy/internal/utils"
 	"github.com/gin-gonic/gin"
@@ -130,16 +129,13 @@ func ProcessStreamEvents(
 	envCfg *config.EnvConfig,
 	startTime time.Time,
 	requestBody []byte,
-	channelScheduler *scheduler.ChannelScheduler,
-	upstream *config.UpstreamConfig,
-	apiKey string,
-) error {
+) (*types.Usage, error) {
 	for {
 		select {
 		case event, ok := <-eventChan:
 			if !ok {
-				logStreamCompletion(ctx, envCfg, startTime, channelScheduler, upstream, apiKey)
-				return nil
+				usage := logStreamCompletion(ctx, envCfg, startTime)
+				return usage, nil
 			}
 			ProcessStreamEvent(c, w, flusher, event, ctx, envCfg, requestBody)
 
@@ -151,9 +147,6 @@ func ProcessStreamEvents(
 				log.Printf("[Messages-Stream] 错误: 流式传输错误: %v", err)
 				logPartialResponse(ctx, envCfg)
 
-				// 记录失败指标
-				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, scheduler.ChannelKindMessages)
-
 				// 向客户端发送错误事件（如果连接仍然有效）
 				if !ctx.ClientGone {
 					errorEvent := BuildStreamErrorEvent(err)
@@ -161,7 +154,7 @@ func ProcessStreamEvents(
 					flusher.Flush()
 				}
 
-				return err
+				return nil, err
 			}
 		}
 	}
@@ -300,7 +293,7 @@ func updateCollectedUsage(collected *CollectedUsageData, usageData CollectedUsag
 }
 
 // logStreamCompletion 记录流完成日志
-func logStreamCompletion(ctx *StreamContext, envCfg *config.EnvConfig, startTime time.Time, channelScheduler *scheduler.ChannelScheduler, upstream *config.UpstreamConfig, apiKey string) {
+func logStreamCompletion(ctx *StreamContext, envCfg *config.EnvConfig, startTime time.Time) *types.Usage {
 	if envCfg.EnableResponseLogs {
 		log.Printf("[Messages-Stream] 流式响应完成: %dms", time.Since(startTime).Milliseconds())
 	}
@@ -338,9 +331,7 @@ func logStreamCompletion(ctx *StreamContext, envCfg *config.EnvConfig, startTime
 			CacheTTL:                   ctx.CollectedUsage.CacheTTL,
 		}
 	}
-
-	// 记录成功指标
-	channelScheduler.RecordSuccessWithUsage(upstream.BaseURL, apiKey, usage, scheduler.ChannelKindMessages)
+	return usage
 }
 
 // logPartialResponse 记录部分响应日志
@@ -389,16 +380,14 @@ func HandleStreamResponse(
 	startTime time.Time,
 	upstream *config.UpstreamConfig,
 	requestBody []byte,
-	channelScheduler *scheduler.ChannelScheduler,
-	apiKey string,
 	requestModel string,
-) {
+) (*types.Usage, error) {
 	defer resp.Body.Close()
 
 	eventChan, errChan, err := provider.HandleStreamResponse(resp.Body)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to handle stream response"})
-		return
+		return nil, err
 	}
 
 	SetupStreamHeaders(c, resp)
@@ -407,7 +396,7 @@ func HandleStreamResponse(
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		log.Printf("[Messages-Stream] 警告: ResponseWriter不支持Flush接口")
-		return
+		return nil, fmt.Errorf("ResponseWriter不支持Flush接口")
 	}
 	flusher.Flush()
 
@@ -415,7 +404,7 @@ func HandleStreamResponse(
 	ctx.RequestModel = requestModel
 	ctx.LowQuality = upstream.LowQuality
 	seedSynthesizerFromRequest(ctx, requestBody)
-	ProcessStreamEvents(c, w, flusher, eventChan, errChan, ctx, envCfg, startTime, requestBody, channelScheduler, upstream, apiKey)
+	return ProcessStreamEvents(c, w, flusher, eventChan, errChan, ctx, envCfg, startTime, requestBody)
 }
 
 // ========== Token 检测和修补相关函数 ==========

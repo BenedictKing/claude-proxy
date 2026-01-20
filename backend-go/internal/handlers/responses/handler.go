@@ -132,7 +132,7 @@ func handleMultiChannel(
 				func(url string) {
 					channelScheduler.MarkURLSuccess(scheduler.ChannelKindResponses, channelIndex, url)
 				},
-				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) *types.Usage {
+				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) (*types.Usage, error) {
 					return handleSuccess(c, resp, provider, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, bodyBytes)
 				},
 			)
@@ -147,16 +147,7 @@ func handleMultiChannel(
 				LastError:         lastErr,
 			}
 		},
-		func(selection *scheduler.SelectionResult, result common.MultiChannelAttemptResult) {
-			if result.SuccessKey == "" || selection.Upstream == nil {
-				return
-			}
-			baseURLs := selection.Upstream.GetAllBaseURLs()
-			if result.SuccessBaseURLIdx < 0 || result.SuccessBaseURLIdx >= len(baseURLs) {
-				return
-			}
-			channelScheduler.RecordSuccessWithUsage(baseURLs[result.SuccessBaseURLIdx], result.SuccessKey, result.Usage, scheduler.ChannelKindResponses)
-		},
+		nil,
 		func(ctx *gin.Context, failoverErr *common.FailoverError, lastError error) {
 			common.HandleAllChannelsFailed(ctx, cfgManager.GetFuzzyModeEnabled(), failoverErr, lastError, "Responses")
 		},
@@ -198,7 +189,7 @@ func handleSingleChannel(
 
 	urlResults := common.BuildDefaultURLResults(baseURLs)
 
-	handled, successKey, successBaseURLIdx, lastFailoverError, usage, lastError := common.TryUpstreamWithAllKeys(
+	handled, _, _, lastFailoverError, _, lastError := common.TryUpstreamWithAllKeys(
 		c,
 		envCfg,
 		cfgManager,
@@ -224,14 +215,11 @@ func handleSingleChannel(
 		},
 		nil,
 		nil,
-		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) *types.Usage {
+		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) (*types.Usage, error) {
 			return handleSuccess(c, resp, provider, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, bodyBytes)
 		},
 	)
 	if handled {
-		if successKey != "" {
-			channelScheduler.RecordSuccessWithUsage(baseURLs[successBaseURLIdx], successKey, usage, scheduler.ChannelKindResponses)
-		}
 		return
 	}
 
@@ -250,20 +238,20 @@ func handleSuccess(
 	startTime time.Time,
 	originalReq *types.ResponsesRequest,
 	originalRequestJSON []byte,
-) *types.Usage {
+) (*types.Usage, error) {
 	defer resp.Body.Close()
 
 	isStream := originalReq != nil && originalReq.Stream
 
 	if isStream {
-		return handleStreamSuccess(c, resp, upstreamType, envCfg, startTime, originalReq, originalRequestJSON)
+		return handleStreamSuccess(c, resp, upstreamType, envCfg, startTime, originalReq, originalRequestJSON), nil
 	}
 
 	// 非流式响应处理
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to read response"})
-		return nil
+		return nil, err
 	}
 
 	if envCfg.EnableResponseLogs {
@@ -304,7 +292,7 @@ func handleSuccess(
 	responsesResp, err := provider.ConvertToResponsesResponse(providerResp, upstreamType, "")
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to convert response"})
-		return nil
+		return nil, err
 	}
 
 	// Token 补全逻辑
@@ -344,7 +332,7 @@ func handleSuccess(
 		CacheCreation5mInputTokens: responsesResp.Usage.CacheCreation5mInputTokens,
 		CacheCreation1hInputTokens: responsesResp.Usage.CacheCreation1hInputTokens,
 		CacheTTL:                   responsesResp.Usage.CacheTTL,
-	}
+	}, nil
 }
 
 // patchResponsesUsage 补全 Responses 响应的 Token 统计

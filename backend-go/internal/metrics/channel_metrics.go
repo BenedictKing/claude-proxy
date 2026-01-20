@@ -39,6 +39,8 @@ type KeyMetrics struct {
 	recentResults []bool // true=success, false=failure
 	// 带时间戳的请求记录（用于分时段统计，保留24小时）
 	requestHistory []RequestRecord
+	// 进行中请求在 requestHistory 中的索引（用于“连接即计数”，结束后回写成功/失败与 token）
+	pendingHistoryIdx map[uint64]int
 }
 
 // ChannelMetrics 渠道聚合指标（用于 API 返回，兼容旧结构）
@@ -81,6 +83,7 @@ type MetricsManager struct {
 	failureThreshold    float64                // 失败率阈值
 	circuitRecoveryTime time.Duration          // 熔断恢复时间
 	stopCh              chan struct{}          // 用于停止清理 goroutine
+	nextRequestID       uint64                 // 单进程递增请求ID（用于 pendingHistoryIdx）
 
 	// 持久化存储（可选）
 	store   PersistenceStore
@@ -237,10 +240,11 @@ func (m *MetricsManager) getOrCreateKeyLocked(baseURL, metricsKey, keyMask strin
 		return metrics
 	}
 	metrics := &KeyMetrics{
-		MetricsKey:    metricsKey,
-		BaseURL:       baseURL,
-		KeyMask:       keyMask,
-		recentResults: make([]bool, 0, m.windowSize),
+		MetricsKey:        metricsKey,
+		BaseURL:           baseURL,
+		KeyMask:           keyMask,
+		recentResults:     make([]bool, 0, m.windowSize),
+		pendingHistoryIdx: make(map[uint64]int),
 	}
 	m.keyMetrics[metricsKey] = metrics
 	return metrics
@@ -260,10 +264,11 @@ func (m *MetricsManager) getOrCreateKey(baseURL, apiKey string) *KeyMetrics {
 		return metrics
 	}
 	metrics := &KeyMetrics{
-		MetricsKey:    metricsKey,
-		BaseURL:       baseURL,
-		KeyMask:       utils.MaskAPIKey(apiKey),
-		recentResults: make([]bool, 0, m.windowSize),
+		MetricsKey:        metricsKey,
+		BaseURL:           baseURL,
+		KeyMask:           utils.MaskAPIKey(apiKey),
+		recentResults:     make([]bool, 0, m.windowSize),
+		pendingHistoryIdx: make(map[uint64]int),
 	}
 	m.keyMetrics[metricsKey] = metrics
 	return metrics
@@ -279,12 +284,15 @@ func (m *MetricsManager) RecordSuccessWithUsage(baseURL, apiKey string, usage *t
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	m.recordSuccessWithUsageLocked(baseURL, apiKey, usage, time.Now())
+}
+
+func (m *MetricsManager) recordSuccessWithUsageLocked(baseURL, apiKey string, usage *types.Usage, now time.Time) {
 	metrics := m.getOrCreateKey(baseURL, apiKey)
 	metrics.RequestCount++
 	metrics.SuccessCount++
 	metrics.ConsecutiveFailures = 0
 
-	now := time.Now()
 	metrics.LastSuccessAt = &now
 
 	// 成功后清除熔断标记
@@ -334,12 +342,15 @@ func (m *MetricsManager) RecordFailure(baseURL, apiKey string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	m.recordFailureLocked(baseURL, apiKey, time.Now())
+}
+
+func (m *MetricsManager) recordFailureLocked(baseURL, apiKey string, now time.Time) {
 	metrics := m.getOrCreateKey(baseURL, apiKey)
 	metrics.RequestCount++
 	metrics.FailureCount++
 	metrics.ConsecutiveFailures++
 
-	now := time.Now()
 	metrics.LastFailureAt = &now
 
 	// 更新滑动窗口
@@ -361,6 +372,174 @@ func (m *MetricsManager) RecordFailure(baseURL, apiKey string) {
 			BaseURL:             baseURL,
 			KeyMask:             metrics.KeyMask,
 			Timestamp:           now,
+			Success:             false,
+			InputTokens:         0,
+			OutputTokens:        0,
+			CacheCreationTokens: 0,
+			CacheReadTokens:     0,
+			APIType:             m.apiType,
+		})
+	}
+}
+
+// RecordRequestConnected 记录“开始发起上游请求（TCP 建连阶段）”的请求（用于更实时的活跃度统计）。
+// 返回 requestID，用于后续在请求结束时回写成功/失败与 token。
+func (m *MetricsManager) RecordRequestConnected(baseURL, apiKey string) uint64 {
+	return m.RecordRequestConnectedAt(baseURL, apiKey, time.Now())
+}
+
+// RecordRequestConnectedAt 与 RecordRequestConnected 相同，但允许注入时间戳（用于测试）。
+func (m *MetricsManager) RecordRequestConnectedAt(baseURL, apiKey string, timestamp time.Time) uint64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	metrics := m.getOrCreateKey(baseURL, apiKey)
+	// RequestCount 改为在 finalize 阶段统一增加，避免 fallback 路径二次计数
+
+	m.nextRequestID++
+	requestID := m.nextRequestID
+
+	if metrics.pendingHistoryIdx == nil {
+		metrics.pendingHistoryIdx = make(map[uint64]int)
+	}
+
+	metrics.requestHistory = append(metrics.requestHistory, RequestRecord{
+		Timestamp: timestamp,
+		Success:   true, // 先按成功计数；结束时会回写真实结果
+	})
+	metrics.pendingHistoryIdx[requestID] = len(metrics.requestHistory) - 1
+
+	// 清理历史并同步修正索引
+	m.cleanupHistoryLocked(metrics)
+
+	return requestID
+}
+
+// RecordRequestFinalizeSuccess 回写成功结果与 token（requestID 来自 RecordRequestConnected）。
+func (m *MetricsManager) RecordRequestFinalizeSuccess(baseURL, apiKey string, requestID uint64, usage *types.Usage) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	metricsKey := generateMetricsKey(baseURL, apiKey)
+	metrics, exists := m.keyMetrics[metricsKey]
+	if !exists {
+		m.recordSuccessWithUsageLocked(baseURL, apiKey, usage, time.Now())
+		return
+	}
+
+	idx, ok := metrics.pendingHistoryIdx[requestID]
+	if !ok || idx < 0 || idx >= len(metrics.requestHistory) {
+		m.recordSuccessWithUsageLocked(baseURL, apiKey, usage, time.Now())
+		return
+	}
+	delete(metrics.pendingHistoryIdx, requestID)
+
+	// 正常路径：在此统一增加 RequestCount
+	metrics.RequestCount++
+	metrics.SuccessCount++
+	metrics.ConsecutiveFailures = 0
+
+	now := time.Now()
+	metrics.LastSuccessAt = &now
+
+	// 成功后清除熔断标记
+	if metrics.CircuitBrokenAt != nil {
+		metrics.CircuitBrokenAt = nil
+		log.Printf("[Metrics-Circuit] Key [%s] (%s) 因请求成功退出熔断状态", metrics.KeyMask, metrics.BaseURL)
+	}
+
+	// 更新滑动窗口
+	m.appendToWindowKey(metrics, true)
+
+	// 提取 Token 数据（如果有）
+	var inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64
+	if usage != nil {
+		inputTokens = int64(usage.InputTokens)
+		outputTokens = int64(usage.OutputTokens)
+		// cache_creation_input_tokens 有时不会返回（只返回 5m/1h 细分字段），这里做兜底汇总。
+		cacheCreationTokens = int64(usage.CacheCreationInputTokens)
+		if cacheCreationTokens <= 0 {
+			cacheCreationTokens = int64(usage.CacheCreation5mInputTokens + usage.CacheCreation1hInputTokens)
+		}
+		cacheReadTokens = int64(usage.CacheReadInputTokens)
+	}
+
+	// 回写历史记录（时间戳保持为“请求开始（TCP 建连阶段）”时刻）
+	record := &metrics.requestHistory[idx]
+	record.Success = true
+	record.InputTokens = inputTokens
+	record.OutputTokens = outputTokens
+	record.CacheCreationInputTokens = cacheCreationTokens
+	record.CacheReadInputTokens = cacheReadTokens
+
+	// 写入持久化存储（异步，不阻塞）
+	if m.store != nil {
+		m.store.AddRecord(PersistentRecord{
+			MetricsKey:          metrics.MetricsKey,
+			BaseURL:             baseURL,
+			KeyMask:             metrics.KeyMask,
+			Timestamp:           record.Timestamp,
+			Success:             true,
+			InputTokens:         inputTokens,
+			OutputTokens:        outputTokens,
+			CacheCreationTokens: cacheCreationTokens,
+			CacheReadTokens:     cacheReadTokens,
+			APIType:             m.apiType,
+		})
+	}
+}
+
+// RecordRequestFinalizeFailure 回写失败结果（requestID 来自 RecordRequestConnected）。
+func (m *MetricsManager) RecordRequestFinalizeFailure(baseURL, apiKey string, requestID uint64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	metricsKey := generateMetricsKey(baseURL, apiKey)
+	metrics, exists := m.keyMetrics[metricsKey]
+	if !exists {
+		m.recordFailureLocked(baseURL, apiKey, time.Now())
+		return
+	}
+
+	idx, ok := metrics.pendingHistoryIdx[requestID]
+	if !ok || idx < 0 || idx >= len(metrics.requestHistory) {
+		m.recordFailureLocked(baseURL, apiKey, time.Now())
+		return
+	}
+	delete(metrics.pendingHistoryIdx, requestID)
+
+	// 正常路径：在此统一增加 RequestCount
+	metrics.RequestCount++
+	metrics.FailureCount++
+	metrics.ConsecutiveFailures++
+
+	now := time.Now()
+	metrics.LastFailureAt = &now
+
+	// 更新滑动窗口
+	m.appendToWindowKey(metrics, false)
+
+	// 检查是否刚进入熔断状态
+	if metrics.CircuitBrokenAt == nil && m.isKeyCircuitBroken(metrics) {
+		metrics.CircuitBrokenAt = &now
+		log.Printf("[Metrics-Circuit] Key [%s] (%s) 进入熔断状态（失败率: %.1f%%）", metrics.KeyMask, metrics.BaseURL, m.calculateKeyFailureRateInternal(metrics)*100)
+	}
+
+	// 回写历史记录（时间戳保持为“请求开始（TCP 建连阶段）”时刻）
+	record := &metrics.requestHistory[idx]
+	record.Success = false
+	record.InputTokens = 0
+	record.OutputTokens = 0
+	record.CacheCreationInputTokens = 0
+	record.CacheReadInputTokens = 0
+
+	// 写入持久化存储（异步，不阻塞）
+	if m.store != nil {
+		m.store.AddRecord(PersistentRecord{
+			MetricsKey:          metrics.MetricsKey,
+			BaseURL:             baseURL,
+			KeyMask:             metrics.KeyMask,
+			Timestamp:           record.Timestamp,
 			Success:             false,
 			InputTokens:         0,
 			OutputTokens:        0,
@@ -431,6 +610,49 @@ func (m *MetricsManager) appendToHistoryKey(metrics *KeyMetrics, timestamp time.
 	m.appendToHistoryKeyWithUsage(metrics, timestamp, success, 0, 0, 0, 0)
 }
 
+// cleanupHistoryLocked 清理超过 24 小时的历史记录，并同步修正 pendingHistoryIdx 索引。
+// 注意：调用方需要持有写锁。
+func (m *MetricsManager) cleanupHistoryLocked(metrics *KeyMetrics) {
+	if metrics == nil || len(metrics.requestHistory) == 0 {
+		return
+	}
+
+	cutoff := time.Now().Add(-24 * time.Hour)
+
+	newStart := -1
+	for i, record := range metrics.requestHistory {
+		if record.Timestamp.After(cutoff) {
+			newStart = i
+			break
+		}
+	}
+
+	if newStart > 0 {
+		metrics.requestHistory = metrics.requestHistory[newStart:]
+		// 索引平移：老数据被切走后，pending 索引需要整体减去 newStart
+		if metrics.pendingHistoryIdx != nil && len(metrics.pendingHistoryIdx) > 0 {
+			for id, idx := range metrics.pendingHistoryIdx {
+				if idx < newStart {
+					delete(metrics.pendingHistoryIdx, id)
+					continue
+				}
+				metrics.pendingHistoryIdx[id] = idx - newStart
+			}
+		}
+		return
+	}
+
+	if newStart == -1 {
+		// 所有记录都过期，清空切片
+		metrics.requestHistory = metrics.requestHistory[:0]
+		if metrics.pendingHistoryIdx != nil {
+			for id := range metrics.pendingHistoryIdx {
+				delete(metrics.pendingHistoryIdx, id)
+			}
+		}
+	}
+}
+
 // appendToHistoryKeyWithUsage 向 Key 历史记录添加请求（带 Usage 数据）
 func (m *MetricsManager) appendToHistoryKeyWithUsage(metrics *KeyMetrics, timestamp time.Time, success bool, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64) {
 	metrics.requestHistory = append(metrics.requestHistory, RequestRecord{
@@ -442,21 +664,8 @@ func (m *MetricsManager) appendToHistoryKeyWithUsage(metrics *KeyMetrics, timest
 		CacheReadInputTokens:     cacheReadTokens,
 	})
 
-	// 清理超过24小时的记录
-	cutoff := time.Now().Add(-24 * time.Hour)
-	newStart := -1
-	for i, record := range metrics.requestHistory {
-		if record.Timestamp.After(cutoff) {
-			newStart = i
-			break
-		}
-	}
-	if newStart > 0 {
-		metrics.requestHistory = metrics.requestHistory[newStart:]
-	} else if newStart == -1 && len(metrics.requestHistory) > 0 {
-		// 所有记录都过期，清空切片
-		metrics.requestHistory = metrics.requestHistory[:0]
-	}
+	// 清理超过 24 小时的记录
+	m.cleanupHistoryLocked(metrics)
 }
 
 // IsKeyHealthy 判断单个 Key 是否健康
@@ -885,11 +1094,17 @@ func (m *MetricsManager) ResetKey(baseURL, apiKey string) {
 		metrics.SuccessCount = 0
 		metrics.FailureCount = 0
 		metrics.ConsecutiveFailures = 0
+		metrics.ActiveRequests = 0
 		metrics.LastSuccessAt = nil
 		metrics.LastFailureAt = nil
 		metrics.CircuitBrokenAt = nil
 		metrics.recentResults = make([]bool, 0, m.windowSize)
 		metrics.requestHistory = nil
+		if metrics.pendingHistoryIdx != nil {
+			for id := range metrics.pendingHistoryIdx {
+				delete(metrics.pendingHistoryIdx, id)
+			}
+		}
 		log.Printf("[Metrics-Reset] Key [%s] (%s) 指标已完全重置", metrics.KeyMask, metrics.BaseURL)
 	}
 }

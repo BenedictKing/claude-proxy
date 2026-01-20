@@ -4,6 +4,34 @@
 
 ---
 
+## [Unreleased]
+
+### 修复
+
+- **指标二次计数 Bug** - 修复 `RecordRequestFinalize*` fallback 路径导致的请求计数重复问题
+  - 将 `RequestCount++` 从 `RecordRequestConnected` 移至 `RecordRequestFinalize*` 阶段
+  - 采用延迟计数策略：连接时预写历史记录，完成时统一计数
+  - 确保 fallback 路径（requestID 丢失/索引越界）不会触发二次计数
+  - 涉及文件：`backend-go/internal/metrics/channel_metrics.go`
+
+### 重构
+
+- **指标记录架构优化** - 将指标记录职责从 handler 层下沉到 failover 层，实现"连接即计数"的实时统计
+  - 新增 `RecordRequestConnected` / `RecordRequestFinalizeSuccess` / `RecordRequestFinalizeFailure` 三阶段记录机制
+  - TCP 建连时即计入活跃请求数，响应完成后回写成功/失败与 token 数据
+  - 移除 handler 层的 `RecordSuccessWithUsage` / `RecordFailure` 调用，统一由 `upstream_failover.go` 管理
+  - 修改 `HandleSuccessFunc` 签名：返回 `(*types.Usage, error)` 而非 `*types.Usage`，支持流式响应错误处理
+  - 修改 `ProcessStreamEvents` / `HandleStreamResponse` 返回 usage，避免在 stream 层直接记录指标
+  - 新增 `pendingHistoryIdx` 映射表，支持请求 ID 到历史记录索引的快速查找
+  - 新增 `cleanupHistoryLocked` 函数，清理过期历史记录时同步修正索引
+  - 涉及文件：
+    - `backend-go/internal/handlers/common/stream.go` - 移除指标记录，返回 usage
+    - `backend-go/internal/handlers/common/upstream_failover.go` - 三阶段指标记录
+    - `backend-go/internal/handlers/messages/handler.go` - 移除指标记录调用
+    - `backend-go/internal/handlers/responses/handler.go` - 移除指标记录调用
+    - `backend-go/internal/handlers/gemini/handler.go` - 移除指标记录调用
+    - `backend-go/internal/metrics/channel_metrics.go` - 新增三阶段记录 API
+
 ## [v2.5.6] - 2026-01-20
 
 ### 修复

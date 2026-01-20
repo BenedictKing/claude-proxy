@@ -170,7 +170,7 @@ func handleMultiChannel(
 				func(url string) {
 					channelScheduler.MarkURLSuccess(scheduler.ChannelKindGemini, channelIndex, url)
 				},
-				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) *types.Usage {
+				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) (*types.Usage, error) {
 					return handleSuccess(c, resp, upstreamCopy.ServiceType, envCfg, startTime, geminiReq, model, isStream)
 				},
 			)
@@ -185,16 +185,7 @@ func handleMultiChannel(
 				LastError:         lastErr,
 			}
 		},
-		func(selection *scheduler.SelectionResult, result common.MultiChannelAttemptResult) {
-			if result.SuccessKey == "" || selection.Upstream == nil {
-				return
-			}
-			baseURLs := selection.Upstream.GetAllBaseURLs()
-			if result.SuccessBaseURLIdx < 0 || result.SuccessBaseURLIdx >= len(baseURLs) {
-				return
-			}
-			channelScheduler.RecordSuccessWithUsage(baseURLs[result.SuccessBaseURLIdx], result.SuccessKey, result.Usage, scheduler.ChannelKindGemini)
-		},
+		nil,
 		func(ctx *gin.Context, failoverErr *common.FailoverError, lastError error) {
 			handleAllChannelsFailed(ctx, failoverErr, lastError)
 		},
@@ -240,7 +231,7 @@ func handleSingleChannel(
 	baseURLs := upstream.GetAllBaseURLs()
 	urlResults := common.BuildDefaultURLResults(baseURLs)
 
-	handled, successKey, successBaseURLIdx, lastFailoverError, usage, lastError := common.TryUpstreamWithAllKeys(
+	handled, _, _, lastFailoverError, _, lastError := common.TryUpstreamWithAllKeys(
 		c,
 		envCfg,
 		cfgManager,
@@ -263,14 +254,11 @@ func handleSingleChannel(
 		},
 		nil,
 		nil,
-		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) *types.Usage {
+		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) (*types.Usage, error) {
 			return handleSuccess(c, resp, upstreamCopy.ServiceType, envCfg, startTime, geminiReq, model, isStream)
 		},
 	)
 	if handled {
-		if successKey != "" && successBaseURLIdx >= 0 && successBaseURLIdx < len(baseURLs) {
-			channelScheduler.RecordSuccessWithUsage(baseURLs[successBaseURLIdx], successKey, usage, scheduler.ChannelKindGemini)
-		}
 		return
 	}
 
@@ -466,11 +454,11 @@ func handleSuccess(
 	geminiReq *types.GeminiRequest,
 	model string,
 	isStream bool,
-) *types.Usage {
+) (*types.Usage, error) {
 	defer resp.Body.Close()
 
 	if isStream {
-		return handleStreamSuccess(c, resp, upstreamType, envCfg, startTime, model)
+		return handleStreamSuccess(c, resp, upstreamType, envCfg, startTime, model), nil
 	}
 
 	// 非流式响应处理
@@ -483,7 +471,7 @@ func handleSuccess(
 				Status:  "INTERNAL",
 			},
 		})
-		return nil
+		return nil, err
 	}
 
 	if envCfg.EnableResponseLogs {
@@ -499,7 +487,7 @@ func handleSuccess(
 		// 直接解析 Gemini 响应
 		if err := json.Unmarshal(bodyBytes, &geminiResp); err != nil {
 			c.Data(resp.StatusCode, "application/json", bodyBytes)
-			return nil
+			return nil, nil
 		}
 
 	case "claude":
@@ -507,12 +495,12 @@ func handleSuccess(
 		var claudeResp map[string]interface{}
 		if err := json.Unmarshal(bodyBytes, &claudeResp); err != nil {
 			c.Data(resp.StatusCode, "application/json", bodyBytes)
-			return nil
+			return nil, nil
 		}
 		geminiResp, err = converters.ClaudeResponseToGemini(claudeResp)
 		if err != nil {
 			c.Data(resp.StatusCode, "application/json", bodyBytes)
-			return nil
+			return nil, nil
 		}
 
 	case "openai":
@@ -520,25 +508,25 @@ func handleSuccess(
 		var openaiResp map[string]interface{}
 		if err := json.Unmarshal(bodyBytes, &openaiResp); err != nil {
 			c.Data(resp.StatusCode, "application/json", bodyBytes)
-			return nil
+			return nil, nil
 		}
 		geminiResp, err = converters.OpenAIResponseToGemini(openaiResp)
 		if err != nil {
 			c.Data(resp.StatusCode, "application/json", bodyBytes)
-			return nil
+			return nil, nil
 		}
 
 	default:
 		// 默认直接返回
 		c.Data(resp.StatusCode, "application/json", bodyBytes)
-		return nil
+		return nil, nil
 	}
 
 	// 返回 Gemini 格式响应
 	respBytes, err := json.Marshal(geminiResp)
 	if err != nil {
 		c.Data(resp.StatusCode, "application/json", bodyBytes)
-		return nil
+		return nil, nil
 	}
 
 	c.Data(resp.StatusCode, "application/json", respBytes)
@@ -552,7 +540,7 @@ func handleSuccess(
 		}
 	}
 
-	return usage
+	return usage, nil
 }
 
 // handleAllChannelsFailed 处理所有渠道失败的情况

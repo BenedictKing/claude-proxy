@@ -23,7 +23,7 @@ func TestGetDashboard_IncludesStripThoughtSignature(t *testing.T) {
 	cfg := config.Config{
 		GeminiUpstream: []config.UpstreamConfig{
 			{
-				Name:                 "gemini-test",
+				Name:                  "gemini-test",
 				ServiceType:           "gemini",
 				BaseURL:               "https://example.com",
 				APIKeys:               []string{"test-key"},
@@ -95,4 +95,3 @@ func TestGetDashboard_IncludesStripThoughtSignature(t *testing.T) {
 		t.Fatalf("stripThoughtSignature=%v, want=true", strip)
 	}
 }
-

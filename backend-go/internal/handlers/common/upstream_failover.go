@@ -27,7 +27,7 @@ type DeprioritizeKeyFunc func(apiKey string)
 
 // HandleSuccessFunc 处理成功响应（负责写回客户端），并返回 usage（可为 nil）
 // 注意：实现方需要自行关闭 resp.Body（与现有 handlers 保持一致）。
-type HandleSuccessFunc func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) *types.Usage
+type HandleSuccessFunc func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) (*types.Usage, error)
 
 // TryUpstreamWithAllKeys 尝试一个 upstream 的所有 BaseURL + Key（纯 failover）
 // 返回:
@@ -119,12 +119,15 @@ func TryUpstreamWithAllKeys(
 			// 记录请求开始
 			channelScheduler.RecordRequestStart(currentBaseURL, apiKey, kind)
 
+			// TCP 建连开始即计数：将活跃度统计提前到发起上游请求之前
+			requestID := metricsManager.RecordRequestConnected(currentBaseURL, apiKey)
+
 			resp, err := SendRequest(req, upstream, envCfg, isStream, apiType)
 			if err != nil {
 				lastError = err
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey, apiType)
-				channelScheduler.RecordFailure(currentBaseURL, apiKey, kind)
+				metricsManager.RecordRequestFinalizeFailure(currentBaseURL, apiKey, requestID)
 				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
 				if markURLFailure != nil {
 					markURLFailure(currentBaseURL)
@@ -143,7 +146,7 @@ func TryUpstreamWithAllKeys(
 					lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)
 					failedKeys[apiKey] = true
 					cfgManager.MarkKeyAsFailed(apiKey, apiType)
-					channelScheduler.RecordFailure(currentBaseURL, apiKey, kind)
+					metricsManager.RecordRequestFinalizeFailure(currentBaseURL, apiKey, requestID)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
 					if markURLFailure != nil {
 						markURLFailure(currentBaseURL)
@@ -162,7 +165,7 @@ func TryUpstreamWithAllKeys(
 				}
 
 				// 非 failover 错误，记录失败指标后返回（请求已处理）
-				channelScheduler.RecordFailure(currentBaseURL, apiKey, kind)
+				metricsManager.RecordRequestFinalizeFailure(currentBaseURL, apiKey, requestID)
 				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
 				c.Data(resp.StatusCode, "application/json", respBodyBytes)
 				return true, "", 0, nil, nil, nil
@@ -179,7 +182,17 @@ func TryUpstreamWithAllKeys(
 				markURLSuccess(currentBaseURL)
 			}
 
-			usage = handleSuccess(c, resp, upstreamCopy, apiKey)
+			usage, err = handleSuccess(c, resp, upstreamCopy, apiKey)
+			if err != nil {
+				lastError = err
+				cfgManager.MarkKeyAsFailed(apiKey, apiType)
+				metricsManager.RecordRequestFinalizeFailure(currentBaseURL, apiKey, requestID)
+				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
+				log.Printf("[%s-Key] 警告: 响应处理失败: %v", apiType, err)
+				return true, "", 0, nil, usage, err
+			}
+
+			metricsManager.RecordRequestFinalizeSuccess(currentBaseURL, apiKey, requestID, usage)
 			channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
 			return true, apiKey, originalIdx, nil, usage, nil
 		}

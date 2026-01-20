@@ -130,13 +130,11 @@ func handleMultiChannel(
 				func(url string) {
 					channelScheduler.MarkURLSuccess(scheduler.ChannelKindMessages, channelIndex, url)
 				},
-				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) *types.Usage {
+				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) (*types.Usage, error) {
 					if claudeReq.Stream {
-						common.HandleStreamResponse(c, resp, provider, envCfg, startTime, upstreamCopy, bodyBytes, channelScheduler, apiKey, claudeReq.Model)
-					} else {
-						handleNormalResponse(c, resp, provider, envCfg, startTime, bodyBytes, channelScheduler, upstreamCopy, apiKey)
+						return common.HandleStreamResponse(c, resp, provider, envCfg, startTime, upstreamCopy, bodyBytes, claudeReq.Model)
 					}
-					return nil
+					return handleNormalResponse(c, resp, provider, envCfg, startTime, bodyBytes, upstreamCopy, apiKey)
 				},
 			)
 
@@ -221,13 +219,11 @@ func handleSingleChannel(
 		},
 		nil,
 		nil,
-		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) *types.Usage {
+		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string) (*types.Usage, error) {
 			if claudeReq.Stream {
-				common.HandleStreamResponse(c, resp, provider, envCfg, startTime, upstreamCopy, bodyBytes, channelScheduler, apiKey, claudeReq.Model)
-			} else {
-				handleNormalResponse(c, resp, provider, envCfg, startTime, bodyBytes, channelScheduler, upstreamCopy, apiKey)
+				return common.HandleStreamResponse(c, resp, provider, envCfg, startTime, upstreamCopy, bodyBytes, claudeReq.Model)
 			}
-			return nil
+			return handleNormalResponse(c, resp, provider, envCfg, startTime, bodyBytes, upstreamCopy, apiKey)
 		},
 	)
 	if handled {
@@ -246,16 +242,15 @@ func handleNormalResponse(
 	envCfg *config.EnvConfig,
 	startTime time.Time,
 	requestBody []byte,
-	channelScheduler *scheduler.ChannelScheduler,
 	upstream *config.UpstreamConfig,
 	apiKey string,
-) {
+) (*types.Usage, error) {
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to read response"})
-		return
+		return nil, err
 	}
 
 	if envCfg.EnableResponseLogs {
@@ -296,7 +291,7 @@ func handleNormalResponse(
 	claudeResp, err := provider.ConvertToClaudeResponse(providerResp)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to convert response"})
-		return
+		return nil, err
 	}
 
 	// Token 补全逻辑
@@ -355,13 +350,12 @@ func handleNormalResponse(
 
 	c.JSON(200, claudeResp)
 
-	// 记录成功指标
-	channelScheduler.RecordSuccessWithUsage(upstream.BaseURL, apiKey, claudeResp.Usage, scheduler.ChannelKindMessages)
-
 	if envCfg.EnableResponseLogs {
 		responseTime := time.Since(startTime).Milliseconds()
 		log.Printf("[Messages-Timing] 响应发送完成: %dms, 状态: %d", responseTime, resp.StatusCode)
 	}
+
+	return claudeResp.Usage, nil
 }
 
 // CountTokensHandler 处理 /v1/messages/count_tokens 请求
