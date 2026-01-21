@@ -25,7 +25,6 @@ Thumbs.db
 *.swp
 *.swo
 *~
-go.sum
 tmp/
 
 !docs/

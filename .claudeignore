@@ -1,0 +1,26 @@
+
+# 忽略常规依赖
+**/node_modules
+**/frontend/node_modules
+**/dist
+**/.git
+**/.next
+**/.vercel
+
+# 忽略构建产物和二进制
+**/target
+**/bin
+**/obj
+*.mmdb
+*.pack
+*.bin
+*.rlib
+*.exe
+
+# 忽略日志
+**/logs
+*.log
+*.log.gz
+
+# 忽略外部引用
+refs/
