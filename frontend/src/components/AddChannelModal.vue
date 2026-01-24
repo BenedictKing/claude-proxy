@@ -194,6 +194,8 @@
                 <v-card-text class="pt-2">
                   <div class="text-body-2 text-medium-emphasis mb-4">
                     {{ modelMappingHint }}
+                    <br/>
+                    <span class="text-caption text-primary">💡 点击目标模型输入框会自动获取上游支持的模型列表,每个 API Key 的检测状态会显示在密钥列表中</span>
                   </div>
 
                   <!-- 现有映射列表 -->
@@ -241,24 +243,32 @@
                       placeholder="选择源模型名"
                     />
                     <v-icon color="primary">mdi-arrow-right</v-icon>
-                    <v-text-field
+                    <v-combobox
                       v-model="newMapping.target"
                       label="目标模型名"
                       :placeholder="targetModelPlaceholder"
+                      :items="targetModelOptions"
+                      :loading="fetchingModels"
                       variant="outlined"
                       density="comfortable"
                       hide-details
                       class="flex-1-1"
+                      clearable
+                      @focus="handleTargetModelClick"
                       @keyup.enter="addModelMapping"
                     />
                     <v-btn
                       color="secondary"
                       variant="elevated"
-                      :disabled="!newMapping.source.trim() || !newMapping.target.trim()"
+                      :disabled="!isMappingInputValid"
                       @click="addModelMapping"
                     >
                       添加
                     </v-btn>
+                  </div>
+                  <!-- 错误提示 -->
+                  <div v-if="fetchModelsError" class="text-error text-caption mt-2">
+                    {{ fetchModelsError }}
                   </div>
                 </v-card-text>
               </v-card>
@@ -300,9 +310,47 @@
                         <v-list-item-title>
                           <div class="d-flex align-center justify-space-between">
                             <code class="text-caption">{{ maskApiKey(key) }}</code>
-                            <v-chip v-if="duplicateKeyIndex === index" size="x-small" color="error" variant="text">
-                              重复密钥
-                            </v-chip>
+                            <div class="d-flex align-center ga-1">
+                              <!-- Models 状态标签 -->
+                              <v-chip
+                                v-if="keyModelsStatus.get(key)?.loading"
+                                size="x-small"
+                                color="info"
+                                variant="tonal"
+                              >
+                                <v-icon start size="12">mdi-loading</v-icon>
+                                检测中...
+                              </v-chip>
+                              <v-chip
+                                v-else-if="keyModelsStatus.get(key)?.success"
+                                size="x-small"
+                                color="success"
+                                variant="tonal"
+                              >
+                                models {{ keyModelsStatus.get(key)?.statusCode }} ({{ keyModelsStatus.get(key)?.modelCount }} 个)
+                              </v-chip>
+                              <v-tooltip
+                                v-else-if="keyModelsStatus.get(key)?.error"
+                                :text="keyModelsStatus.get(key)?.error"
+                                location="top"
+                                max-width="300"
+                              >
+                                <template #activator="{ props: tooltipProps }">
+                                  <v-chip
+                                    v-bind="tooltipProps"
+                                    size="x-small"
+                                    color="error"
+                                    variant="tonal"
+                                  >
+                                    models {{ keyModelsStatus.get(key)?.statusCode || 'ERR' }}
+                                  </v-chip>
+                                </template>
+                              </v-tooltip>
+                              <!-- 重复密钥标签 -->
+                              <v-chip v-if="duplicateKeyIndex === index" size="x-small" color="error" variant="text">
+                                重复密钥
+                              </v-chip>
+                            </div>
                           </div>
                         </v-list-item-title>
 
@@ -538,6 +586,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useTheme } from 'vuetify'
 import type { Channel } from '../services/api'
+import { fetchUpstreamModels, ApiError } from '../services/api'
 import {
   isValidApiKey as _isValidApiKey,
   isValidUrl as _isValidQuickInputUrl,
@@ -1022,6 +1071,36 @@ const newMapping = reactive({
   target: ''
 })
 
+// 安全地获取字符串值（处理 v-select/v-combobox 可能返回对象的情况）
+const getStringValue = (val: string | { title: string; value: string } | null | undefined): string => {
+  if (!val) return ''
+  if (typeof val === 'string') return val
+  return val.value || ''
+}
+
+// 检查映射输入是否有效
+const isMappingInputValid = computed(() => {
+  const source = getStringValue(newMapping.source).trim()
+  const target = getStringValue(newMapping.target).trim()
+  return source && target
+})
+
+// 目标模型列表（从上游获取）
+const targetModelOptions = ref<Array<{ title: string; value: string }>>([])
+const fetchingModels = ref(false)
+const fetchModelsError = ref('')
+const hasTriedFetchModels = ref(false) // 标记是否已尝试获取过模型列表
+
+// API Key 的 models 状态管理
+interface KeyModelsStatus {
+  loading: boolean
+  success: boolean
+  statusCode?: number
+  error?: string
+  modelCount?: number
+}
+const keyModelsStatus = ref<Map<string, KeyModelsStatus>>(new Map())
+
 // 表单验证错误
 const errors = reactive({
   name: '',
@@ -1140,6 +1219,13 @@ const resetForm = () => {
   apiKeyError.value = ''
   duplicateKeyIndex.value = -1
 
+  // 清空模型缓存和状态
+  targetModelOptions.value = []
+  fetchingModels.value = false
+  fetchModelsError.value = ''
+  keyModelsStatus.value.clear()
+  hasTriedFetchModels.value = false
+
   // 清除错误信息
   errors.name = ''
   errors.serviceType = ''
@@ -1182,6 +1268,17 @@ const loadChannelData = (channel: Channel) => {
 
   // 立即同步 baseUrl 到预览变量，避免等待 debounce
   formBaseUrlPreview.value = channel.baseUrl
+
+  // 清空模型映射输入框
+  newMapping.source = ''
+  newMapping.target = ''
+
+  // 清空模型缓存和状态（切换渠道时重置）
+  targetModelOptions.value = []
+  fetchingModels.value = false
+  fetchModelsError.value = ''
+  keyModelsStatus.value.clear()
+  hasTriedFetchModels.value = false
 }
 
 const addApiKey = () => {
@@ -1281,8 +1378,16 @@ const copyApiKey = async (key: string, index: number) => {
 }
 
 const addModelMapping = () => {
-  const source = newMapping.source.trim()
-  const target = newMapping.target.trim()
+  // 安全地获取字符串值（处理 v-select/v-combobox 可能返回对象的情况）
+  const getStringValue = (val: string | { title: string; value: string } | null | undefined): string => {
+    if (!val) return ''
+    if (typeof val === 'string') return val
+    return val.value || ''
+  }
+
+  const source = getStringValue(newMapping.source).trim()
+  const target = getStringValue(newMapping.target).trim()
+
   if (source && target && !form.modelMapping[source]) {
     form.modelMapping[source] = target
     newMapping.source = ''
@@ -1292,6 +1397,109 @@ const addModelMapping = () => {
 
 const removeModelMapping = (source: string) => {
   delete form.modelMapping[source]
+}
+
+// 处理目标模型输入框点击事件(仅在首次或有新 key 时触发请求)
+const handleTargetModelClick = () => {
+  // 如果已经尝试过获取且正在加载中,不重复触发
+  if (hasTriedFetchModels.value || fetchingModels.value) {
+    return
+  }
+
+  // 标记已尝试获取
+  hasTriedFetchModels.value = true
+
+  // 调用获取模型列表(内部有缓存逻辑)
+  fetchTargetModels()
+}
+
+const fetchTargetModels = async () => {
+  if (!form.baseUrl || form.apiKeys.length === 0) {
+    fetchModelsError.value = '请先填写 Base URL 和至少一个 API Key'
+    return
+  }
+
+  // 如果已经有模型列表且所有 key 都已检测过,直接返回(缓存)
+  if (targetModelOptions.value.length > 0) {
+    const allKeysChecked = form.apiKeys.every(key => keyModelsStatus.value.has(key))
+    if (allKeysChecked) {
+      return
+    }
+  }
+
+  fetchingModels.value = true
+  fetchModelsError.value = ''
+
+  // 仅为未检测过的 API Key 发起请求
+  const uncheckedKeys = form.apiKeys.filter(key => !keyModelsStatus.value.has(key))
+
+  if (uncheckedKeys.length === 0) {
+    fetchingModels.value = false
+    return
+  }
+
+  // 为每个未检测的 API Key 检测 models 状态
+  const keyPromises = uncheckedKeys.map(async (apiKey) => {
+    keyModelsStatus.value.set(apiKey, { loading: true, success: false })
+
+    try {
+      const response = await fetchUpstreamModels(form.baseUrl, apiKey)
+
+      keyModelsStatus.value.set(apiKey, {
+        loading: false,
+        success: true,
+        statusCode: 200,
+        modelCount: response.data.length
+      })
+
+      return response.data
+    } catch (error) {
+      let errorMsg = '未知错误'
+      let statusCode = 0
+
+      if (error instanceof ApiError) {
+        errorMsg = error.message
+        statusCode = error.status
+      } else if (error instanceof Error) {
+        errorMsg = error.message
+      }
+
+      keyModelsStatus.value.set(apiKey, {
+        loading: false,
+        success: false,
+        statusCode,
+        error: errorMsg
+      })
+
+      return []
+    }
+  })
+
+  try {
+    const results = await Promise.all(keyPromises)
+
+    // 合并新获取的模型列表到现有列表
+    const allModels = new Set<string>(targetModelOptions.value.map(opt => opt.value))
+    results.forEach(models => {
+      models.forEach(m => allModels.add(m.id))
+    })
+
+    targetModelOptions.value = Array.from(allModels)
+      .sort()
+      .map(id => ({ title: id, value: id }))
+
+    // 如果所有 key 都失败了,显示错误
+    const allFailed = form.apiKeys.every(key => {
+      const status = keyModelsStatus.value.get(key)
+      return status && !status.success
+    })
+
+    if (allFailed) {
+      fetchModelsError.value = '所有 API Key 都无法获取模型列表,请检查 API 密钥列表中的错误信息'
+    }
+  } finally {
+    fetchingModels.value = false
+  }
 }
 
 const handleSubmit = async () => {

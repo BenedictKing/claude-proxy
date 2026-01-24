@@ -232,6 +232,89 @@ export interface ChannelRecentActivity {
   tpm: number                  // 15分钟平均 TPM
 }
 
+// ============== 上游模型列表类型 ==============
+
+export interface ModelEntry {
+  id: string
+  object: string
+  created: number
+  owned_by: string
+}
+
+export interface ModelsResponse {
+  object: string
+  data: ModelEntry[]
+}
+
+/**
+ * 构建上游的 /v1/models 端点 URL
+ * 参考：backend-go/internal/handlers/messages/models.go:240-257
+ */
+function buildModelsURL(baseURL: string): string {
+  // 处理 # 后缀（跳过版本前缀）
+  const skipVersionPrefix = baseURL.endsWith('#')
+  if (skipVersionPrefix) {
+    baseURL = baseURL.slice(0, -1)
+  }
+  baseURL = baseURL.replace(/\/$/, '')
+
+  // 检查是否已有版本后缀（如 /v1, /v2）
+  const versionPattern = /\/v\d+[a-z]*$/
+  const hasVersionSuffix = versionPattern.test(baseURL)
+
+  // 构建端点
+  let endpoint = '/models'
+  if (!hasVersionSuffix && !skipVersionPrefix) {
+    endpoint = '/v1' + endpoint
+  }
+
+  return baseURL + endpoint
+}
+
+/**
+ * 直接从上游获取模型列表（前端直连）
+ */
+export async function fetchUpstreamModels(
+  baseUrl: string,
+  apiKey: string
+): Promise<ModelsResponse> {
+  const url = buildModelsURL(baseUrl)
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`
+    },
+    signal: AbortSignal.timeout(10000) // 10秒超时
+  })
+
+  if (!response.ok) {
+    let errorMessage = `${response.status} ${response.statusText}`
+    let errorDetails: unknown = null
+
+    try {
+      const errorText = await response.text()
+      if (errorText) {
+        const errorJson = JSON.parse(errorText)
+        // 解析上游错误格式: { "error": { "code": "", "message": "...", "type": "..." } }
+        if (errorJson.error && errorJson.error.message) {
+          errorMessage = errorJson.error.message
+          errorDetails = errorJson.error
+        } else if (errorJson.message) {
+          errorMessage = errorJson.message
+          errorDetails = errorJson
+        }
+      }
+    } catch {
+      // 解析失败,使用默认错误消息
+    }
+
+    throw new ApiError(errorMessage, response.status, errorDetails)
+  }
+
+  return await response.json()
+}
+
 class ApiService {
   // 获取当前 API Key（从 AuthStore）
   private getApiKey(): string | null {
