@@ -25,7 +25,7 @@ func GetChannelMetricsWithConfig(metricsManager *metrics.MetricsManager, cfgMana
 		result := make([]gin.H, 0, len(upstreams))
 		for i, upstream := range upstreams {
 			// 使用多 URL 聚合方法获取渠道指标（支持 failover 多端点场景）
-			resp := metricsManager.ToResponseMultiURL(i, upstream.GetAllBaseURLs(), upstream.APIKeys, 0)
+			resp := metricsManager.ToResponseMultiURL(i, upstream.GetAllBaseURLs(), upstream.APIKeys, 0, upstream.HistoricalAPIKeys)
 
 			item := gin.H{
 				"channelIndex":        i,
@@ -584,7 +584,7 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 		// 2. 构建 metrics 数据
 		metricsResult := make([]gin.H, 0, len(upstreams))
 		for i, upstream := range upstreams {
-			resp := metricsManager.ToResponseMultiURL(i, upstream.GetAllBaseURLs(), upstream.APIKeys, 0)
+			resp := metricsManager.ToResponseMultiURL(i, upstream.GetAllBaseURLs(), upstream.APIKeys, 0, upstream.HistoricalAPIKeys)
 
 			item := gin.H{
 				"channelIndex":        i,
@@ -822,7 +822,7 @@ func GetGeminiChannelMetrics(metricsManager *metrics.MetricsManager, cfgManager 
 		result := make([]gin.H, 0, len(upstreams))
 		for i, upstream := range upstreams {
 			// 使用多 URL 聚合方法获取渠道指标（支持 failover 多端点场景）
-			resp := metricsManager.ToResponseMultiURL(i, upstream.GetAllBaseURLs(), upstream.APIKeys, 0)
+			resp := metricsManager.ToResponseMultiURL(i, upstream.GetAllBaseURLs(), upstream.APIKeys, 0, upstream.HistoricalAPIKeys)
 
 			item := gin.H{
 				"channelIndex":        i,

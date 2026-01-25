@@ -101,7 +101,7 @@ func UpdateUpstream(cfgManager *config.ConfigManager, sch *scheduler.ChannelSche
 }
 
 // DeleteUpstream 删除 Gemini 上游
-func DeleteUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
+func DeleteUpstream(cfgManager *config.ConfigManager, sch *scheduler.ChannelScheduler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		idStr := c.Param("id")
 		id, err := strconv.Atoi(idStr)
@@ -110,10 +110,18 @@ func DeleteUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			return
 		}
 
-		if _, err := cfgManager.RemoveGeminiUpstream(id); err != nil {
-			c.JSON(500, gin.H{"error": err.Error()})
+		removed, err := cfgManager.RemoveGeminiUpstream(id)
+		if err != nil {
+			if strings.Contains(err.Error(), "无效的") {
+				c.JSON(404, gin.H{"error": "Upstream not found"})
+			} else {
+				c.JSON(500, gin.H{"error": err.Error()})
+			}
 			return
 		}
+
+		// 删除成功后清理指标数据（使用 RemoveGeminiUpstream 返回的渠道信息）
+		sch.DeleteChannelMetrics(removed, scheduler.ChannelKindGemini)
 
 		c.JSON(200, gin.H{"message": "Gemini upstream deleted successfully"})
 	}

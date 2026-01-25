@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -270,6 +271,55 @@ func (s *SQLiteStore) CleanupOldRecords(before time.Time) (int64, error) {
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+// DeleteRecordsByMetricsKeys 按 metrics_key 和 api_type 批量删除记录
+// apiType: 接口类型（messages/responses/gemini），避免误删其他接口的数据
+func (s *SQLiteStore) DeleteRecordsByMetricsKeys(metricsKeys []string, apiType string) (int64, error) {
+	if len(metricsKeys) == 0 {
+		return 0, nil
+	}
+
+	// 先刷新缓冲区，确保待删除的记录已写入数据库
+	s.flush()
+	// 等待所有异步 flush goroutine 完成，避免竞态：
+	// flush 取出记录但尚未写入时，DELETE 可能先执行，随后 flush 把记录插入
+	s.flushWg.Wait()
+
+	// 分批删除，避免触发 SQLite 变量上限（默认 999）
+	const batchSize = 500
+	var totalDeleted int64
+
+	for i := 0; i < len(metricsKeys); i += batchSize {
+		end := i + batchSize
+		if end > len(metricsKeys) {
+			end = len(metricsKeys)
+		}
+		batch := metricsKeys[i:end]
+
+		// 构建 IN 子句的占位符
+		placeholders := make([]string, len(batch))
+		args := make([]interface{}, 0, len(batch)+1)
+		args = append(args, apiType) // 第一个参数是 api_type
+		for j, key := range batch {
+			placeholders[j] = "?"
+			args = append(args, key)
+		}
+
+		query := fmt.Sprintf(
+			"DELETE FROM request_records WHERE api_type = ? AND metrics_key IN (%s)",
+			strings.Join(placeholders, ","),
+		)
+
+		result, err := s.db.Exec(query, args...)
+		if err != nil {
+			return totalDeleted, fmt.Errorf("batch %d-%d failed: %w", i, end, err)
+		}
+		affected, _ := result.RowsAffected()
+		totalDeleted += affected
+	}
+
+	return totalDeleted, nil
 }
 
 // flushLoop 定时刷新循环

@@ -250,11 +250,16 @@ func (m *MetricsManager) getOrCreateKeyLocked(baseURL, metricsKey, keyMask strin
 	return metrics
 }
 
-// generateMetricsKey 生成指标键 hash(baseURL + apiKey)
+// generateMetricsKey 生成指标键 hash(baseURL + apiKey)（内部使用）
 func generateMetricsKey(baseURL, apiKey string) string {
 	h := sha256.New()
 	h.Write([]byte(baseURL + "|" + apiKey))
 	return hex.EncodeToString(h.Sum(nil))[:16] // 取前16位作为键
+}
+
+// GenerateMetricsKey 生成指标键 hash(baseURL + apiKey)（导出供外部使用）
+func GenerateMetricsKey(baseURL, apiKey string) string {
+	return generateMetricsKey(baseURL, apiKey)
 }
 
 // getOrCreateKey 获取或创建 Key 指标
@@ -1171,6 +1176,60 @@ func (m *MetricsManager) Stop() {
 	close(m.stopCh)
 }
 
+// DeleteKeysForChannel 删除指定渠道的所有内存指标
+// baseURLs: 渠道的所有 BaseURL（支持多端点 failover）
+// apiKeys: 渠道的所有 API Key
+// 返回所有可能的 metricsKey 列表（无论内存中是否存在，用于后续清理持久化数据）
+func (m *MetricsManager) DeleteKeysForChannel(baseURLs, apiKeys []string) []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var allKeys []string
+	var deletedFromMemory int
+
+	for _, baseURL := range baseURLs {
+		for _, apiKey := range apiKeys {
+			metricsKey := generateMetricsKey(baseURL, apiKey)
+			allKeys = append(allKeys, metricsKey)
+			if _, exists := m.keyMetrics[metricsKey]; exists {
+				delete(m.keyMetrics, metricsKey)
+				deletedFromMemory++
+			}
+		}
+	}
+
+	if deletedFromMemory > 0 {
+		log.Printf("[Metrics-Delete] 已删除 %d 个内存指标记录", deletedFromMemory)
+	}
+
+	return allKeys
+}
+
+// DeleteChannelMetrics 删除渠道的所有指标数据（内存 + 持久化）
+// baseURLs: 渠道的所有 BaseURL（支持多端点 failover）
+// apiKeys: 渠道的所有 API Key
+// apiType: 接口类型（messages/responses/gemini），用于持久化数据过滤
+// 返回被删除的持久化记录数
+func (m *MetricsManager) DeleteChannelMetrics(baseURLs, apiKeys []string, apiType string) int64 {
+	// 1. 删除内存指标，获取 metricsKey 列表
+	deletedKeys := m.DeleteKeysForChannel(baseURLs, apiKeys)
+
+	// 2. 删除持久化数据
+	if m.store != nil && len(deletedKeys) > 0 {
+		deleted, err := m.store.DeleteRecordsByMetricsKeys(deletedKeys, apiType)
+		if err != nil {
+			log.Printf("[Metrics-Delete] 警告: 删除持久化指标记录失败: %v", err)
+			return 0
+		}
+		if deleted > 0 {
+			log.Printf("[Metrics-Delete] 已删除 %d 条 %s 持久化指标记录", deleted, apiType)
+		}
+		return deleted
+	}
+
+	return 0
+}
+
 // cleanupCircuitBreakers 后台任务：定期检查并恢复超时的熔断 Key，清理过期指标
 func (m *MetricsManager) cleanupCircuitBreakers() {
 	ticker := time.NewTicker(1 * time.Minute)
@@ -1291,7 +1350,8 @@ type KeyMetricsResponse struct {
 
 // ToResponseMultiURL 转换为 API 响应格式（支持多 BaseURL 聚合）
 // baseURLs: 渠道配置的所有 BaseURL（用于多端点 failover 场景）
-func (m *MetricsManager) ToResponseMultiURL(channelIndex int, baseURLs []string, activeKeys []string, latency int64) *MetricsResponse {
+// historicalKeys: 历史 API Key（用于统计聚合，只计入总数不显示在 KeyMetrics 中）
+func (m *MetricsManager) ToResponseMultiURL(channelIndex int, baseURLs []string, activeKeys []string, latency int64, historicalKeys ...[]string) *MetricsResponse {
 	// 如果没有配置 BaseURL，返回空响应
 	if len(baseURLs) == 0 {
 		return &MetricsResponse{
@@ -1376,6 +1436,22 @@ func (m *MetricsManager) ToResponseMultiURL(channelIndex int, baseURLs []string,
 						consecutiveFailures: metrics.ConsecutiveFailures,
 						circuitBroken:       metrics.CircuitBrokenAt != nil,
 					}
+				}
+			}
+		}
+	}
+
+	// 聚合历史 Key 的指标（只计入总数，不显示在 KeyMetrics 中）
+	if len(historicalKeys) > 0 && len(historicalKeys[0]) > 0 {
+		for _, baseURL := range baseURLs {
+			for _, apiKey := range historicalKeys[0] {
+				metricsKey := generateMetricsKey(baseURL, apiKey)
+				if metrics, exists := m.keyMetrics[metricsKey]; exists {
+					resp.RequestCount += metrics.RequestCount
+					resp.SuccessCount += metrics.SuccessCount
+					resp.FailureCount += metrics.FailureCount
+					// 历史 Key 不计入 totalResults（不影响实时失败率计算）
+					// 历史 Key 不计入 maxConsecutiveFailures（不影响熔断判断）
 				}
 			}
 		}

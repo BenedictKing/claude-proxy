@@ -416,6 +416,22 @@ func (s *ChannelScheduler) ResetKeyMetrics(baseURL, apiKey string, kind ChannelK
 	s.getMetricsManager(kind).ResetKey(baseURL, apiKey)
 }
 
+// DeleteChannelMetrics 删除渠道的所有指标数据（内存 + 持久化）
+// 用于删除渠道时清理相关的统计数据
+func (s *ChannelScheduler) DeleteChannelMetrics(upstream *config.UpstreamConfig, kind ChannelKind) {
+	if upstream == nil {
+		return
+	}
+	metricsManager := s.getMetricsManager(kind)
+	// 合并活跃 Key 和历史 Key，一起清理
+	allKeys := append([]string{}, upstream.APIKeys...)
+	allKeys = append(allKeys, upstream.HistoricalAPIKeys...)
+	// 传递 apiType（与 ChannelKind 值相同：messages/responses/gemini）
+	metricsManager.DeleteChannelMetrics(upstream.GetAllBaseURLs(), allKeys, string(kind))
+	prefix := kindSchedulerLogPrefix(kind)
+	log.Printf("[%s-Delete] 渠道 %s 的指标数据已清理", prefix, upstream.Name)
+}
+
 // GetActiveChannelCount 获取活跃渠道数量
 func (s *ChannelScheduler) GetActiveChannelCount(kind ChannelKind) int {
 	return len(s.getActiveChannels(kind))

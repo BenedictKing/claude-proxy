@@ -5,6 +5,8 @@ import (
 	"log"
 	"strings"
 	"time"
+
+	"github.com/BenedictKing/claude-proxy/internal/utils"
 )
 
 // ============== Responses 渠道方法 ==============
@@ -91,6 +93,41 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 		upstream.Website = *updates.Website
 	}
 	if updates.APIKeys != nil {
+		// 记录被移除的 Key 到历史列表（用于统计聚合）
+		newKeys := make(map[string]bool)
+		for _, key := range updates.APIKeys {
+			newKeys[key] = true
+		}
+
+		// 找出被移除的 Key（在旧列表中但不在新列表中）
+		for _, key := range upstream.APIKeys {
+			if !newKeys[key] {
+				// 检查是否已在历史列表中
+				alreadyInHistory := false
+				for _, hk := range upstream.HistoricalAPIKeys {
+					if hk == key {
+						alreadyInHistory = true
+						break
+					}
+				}
+				if !alreadyInHistory {
+					upstream.HistoricalAPIKeys = append(upstream.HistoricalAPIKeys, key)
+					log.Printf("[Config-Upstream] Responses 渠道 [%d] %s: Key %s 已移入历史列表", index, upstream.Name, utils.MaskAPIKey(key))
+				}
+			}
+		}
+
+		// 如果新 Key 在历史列表中，从历史列表移除（换回来了）
+		var newHistoricalKeys []string
+		for _, hk := range upstream.HistoricalAPIKeys {
+			if !newKeys[hk] {
+				newHistoricalKeys = append(newHistoricalKeys, hk)
+			} else {
+				log.Printf("[Config-Upstream] Responses 渠道 [%d] %s: Key %s 已从历史列表恢复", index, upstream.Name, utils.MaskAPIKey(hk))
+			}
+		}
+		upstream.HistoricalAPIKeys = newHistoricalKeys
+
 		// 只有单 key 场景且 key 被更换时，才自动激活并重置熔断
 		if len(upstream.APIKeys) == 1 && len(updates.APIKeys) == 1 &&
 			upstream.APIKeys[0] != updates.APIKeys[0] {
@@ -170,6 +207,17 @@ func (cm *ConfigManager) AddResponsesAPIKey(index int, apiKey string) error {
 
 	cm.config.ResponsesUpstream[index].APIKeys = append(cm.config.ResponsesUpstream[index].APIKeys, apiKey)
 
+	// 如果该 Key 在历史列表中，从历史列表移除（换回来了）
+	var newHistoricalKeys []string
+	for _, hk := range cm.config.ResponsesUpstream[index].HistoricalAPIKeys {
+		if hk != apiKey {
+			newHistoricalKeys = append(newHistoricalKeys, hk)
+		} else {
+			log.Printf("[Responses-Key] 上游 [%d] %s: Key %s 已从历史列表恢复", index, cm.config.ResponsesUpstream[index].Name, utils.MaskAPIKey(hk))
+		}
+	}
+	cm.config.ResponsesUpstream[index].HistoricalAPIKeys = newHistoricalKeys
+
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return err
 	}
@@ -200,6 +248,19 @@ func (cm *ConfigManager) RemoveResponsesAPIKey(index int, apiKey string) error {
 
 	if !found {
 		return fmt.Errorf("API密钥不存在")
+	}
+
+	// 将被移除的 Key 添加到历史列表（用于统计聚合）
+	alreadyInHistory := false
+	for _, hk := range cm.config.ResponsesUpstream[index].HistoricalAPIKeys {
+		if hk == apiKey {
+			alreadyInHistory = true
+			break
+		}
+	}
+	if !alreadyInHistory {
+		cm.config.ResponsesUpstream[index].HistoricalAPIKeys = append(cm.config.ResponsesUpstream[index].HistoricalAPIKeys, apiKey)
+		log.Printf("[Responses-Key] 上游 [%d] %s: Key %s 已移入历史列表", index, cm.config.ResponsesUpstream[index].Name, utils.MaskAPIKey(apiKey))
 	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {

@@ -4,6 +4,44 @@
 
 ---
 
+## [Unreleased]
+
+### 新增
+
+- **删除渠道时自动清理指标数据** - 修复删除渠道后内存和 SQLite 指标数据残留问题
+  - 扩展 `PersistenceStore` 接口，新增按 `metrics_key` 和 `api_type` 批量删除记录的方法
+  - 新增 `MetricsManager.DeleteChannelMetrics()` 方法，支持同时清理内存和持久化数据
+  - 新增 `ChannelScheduler.DeleteChannelMetrics()` 统一删除入口
+  - 修改 `DeleteUpstream` Handler（Messages/Responses/Gemini），删除后自动调用指标清理
+  - SQLite 清理不依赖内存状态，确保即使内存中无数据也能正确清理持久化记录
+  - 删除渠道时同时清理历史 Key 的指标数据
+  - **按 `api_type` 过滤删除**：避免误删其他接口类型（messages/responses/gemini）的指标数据
+  - **分批删除**：每批 500 条，避免触发 SQLite 变量上限（999）导致删除失败
+  - **等待异步 flush 完成**：删除前调用 `flushWg.Wait()` 避免并发竞态导致数据残留
+  - 涉及文件：
+    - `backend-go/internal/metrics/persistence.go` - 接口扩展（新增 apiType 参数）
+    - `backend-go/internal/metrics/sqlite_store.go` - 实现 SQLite 删除逻辑（分批 + api_type 过滤）
+    - `backend-go/internal/metrics/channel_metrics.go` - 新增删除方法，导出 `GenerateMetricsKey()`
+    - `backend-go/internal/scheduler/channel_scheduler.go` - 新增统一删除入口
+    - `backend-go/internal/handlers/*/channels.go` - 删除 Handler 改造
+    - `backend-go/main.go` - 路由注册更新
+
+- **换 Key 后历史数据累计统计** - 修复更换 API Key 后旧 Key 的历史统计数据丢失问题
+  - 新增 `UpstreamConfig.HistoricalAPIKeys` 字段，存储历史 API Key 列表
+  - 更新渠道时自动维护历史 Key 列表：被移除的 Key 进入历史列表，恢复的 Key 从历史列表移除
+  - `Add*APIKey` / `Remove*APIKey` 接口同样维护历史 Key 列表
+  - `ToResponseMultiURL()` 支持聚合历史 Key 指标（只计入总数，不影响实时失败率和熔断判断）
+  - 前端查看渠道统计时，总数包含历史 Key 数据，Key 详情列表只显示当前活跃 Key
+  - 涉及文件：
+    - `backend-go/internal/config/config.go` - 新增 `HistoricalAPIKeys` 字段
+    - `backend-go/internal/config/config_utils.go` - `Clone()` 方法深拷贝历史 Key
+    - `backend-go/internal/config/config_*.go` - 更新渠道时维护历史 Key 列表
+    - `backend-go/internal/metrics/channel_metrics.go` - 聚合逻辑支持历史 Key
+    - `backend-go/internal/handlers/channel_metrics_handler.go` - 传入历史 Key 参数
+    - `backend-go/internal/handlers/gemini/dashboard.go` - 传入历史 Key 参数
+
+---
+
 ## [v2.5.9] - 2026-01-24
 
 ### 新增

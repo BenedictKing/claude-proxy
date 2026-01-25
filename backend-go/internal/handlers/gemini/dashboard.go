@@ -48,7 +48,7 @@ func GetDashboard(cfgManager *config.ConfigManager, sch *scheduler.ChannelSchedu
 		// 2. 构建 metrics 数据
 		metricsResult := make([]gin.H, 0, len(upstreams))
 		for i, upstream := range upstreams {
-			resp := metricsManager.ToResponseMultiURL(i, upstream.GetAllBaseURLs(), upstream.APIKeys, 0)
+			resp := metricsManager.ToResponseMultiURL(i, upstream.GetAllBaseURLs(), upstream.APIKeys, 0, upstream.HistoricalAPIKeys)
 
 			item := gin.H{
 				"channelIndex":        i,

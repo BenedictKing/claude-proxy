@@ -18,7 +18,8 @@ type UpstreamConfig struct {
 	BaseURL            string            `json:"baseUrl"`
 	BaseURLs           []string          `json:"baseUrls,omitempty"` // 多 BaseURL 支持（failover 模式）
 	APIKeys            []string          `json:"apiKeys"`
-	ServiceType        string            `json:"serviceType"` // gemini, openai, claude
+	HistoricalAPIKeys  []string          `json:"historicalApiKeys,omitempty"` // 历史 API Key（用于统计聚合，换 Key 后保留旧 Key 的统计数据）
+	ServiceType        string            `json:"serviceType"`                 // gemini, openai, claude
 	Name               string            `json:"name,omitempty"`
 	Description        string            `json:"description,omitempty"`
 	Website            string            `json:"website,omitempty"`
