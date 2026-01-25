@@ -87,7 +87,7 @@ type MetricsManager struct {
 
 	// 持久化存储（可选）
 	store   PersistenceStore
-	apiType string // "messages" 或 "responses"
+	apiType string // "messages"、"responses" 或 "gemini"
 }
 
 // NewMetricsManager 创建指标管理器
@@ -1208,21 +1208,20 @@ func (m *MetricsManager) DeleteKeysForChannel(baseURLs, apiKeys []string) []stri
 // DeleteChannelMetrics 删除渠道的所有指标数据（内存 + 持久化）
 // baseURLs: 渠道的所有 BaseURL（支持多端点 failover）
 // apiKeys: 渠道的所有 API Key
-// apiType: 接口类型（messages/responses/gemini），用于持久化数据过滤
 // 返回被删除的持久化记录数
-func (m *MetricsManager) DeleteChannelMetrics(baseURLs, apiKeys []string, apiType string) int64 {
+func (m *MetricsManager) DeleteChannelMetrics(baseURLs, apiKeys []string) int64 {
 	// 1. 删除内存指标，获取 metricsKey 列表
 	deletedKeys := m.DeleteKeysForChannel(baseURLs, apiKeys)
 
-	// 2. 删除持久化数据
+	// 2. 删除持久化数据（使用内部 apiType，避免外部误传）
 	if m.store != nil && len(deletedKeys) > 0 {
-		deleted, err := m.store.DeleteRecordsByMetricsKeys(deletedKeys, apiType)
+		deleted, err := m.store.DeleteRecordsByMetricsKeys(deletedKeys, m.apiType)
 		if err != nil {
 			log.Printf("[Metrics-Delete] 警告: 删除持久化指标记录失败: %v", err)
 			return 0
 		}
 		if deleted > 0 {
-			log.Printf("[Metrics-Delete] 已删除 %d 条 %s 持久化指标记录", deleted, apiType)
+			log.Printf("[Metrics-Delete] 已删除 %d 条 %s 持久化指标记录", deleted, m.apiType)
 		}
 		return deleted
 	}

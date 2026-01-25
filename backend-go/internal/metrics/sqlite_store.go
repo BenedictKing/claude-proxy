@@ -28,10 +28,11 @@ type SQLiteStore struct {
 	retentionDays int           // 数据保留天数
 
 	// 控制
-	stopCh  chan struct{}
-	wg      sync.WaitGroup
-	closed  bool           // 是否已关闭
-	flushWg sync.WaitGroup // 追踪异步 flush goroutine
+	stopCh       chan struct{}
+	wg           sync.WaitGroup
+	closed       bool           // 是否已关闭
+	flushMu      sync.Mutex     // 串行化 flush 与 delete 操作，避免并发竞态
+	asyncFlushWg sync.WaitGroup // 追踪 AddRecord 触发的异步 flush goroutine
 }
 
 // SQLiteStoreConfig SQLite 存储配置
@@ -149,10 +150,13 @@ func (s *SQLiteStore) AddRecord(record PersistentRecord) {
 	s.bufferMu.Unlock()
 
 	if shouldFlush {
-		s.flushWg.Add(1)
+		s.asyncFlushWg.Add(1)
 		go func() {
-			defer s.flushWg.Done()
+			defer s.asyncFlushWg.Done()
+			// 获取 flush 锁，与 DeleteRecordsByMetricsKeys 串行化
+			s.flushMu.Lock()
 			s.flush()
+			s.flushMu.Unlock()
 		}()
 	}
 }
@@ -280,11 +284,12 @@ func (s *SQLiteStore) DeleteRecordsByMetricsKeys(metricsKeys []string, apiType s
 		return 0, nil
 	}
 
+	// 获取 flush 锁，确保删除期间不会有后台 flush 写入新记录
+	s.flushMu.Lock()
+	defer s.flushMu.Unlock()
+
 	// 先刷新缓冲区，确保待删除的记录已写入数据库
 	s.flush()
-	// 等待所有异步 flush goroutine 完成，避免竞态：
-	// flush 取出记录但尚未写入时，DELETE 可能先执行，随后 flush 把记录插入
-	s.flushWg.Wait()
 
 	// 分批删除，避免触发 SQLite 变量上限（默认 999）
 	const batchSize = 500
@@ -331,9 +336,15 @@ func (s *SQLiteStore) flushLoop() {
 	for {
 		select {
 		case <-ticker.C:
+			// 获取 flush 锁，与 DeleteRecordsByMetricsKeys 串行化
+			s.flushMu.Lock()
 			s.flush()
+			s.flushMu.Unlock()
 		case <-s.stopCh:
-			s.flush() // 关闭前最后一次刷新
+			// 关闭前最后一次刷新
+			s.flushMu.Lock()
+			s.flush()
+			s.flushMu.Unlock()
 			return
 		}
 	}
@@ -377,12 +388,12 @@ func (s *SQLiteStore) Close() error {
 	s.closed = true
 	s.bufferMu.Unlock()
 
-	// 停止后台循环
+	// 停止后台循环（flushLoop 会在退出前执行最后一次 flush）
 	close(s.stopCh)
 	s.wg.Wait()
 
-	// 等待所有异步 flush 完成
-	s.flushWg.Wait()
+	// 等待所有 AddRecord 触发的异步 flush goroutine 完成
+	s.asyncFlushWg.Wait()
 
 	return s.db.Close()
 }

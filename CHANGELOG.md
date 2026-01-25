@@ -17,7 +17,7 @@
   - 删除渠道时同时清理历史 Key 的指标数据
   - **按 `api_type` 过滤删除**：避免误删其他接口类型（messages/responses/gemini）的指标数据
   - **分批删除**：每批 500 条，避免触发 SQLite 变量上限（999）导致删除失败
-  - **等待异步 flush 完成**：删除前调用 `flushWg.Wait()` 避免并发竞态导致数据残留
+  - **并发安全**：`flushMu` 互斥锁串行化 flush 与 delete；`asyncFlushWg` 确保 Close 前所有异步 flush 完成
   - 涉及文件：
     - `backend-go/internal/metrics/persistence.go` - 接口扩展（新增 apiType 参数）
     - `backend-go/internal/metrics/sqlite_store.go` - 实现 SQLite 删除逻辑（分批 + api_type 过滤）

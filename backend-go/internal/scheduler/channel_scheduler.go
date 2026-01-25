@@ -426,8 +426,8 @@ func (s *ChannelScheduler) DeleteChannelMetrics(upstream *config.UpstreamConfig,
 	// 合并活跃 Key 和历史 Key，一起清理
 	allKeys := append([]string{}, upstream.APIKeys...)
 	allKeys = append(allKeys, upstream.HistoricalAPIKeys...)
-	// 传递 apiType（与 ChannelKind 值相同：messages/responses/gemini）
-	metricsManager.DeleteChannelMetrics(upstream.GetAllBaseURLs(), allKeys, string(kind))
+	// MetricsManager 内部已有 apiType，无需外部传递
+	metricsManager.DeleteChannelMetrics(upstream.GetAllBaseURLs(), allKeys)
 	prefix := kindSchedulerLogPrefix(kind)
 	log.Printf("[%s-Delete] 渠道 %s 的指标数据已清理", prefix, upstream.Name)
 }
