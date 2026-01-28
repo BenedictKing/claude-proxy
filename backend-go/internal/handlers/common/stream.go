@@ -194,11 +194,12 @@ func ProcessStreamEvent(
 	ExtractTextFromEvent(event, &ctx.OutputTextBuffer)
 
 	// 检测并收集 usage
-	hasUsage, needPatch, usageData := CheckEventUsageStatus(event, envCfg.EnableResponseLogs && envCfg.ShouldLog("debug"))
+	hasUsage, needInputPatch, needOutputPatch, usageData := CheckEventUsageStatus(event, envCfg.EnableResponseLogs && envCfg.ShouldLog("debug"))
+	needPatch := needInputPatch || needOutputPatch
 	if hasUsage {
 		if !ctx.HasUsage {
 			ctx.HasUsage = true
-			ctx.NeedTokenPatch = needPatch
+			ctx.NeedTokenPatch = needPatch || ctx.LowQuality
 			if envCfg.EnableResponseLogs && envCfg.ShouldLog("debug") && needPatch && !IsMessageDeltaEvent(event) {
 				log.Printf("[Messages-Stream-Token] 检测到虚假值, 延迟到流结束修补")
 			}
@@ -236,17 +237,37 @@ func ProcessStreamEvent(
 		eventToSend = PatchMessageStartEvent(eventToSend, ctx.RequestModel, envCfg.RewriteResponseModel, envCfg.EnableResponseLogs && envCfg.ShouldLog("debug"))
 	}
 
+	// 处理 message_start 事件：尽早补全 input_tokens（部分客户端只读取首个 usage 来累计）
+	if hasUsage {
+		eventToSend = PatchMessageStartInputTokensIfNeeded(eventToSend, requestBody, needInputPatch, usageData, envCfg.EnableResponseLogs && envCfg.ShouldLog("debug"), ctx.LowQuality)
+	}
+
 	if ctx.NeedTokenPatch && HasEventWithUsage(event) {
 		if IsMessageDeltaEvent(event) || IsMessageStopEvent(event) {
+			hasCacheTokens := ctx.CollectedUsage.CacheCreationInputTokens > 0 ||
+				ctx.CollectedUsage.CacheReadInputTokens > 0 ||
+				ctx.CollectedUsage.CacheCreation5mInputTokens > 0 ||
+				ctx.CollectedUsage.CacheCreation1hInputTokens > 0
+
 			inputTokens := ctx.CollectedUsage.InputTokens
-			if inputTokens == 0 {
-				inputTokens = utils.EstimateRequestTokens(requestBody)
+			estimatedInputTokens := utils.EstimateRequestTokens(requestBody)
+			if !hasCacheTokens && inputTokens < 10 && estimatedInputTokens > inputTokens {
+				inputTokens = estimatedInputTokens
 			}
+
 			outputTokens := ctx.CollectedUsage.OutputTokens
-			if outputTokens == 0 {
-				outputTokens = utils.EstimateTokens(ctx.OutputTextBuffer.String())
+			estimatedOutputTokens := utils.EstimateTokens(ctx.OutputTextBuffer.String())
+			if outputTokens <= 1 && estimatedOutputTokens > outputTokens {
+				outputTokens = estimatedOutputTokens
 			}
-			hasCacheTokens := ctx.CollectedUsage.CacheCreationInputTokens > 0 || ctx.CollectedUsage.CacheReadInputTokens > 0
+
+			if inputTokens > ctx.CollectedUsage.InputTokens {
+				ctx.CollectedUsage.InputTokens = inputTokens
+			}
+			if outputTokens > ctx.CollectedUsage.OutputTokens {
+				ctx.CollectedUsage.OutputTokens = outputTokens
+			}
+
 			eventToSend = PatchTokensInEvent(eventToSend, inputTokens, outputTokens, hasCacheTokens, envCfg.EnableResponseLogs && envCfg.ShouldLog("debug"), ctx.LowQuality)
 			ctx.NeedTokenPatch = false
 		}
@@ -410,7 +431,7 @@ func HandleStreamResponse(
 // ========== Token 检测和修补相关函数 ==========
 
 // CheckEventUsageStatus 检测事件是否包含 usage 字段
-func CheckEventUsageStatus(event string, enableLog bool) (bool, bool, CollectedUsageData) {
+func CheckEventUsageStatus(event string, enableLog bool) (bool, bool, bool, CollectedUsageData) {
 	for _, line := range strings.Split(event, "\n") {
 		if !strings.HasPrefix(line, "data: ") {
 			continue
@@ -424,33 +445,31 @@ func CheckEventUsageStatus(event string, enableLog bool) (bool, bool, CollectedU
 
 		// 检查顶层 usage 字段
 		if hasUsage, needInputPatch, needOutputPatch := checkUsageFieldsWithPatch(data["usage"]); hasUsage {
-			needPatch := needInputPatch || needOutputPatch
 			var usageData CollectedUsageData
 			if usage, ok := data["usage"].(map[string]interface{}); ok {
 				if enableLog {
-					logUsageDetection("顶层usage", usage, needPatch)
+					logUsageDetection("顶层usage", usage, needInputPatch || needOutputPatch)
 				}
 				usageData = extractUsageFromMap(usage)
 			}
-			return true, needPatch, usageData
+			return true, needInputPatch, needOutputPatch, usageData
 		}
 
 		// 检查 message.usage
 		if msg, ok := data["message"].(map[string]interface{}); ok {
 			if hasUsage, needInputPatch, needOutputPatch := checkUsageFieldsWithPatch(msg["usage"]); hasUsage {
-				needPatch := needInputPatch || needOutputPatch
 				var usageData CollectedUsageData
 				if usage, ok := msg["usage"].(map[string]interface{}); ok {
 					if enableLog {
-						logUsageDetection("message.usage", usage, needPatch)
+						logUsageDetection("message.usage", usage, needInputPatch || needOutputPatch)
 					}
 					usageData = extractUsageFromMap(usage)
 				}
-				return true, needPatch, usageData
+				return true, needInputPatch, needOutputPatch, usageData
 			}
 		}
 	}
-	return false, false, CollectedUsageData{}
+	return false, false, false, CollectedUsageData{}
 }
 
 // checkUsageFieldsWithPatch 检查 usage 对象是否包含 token 字段
@@ -605,6 +624,36 @@ func PatchTokensInEvent(event string, estimatedInputTokens, estimatedOutputToken
 	}
 
 	return result.String()
+}
+
+// PatchMessageStartInputTokensIfNeeded 在首个 message_start 事件中尽早补全 input_tokens。
+//
+// 部分客户端（例如终端工具）只读取首个 usage 来累计 prompt tokens；如果 message_start 的 input_tokens 为 0/极小值，
+// 即便后续顶层 usage 给出正确值，也可能导致累计失败。
+func PatchMessageStartInputTokensIfNeeded(event string, requestBody []byte, needInputPatch bool, usageData CollectedUsageData, enableLog bool, lowQuality bool) string {
+	if !IsMessageStartEvent(event) {
+		return event
+	}
+	if !HasEventWithUsage(event) {
+		return event
+	}
+
+	hasCacheTokens := usageData.CacheCreationInputTokens > 0 ||
+		usageData.CacheReadInputTokens > 0 ||
+		usageData.CacheCreation5mInputTokens > 0 ||
+		usageData.CacheCreation1hInputTokens > 0
+
+	// 仅在 input_tokens 明显异常时提前补齐；缓存命中场景不应强行补 input_tokens（除非上游返回 nil）
+	if !needInputPatch && (hasCacheTokens || usageData.InputTokens >= 10) {
+		return event
+	}
+
+	estimatedInputTokens := utils.EstimateRequestTokens(requestBody)
+	if estimatedInputTokens <= 0 {
+		return event
+	}
+
+	return PatchTokensInEvent(event, estimatedInputTokens, 0, hasCacheTokens, enableLog, lowQuality)
 }
 
 // patchUsageFieldsWithLog 修补 usage 对象中的 token 字段

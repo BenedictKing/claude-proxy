@@ -1,7 +1,11 @@
 package common
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
+
+	"github.com/BenedictKing/claude-proxy/internal/utils"
 )
 
 func TestPatchUsageFieldsWithLog_NilInputTokens(t *testing.T) {
@@ -54,4 +58,108 @@ func TestPatchUsageFieldsWithLog_NilInputTokens(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPatchMessageStartInputTokensIfNeeded(t *testing.T) {
+	requestBody := []byte(`{"messages":[{"role":"user","content":[{"type":"text","text":"hello world hello world hello world"}]}]}`)
+	estimated := utils.EstimateRequestTokens(requestBody)
+	if estimated <= 0 {
+		t.Fatalf("expected estimated input tokens > 0, got %d", estimated)
+	}
+
+	extractInputTokens := func(t *testing.T, event string) float64 {
+		t.Helper()
+		for _, line := range strings.Split(event, "\n") {
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			var data map[string]interface{}
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &data); err != nil {
+				t.Fatalf("failed to unmarshal data: %v", err)
+			}
+			msg, ok := data["message"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("missing message field")
+			}
+			usage, ok := msg["usage"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("missing message.usage field")
+			}
+			v, ok := usage["input_tokens"].(float64)
+			if !ok {
+				t.Fatalf("missing input_tokens field")
+			}
+			return v
+		}
+		t.Fatalf("no data line found")
+		return 0
+	}
+
+	t.Run("input_tokens=0 should patch in message_start", func(t *testing.T) {
+		event := "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":0,\"output_tokens\":0}}}\n\n"
+		hasUsage, needInputPatch, _, usageData := CheckEventUsageStatus(event, false)
+		if !hasUsage {
+			t.Fatalf("expected hasUsage=true")
+		}
+		if !needInputPatch {
+			t.Fatalf("expected needInputPatch=true")
+		}
+
+		patched := PatchMessageStartInputTokensIfNeeded(event, requestBody, needInputPatch, usageData, false, false)
+		got := extractInputTokens(t, patched)
+		if got != float64(estimated) {
+			t.Fatalf("expected input_tokens=%d, got %v", estimated, got)
+		}
+	})
+
+	t.Run("input_tokens<10 should patch in message_start", func(t *testing.T) {
+		event := "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":5,\"output_tokens\":0}}}\n\n"
+		hasUsage, needInputPatch, _, usageData := CheckEventUsageStatus(event, false)
+		if !hasUsage {
+			t.Fatalf("expected hasUsage=true")
+		}
+		if needInputPatch {
+			t.Fatalf("expected needInputPatch=false")
+		}
+
+		patched := PatchMessageStartInputTokensIfNeeded(event, requestBody, needInputPatch, usageData, false, false)
+		got := extractInputTokens(t, patched)
+		if got != float64(estimated) {
+			t.Fatalf("expected input_tokens=%d, got %v", estimated, got)
+		}
+	})
+
+	t.Run("cache hit should not patch input_tokens", func(t *testing.T) {
+		event := "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":0,\"output_tokens\":0,\"cache_read_input_tokens\":100}}}\n\n"
+		hasUsage, needInputPatch, _, usageData := CheckEventUsageStatus(event, false)
+		if !hasUsage {
+			t.Fatalf("expected hasUsage=true")
+		}
+		if needInputPatch {
+			t.Fatalf("expected needInputPatch=false")
+		}
+
+		patched := PatchMessageStartInputTokensIfNeeded(event, requestBody, needInputPatch, usageData, false, false)
+		got := extractInputTokens(t, patched)
+		if got != 0 {
+			t.Fatalf("expected input_tokens=0, got %v", got)
+		}
+	})
+
+	t.Run("valid input_tokens should not patch", func(t *testing.T) {
+		event := "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":50,\"output_tokens\":0}}}\n\n"
+		hasUsage, needInputPatch, _, usageData := CheckEventUsageStatus(event, false)
+		if !hasUsage {
+			t.Fatalf("expected hasUsage=true")
+		}
+		if needInputPatch {
+			t.Fatalf("expected needInputPatch=false")
+		}
+
+		patched := PatchMessageStartInputTokensIfNeeded(event, requestBody, needInputPatch, usageData, false, false)
+		got := extractInputTokens(t, patched)
+		if got != 50 {
+			t.Fatalf("expected input_tokens=50, got %v", got)
+		}
+	})
 }
