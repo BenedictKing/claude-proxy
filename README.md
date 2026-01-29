@@ -3,7 +3,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/BenedictKing/claude-proxy)](https://github.com/BenedictKing/claude-proxy/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-一个高性能的 Claude API 代理服务器，支持多种上游 AI 服务提供商（Claude、Codex、Gemini），提供负载均衡、多 API 密钥管理和统一入口访问。
+一个高性能的 Claude API 代理服务器，支持多种上游 AI 服务提供商（Claude、Codex、Gemini），提供故障转移、多 API 密钥管理和统一入口访问。
 
 ## 🚀 功能特性
 
@@ -17,7 +17,7 @@
 - **🎯 智能调度**: 多渠道智能调度器，支持优先级排序、健康检查和自动熔断
 - **📊 渠道编排**: 可视化渠道管理，拖拽调整优先级，实时查看健康状态
 - **🔄 Trace 亲和**: 同一用户会话自动绑定到同一渠道，提升一致性体验
-- **负载均衡**: 支持轮询、随机、故障转移策略，Claude/Codex 负载均衡互不影响
+- **故障转移**: 自动切换到可用渠道，确保服务高可用
 - **多 API 密钥**: 每个上游可配置多个 API 密钥，自动轮换使用（推荐 failover 策略以最大化利用 Prompt Caching）
 - **🧠 缓存统计**: 按 Token 口径展示各渠道缓存读/写与命中率（命中率 = `cache_read_tokens / (cache_read_tokens + input_tokens)`）
 - **增强的稳定性**: 内置上游请求超时与重试机制，确保服务在网络波动时依然可靠
@@ -69,7 +69,6 @@
 
 > 📚 详细架构设计和技术选型请参考 [ARCHITECTURE.md](ARCHITECTURE.md)
 
-> 💡 **负载均衡提示**: 本项目内置的负载均衡策略（failover/round-robin）适用于大多数场景。如果您需要更高级的负载均衡功能（如加权分配、健康检查间隔自定义、更复杂的路由策略等），建议在本服务前添加 [gpt-load](https://github.com/tbphp/gpt-load) 作为负载均衡层。
 
 ## 🏁 快速开始
 
@@ -632,7 +631,7 @@ GET /health
   "mode": "production",
   "config": {
     "upstreamCount": 3,
-    "loadBalance": "round-robin"
+    "loadBalance": "failover"
   }
 }
 ```

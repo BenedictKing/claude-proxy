@@ -92,8 +92,6 @@ claude-proxy/
 | `QUIET_POLLING_LOGS` | true | 静默轮询日志 |
 | `MAX_REQUEST_BODY_SIZE_MB` | 50 | 请求体最大大小 |
 
-**注意**: 负载均衡策略通过 Web UI 或 `config.json` 配置，不再使用环境变量。
-
 完整配置参考 `backend-go/.env.example`
 
 ## 常见任务
