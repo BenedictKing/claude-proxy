@@ -43,7 +43,7 @@
 
 支持多种上游服务类型（Claude/Codex/Gemini），灵活配置 API 密钥、模型映射和请求参数。
 
-![添加渠道](docs/screenshots/add-channel-modal.png)
+<img src="docs/screenshots/add-channel-modal.png" width="500" alt="添加渠道">
 
 ### 流量统计
 
@@ -297,16 +297,15 @@ fly deploy
 ### 认证流程
 
 ```mermaid
-flowchart TD
-    A[用户访问] --> B{是否为健康检查?}
-    B -->|是| C[直接访问]
-    B -->|否| D{提供了密钥?}
-    D -->|否| E[显示认证页面]
-    D -->|是| F{密钥是否正确?}
-    F -->|否| G[返回401错误]
-    F -->|是| H[允许访问]
-    E --> I[用户输入密钥]
-    I --> F
+flowchart LR
+    A[访问] --> B{健康检查?}
+    B -->|是| C[通过]
+    B -->|否| D{有密钥?}
+    D -->|否| E[认证页]
+    D -->|是| F{正确?}
+    F -->|否| G[401]
+    F -->|是| H[通过]
+    E --> F
 ```
 
 ### 生产环境安全清单
