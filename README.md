@@ -784,6 +784,12 @@ cd backend-go && make help
 - **📝 版本历史**: [CHANGELOG.md](CHANGELOG.md) - 完整变更记录和升级指南
 - **🚀 发布流程**: [RELEASE.md](RELEASE.md) - 维护者发布流程
 
+## 💬 社区交流
+
+欢迎加入 QQ 群交流讨论：**642217364**
+
+![QQ群二维码](docs/qrcode_1769645166806.jpg)
+
 ## 📄 许可证
 
 本项目基于 MIT 许可证开源 - 查看 [LICENSE](LICENSE) 文件了解详情。
